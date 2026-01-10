@@ -118,15 +118,35 @@ def _update_umbral_flags(s, cfg):
 
 
 def _apply_minus5_transitions(s, cfg):
+    """
+    P0.4: Event on crossing to -5.
+    - Destroy keys and objects when crossing to <= -5
+    - Others lose 1 sanity when someone crosses
+    - Maintain 1 action while at -5; restore 2 when leaving to -4
+    - Event fires only once on crossing (tracked via at_minus5 flag)
+    """
     for pid, p in s.players.items():
-        if p.sanity <= cfg.S_LOSS:
-            if not p.at_minus5:
+        if p.sanity <= cfg.S_LOSS:  # At or below -5
+            if not p.at_minus5:  # Just crossed into -5
+                # Destroy keys and objects
+                p.keys = 0
+                p.objects = []
+                
+                # Other players lose 1 sanity
+                for other_pid, other in s.players.items():
+                    if other_pid != pid:
+                        other.sanity -= 1
+                
+                # Mark as in -5 state
                 p.at_minus5 = True
+            
+            # Maintain 1 action per turn while at -5
             s.remaining_actions[pid] = min(1, s.remaining_actions.get(pid, 2))
-        else:
-            if p.at_minus5:
+        else:  # Above -5
+            if p.at_minus5:  # Just left -5
+                # Restore to 2 actions
                 p.at_minus5 = False
-
+                s.remaining_actions[pid] = 2
 
 def _advance_turn_or_king(s):
     order = s.turn_order
@@ -148,7 +168,9 @@ def _advance_turn_or_king(s):
 
 
 def _presence_damage_for_round(round_n: int) -> int:
-    return 1
+    """Damage per round from King presence (P0.5)."""
+    # Ronda 1: sin daño. Ronda 2+: 1 punto por ronda (KING_PRESENCE_DAMAGE en config)
+    return 1 if round_n >= 2 else 0
 
 
 def _shuffle_all_room_decks(s, rng: RNG):
@@ -160,9 +182,31 @@ def _shuffle_all_room_decks(s, rng: RNG):
 
 
 def _expel_players_from_floor(s, floor: int):
+    """
+    P0.2: Expel players from King's floor to adjacent floor's stair room.
+    Floor mapping (canon):
+    - F1 -> F2 (move to stair room in F2)
+    - F2 -> F1 (move to stair room in F1)
+    - F3 -> F2 (move to stair room in F2)
+    """
+    # Determine destination floor
+    if floor == 1:
+        dest_floor = 2
+    elif floor == 2:
+        dest_floor = 1
+    elif floor == 3:
+        dest_floor = 2
+    else:
+        return  # Invalid floor
+    
+    # Move players to stair room in destination floor
+    stair_room = s.stairs.get(dest_floor)
+    if stair_room is None:
+        return  # No stair initialized (shouldn't happen)
+    
     for p in s.players.values():
         if floor_of(p.room) == floor:
-            p.room = corridor_id(floor)
+            p.room = stair_room
 
 
 def _attract_players_to_floor(s, floor: int):
@@ -172,7 +216,11 @@ def _attract_players_to_floor(s, floor: int):
 
 
 def _roll_stairs(s, rng: RNG):
-    return None
+    """Reroll stairs (1d4 per floor) at end of round."""
+    from engine.board import room_from_d4, FLOORS
+    for floor in range(1, FLOORS + 1):
+        roll = rng.randint(1, 4)
+        s.stairs[floor] = room_from_d4(floor, roll)
 
 
 def _end_of_round_checks(s, cfg):
