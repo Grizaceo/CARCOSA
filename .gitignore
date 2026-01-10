@@ -1,0 +1,21 @@
+# venv
+.venv/
+
+# python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# build artifacts
+build/
+dist/
+*.egg-info/
+
+# runs/output (si no quieres versionarlos)
+runs/
+
+# OS/editor
+.DS_Store
+.vscode/
