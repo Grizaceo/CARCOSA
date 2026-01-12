@@ -112,7 +112,7 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
         if not s.flags.get("CROWN_YELLOW"):
             s.flags["CROWN_YELLOW"] = True
             s.flags["CROWN_HOLDER"] = str(pid)
-            # El Falso Rey aparece en el piso actual del jugador que reveló CROWN
+            # Piso inicial del Falso Rey (cuando se revela CROWN)
             s.false_king_floor = floor_of(p.room)
             s.false_king_round_appeared = s.round
         return
@@ -154,6 +154,16 @@ def _apply_minus5_transitions(s, cfg):
                 # Restore to 2 actions
                 p.at_minus5 = False
                 s.remaining_actions[pid] = 2
+
+
+def _current_false_king_floor(s) -> Optional[int]:
+    holder_id = s.flags.get("CROWN_HOLDER") if s.flags else None
+    if not holder_id:
+        return s.false_king_floor
+    holder = s.players.get(PlayerId(holder_id))
+    if holder is None:
+        return s.false_king_floor
+    return floor_of(holder.room)
 
 def _advance_turn_or_king(s):
     order = s.turn_order
@@ -232,12 +242,13 @@ def _expel_players_from_floor(s, floor: int):
 def _attract_players_to_floor(s, floor: int):
     """
     Attract (atraer) all players to the corridor of the specified floor.
-    P0.4b: Exception: don't move players on false_king_floor (if it exists).
+    P0.4b: Exception: don't move players on the floor of the crown holder.
     """
     target = corridor_id(floor)
+    fk_floor = _current_false_king_floor(s)
     for p in s.players.values():
-        # Don't move if player is on false_king_floor
-        if s.false_king_floor is not None and floor_of(p.room) == s.false_king_floor:
+        # Don't move if player is on the false king floor
+        if fk_floor is not None and floor_of(p.room) == fk_floor:
             continue
         p.room = target
 
@@ -257,7 +268,8 @@ def _false_king_check(s, rng: RNG, cfg):
     umbral = cordura_max + 2 + (rondas desde aparición)
     Si total <= umbral: aplicar solo daño por presencia en piso del Falso Rey.
     """
-    if s.false_king_floor is None:
+    fk_floor = _current_false_king_floor(s)
+    if fk_floor is None:
         return
 
     holder_id = s.flags.get("CROWN_HOLDER")
@@ -279,7 +291,7 @@ def _false_king_check(s, rng: RNG, cfg):
     if total <= threshold:
         pres = _presence_damage_for_round(s.round)
         for p in s.players.values():
-            if floor_of(p.room) == s.false_king_floor:
+            if floor_of(p.room) == fk_floor:
                 p.sanity -= pres
 
 
@@ -401,10 +413,12 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             new_floor = ruleta_floor(s.king_floor, d4)
 
             # Excepción: si cae en piso del Falso Rey, repetir HASTA QUE sea distinto (canon P0)
-            while new_floor == s.false_king_floor:
+            fk_floor = _current_false_king_floor(s)
+            while fk_floor is not None and new_floor == fk_floor:
                 d4 = rng.randint(1, 4)
                 rng.last_king_d4 = d4
                 new_floor = ruleta_floor(s.king_floor, d4)
+                fk_floor = _current_false_king_floor(s)
             
             s.king_floor = new_floor
 
