@@ -74,13 +74,13 @@ def _reveal_one(s, room_id: RoomId):
     return card
 
 
-def _resolve_card_minimal(s, pid: PlayerId, card, cfg):
+def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None):
     """
     Resolver efectos mínimos de cartas.
     - "KEY" → jugador gana una llave (si no excede límite)
     - "MONSTER:<id>" → monstruo entra en el tablero
     - "STATE:<id>" → status al jugador
-    - "CROWN" → activa bandera de corona
+    - "CROWN" → activa bandera de corona y crea Falso Rey en piso del jugador
     """
     s_str = str(card)
     p = s.players[pid]
@@ -108,12 +108,13 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg):
         return
     
     if s_str == "CROWN":
-        # CAMBIO 4: Inicializar Falso Rey cuando se revela CROWN
+        # Falso Rey aparece en el piso del jugador que tomó la corona (canon P0)
         if not s.flags.get("CROWN_YELLOW"):
             s.flags["CROWN_YELLOW"] = True
-            # Falso Rey aparece en piso aleatorio
-            s.false_king_floor = rng.randint(1, 3)
-            s.false_king_round_appeared = None  # Será seteado en fin de ronda si es necesario
+            s.flags["CROWN_HOLDER"] = str(pid)
+            # El Falso Rey aparece en el piso actual del jugador que reveló CROWN
+            s.false_king_floor = floor_of(p.room)
+            s.false_king_round_appeared = s.round
         return
 
 
@@ -249,6 +250,39 @@ def _roll_stairs(s, rng: RNG):
         s.stairs[floor] = room_from_d4(floor, roll)
 
 
+def _false_king_check(s, rng: RNG, cfg):
+    """
+    P0: Check de Falso Rey al final de ronda.
+    total = d6 + cordura_actual (clamp mínimo 0)
+    umbral = cordura_max + 2 + (rondas desde aparición)
+    Si total <= umbral: aplicar solo daño por presencia en piso del Falso Rey.
+    """
+    if s.false_king_floor is None:
+        return
+
+    holder_id = s.flags.get("CROWN_HOLDER")
+    if not holder_id:
+        return
+
+    holder = s.players.get(PlayerId(holder_id))
+    if holder is None:
+        return
+
+    if s.false_king_round_appeared is None:
+        s.false_king_round_appeared = s.round
+
+    rounds_since = max(0, s.round - s.false_king_round_appeared)
+    sanity_max = holder.sanity_max if holder.sanity_max is not None else holder.sanity
+    threshold = int(sanity_max) + 2 + int(rounds_since)
+    total = rng.randint(1, 6) + max(0, int(holder.sanity))
+
+    if total <= threshold:
+        pres = _presence_damage_for_round(s.round)
+        for p in s.players.values():
+            if floor_of(p.room) == s.false_king_floor:
+                p.sanity -= pres
+
+
 def _end_of_round_checks(s, cfg):
     if s.game_over:
         return
@@ -324,13 +358,13 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             p.room = to
             card = _reveal_one(s, to)
             if card is not None:
-                _resolve_card_minimal(s, pid, card, cfg)
+                _resolve_card_minimal(s, pid, card, cfg, rng)
 
         elif action.type == ActionType.SEARCH:
             cost = 1
             card = _reveal_one(s, p.room)
             if card is not None:
-                _resolve_card_minimal(s, pid, card, cfg)
+                _resolve_card_minimal(s, pid, card, cfg, rng)
 
         elif action.type == ActionType.MEDITATE:
             cost = 1
@@ -363,26 +397,15 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             s.king_vanish_ends -= 1
         else:
             # PASO 3: Ruleta d4 para determinar nuevo piso (canon P0)
-            # Si action.data tiene "floor", usarlo (compatibilidad hacia atrás para tests)
-            # De lo contrario, tirar d4 + ruleta (comportamiento canon)
-            if "floor" in action.data and action.data["floor"]:
-                new_floor = int(action.data["floor"])
-                rng.last_king_d4 = None  # No se lanzó d4
-            else:
+            d4 = rng.randint(1, 4)
+            rng.last_king_d4 = d4  # Track for logging
+            new_floor = ruleta_floor(s.king_floor, d4)
+
+            # Excepción: si cae en piso del Falso Rey, repetir HASTA QUE sea distinto (canon P0)
+            while new_floor == s.false_king_floor:
                 d4 = rng.randint(1, 4)
-                rng.last_king_d4 = d4  # Track for logging
+                rng.last_king_d4 = d4
                 new_floor = ruleta_floor(s.king_floor, d4)
-            
-            # Excepción: si cae en piso del Falso Rey, repetir (máx 3 intentos)
-            attempts = 0
-            while new_floor == s.false_king_floor and attempts < 3:
-                if "floor" not in action.data or not action.data["floor"]:
-                    d4 = rng.randint(1, 4)
-                    new_floor = ruleta_floor(s.king_floor, d4)
-                else:
-                    # Si floor fue explícito, no repetir
-                    break
-                attempts += 1
             
             s.king_floor = new_floor
 
@@ -417,6 +440,9 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             for st in p.statuses:
                 st.remaining_rounds -= 1
             p.statuses = [st for st in p.statuses if st.remaining_rounds > 0]
+
+        # PASO 6: Check del Falso Rey
+        _false_king_check(s, rng, cfg)
 
         _update_umbral_flags(s, cfg)
         _apply_minus5_transitions(s, cfg)

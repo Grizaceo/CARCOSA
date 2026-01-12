@@ -213,3 +213,10 @@ python compare_versions.py
 ---
 
 **Start with:** [WORKFLOW_AFTER_CHANGES.md](WORKFLOW_AFTER_CHANGES.md) if you're new!
+
+## Regla canonica vigente (Libro Tecnico)
+- docs/Carcosa_Libro_Tecnico_CANON.pdf (vigente, nombre estable)
+- docs/releases/Carcosa_Libro_Tecnico_v0_2.pdf (release/versionado)
+
+## Archivo
+- docs/archive/ (versiones anteriores; ver nombres con fecha)
