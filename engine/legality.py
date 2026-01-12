@@ -31,13 +31,17 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(nb)}))
 
         # MOVE especial: si estás en la habitación que tiene escaleras en tu piso,
-        # puedes moverte al pasillo del piso arriba/abajo (mínimo operativo para simulación).
+        # puedes moverte a la habitación con escalera del piso arriba/abajo (según canon P0).
         f = floor_of(p.room)
         if p.room == state.stairs.get(f):
             if f > 1:
-                acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(corridor_id(f - 1))}))
+                dest_stair = state.stairs.get(f - 1)
+                if dest_stair:
+                    acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
             if f < 3:
-                acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(corridor_id(f + 1))}))
+                dest_stair = state.stairs.get(f + 1)
+                if dest_stair:
+                    acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
 
         # SEARCH solo en habitación
         if not is_corridor(p.room):
@@ -59,12 +63,11 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
     if state.phase == "KING":
         if actor != "KING":
             return []
-        # NOTA: El d6 NO debe ser elegido por política, debe ser aleatorio.
-        # Por tanto, solo generamos acciones para cada floor (3 opciones).
-        # El d6 se generará ALEATORIAMENTE en la transición.
+        # NOTA: El piso se determina por ruleta d4 (RNG), no por acción del policy.
+        # Generamos 3 acciones (placeholder) pero el piso se decide aleatoriamente en transition.py.
         acts: List[Action] = []
         for floor in (1, 2, 3):
-            acts.append(Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": floor}))
+            acts.append(Action(actor="KING", type=ActionType.KING_ENDROUND, data={}))
         return acts
 
     return []

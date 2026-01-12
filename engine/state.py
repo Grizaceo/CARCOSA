@@ -68,6 +68,7 @@ class GameState:
     king_floor: int = 1
     king_vanish_ends: int = 0
     false_king_floor: Optional[int] = None  # P0.4b: Falso Rey en piso (None = no existe)
+    false_king_round_appeared: Optional[int] = None  # Ronda en que CROWN activó Falso Rey
 
     # Escaleras
     stairs: Dict[int, RoomId] = field(default_factory=dict)
@@ -162,6 +163,8 @@ class GameState:
             rooms=rooms,
             king_floor=int(d.get("king_floor", 1)),
             king_vanish_ends=int(d.get("king_vanish_ends", 0)),
+            false_king_floor=int(d["false_king_floor"]) if d.get("false_king_floor") else None,
+            false_king_round_appeared=int(d["false_king_round_appeared"]) if d.get("false_king_round_appeared") else None,
             stairs=stairs,
             phase=d.get("phase", "PLAYER"),
             turn_order=turn_order,
