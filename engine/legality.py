@@ -49,13 +49,10 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             if r and r.deck.remaining() > 0:
                 acts.append(Action(actor=str(pid), type=ActionType.SEARCH, data={}))
 
-        # MEDITATE no se puede en pasillo del piso del Rey (regla base)
-        if not (is_corridor(p.room) and floor_of(p.room) == state.king_floor):
+        # MEDITATE no se puede en pasillo del piso del Rey, salvo si el jugador esta en -5.
+        in_king_corridor = is_corridor(p.room) and floor_of(p.room) == state.king_floor
+        if not in_king_corridor or p.at_minus5:
             acts.append(Action(actor=str(pid), type=ActionType.MEDITATE, data={}))
-
-        # Regla: No puedes meditar en el pasillo del piso donde está el Rey
-        if p.room == corridor_id(state.king_floor):
-            acts = [a for a in acts if a.type != ActionType.MEDITATE]
 
         acts.append(Action(actor=str(pid), type=ActionType.END_TURN, data={}))
         return acts

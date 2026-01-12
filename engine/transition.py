@@ -382,7 +382,6 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         if s.remaining_actions.get(pid, 0) <= 0:
             _advance_turn_or_king(s)
 
-        _finalize_step(s, cfg)
         return _finalize_and_return(s, cfg)
 
     # -------------------------
@@ -454,7 +453,6 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         if not s.game_over:
             _start_new_round(s, cfg)
 
-        _finalize_step(s, cfg)
         return _finalize_and_return(s, cfg)
 
     raise ValueError(f"Invalid phase/action combination: phase={s.phase}, action={action}")

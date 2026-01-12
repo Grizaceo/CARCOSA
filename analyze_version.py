@@ -12,7 +12,7 @@ def analyze_version(version_dir: str):
     version_path = Path(version_dir)
     
     if not version_path.exists():
-        print(f"❌ Directory not found: {version_dir}")
+        print(f"ERROR: Directory not found: {version_dir}")
         return False
     
     # Load metadata if available
@@ -30,7 +30,7 @@ def analyze_version(version_dir: str):
     jsonl_files = sorted(version_path.glob("*.jsonl"))
     
     if not jsonl_files:
-        print(f"❌ No JSONL files found in {version_dir}")
+        print(f"ERROR: No JSONL files found in {version_dir}")
         return False
     
     print(f"Analyzing {len(jsonl_files)} files:\n")
@@ -50,7 +50,7 @@ def analyze_version(version_dir: str):
         
         if d6_rolls:
             counter = Counter(d6_rolls)
-            print(f"  {jsonl_file.name:20s} → {len(d6_rolls):3d} rolls, dist: {dict(sorted(counter.items()))}")
+            print(f"  {jsonl_file.name:20s} -> {len(d6_rolls):3d} rolls, dist: {dict(sorted(counter.items()))}")
     
     print(f"\n{'='*70}")
     print(f"GLOBAL STATISTICS")
@@ -74,25 +74,25 @@ def analyze_version(version_dir: str):
         print(f"  P-value: {p_value:.6f}")
         
         if p_value > 0.05:
-            print(f"\n✓ Distribution is UNIFORM (p > 0.05)\n")
+            print(f"\nOK: Distribution is UNIFORM (p > 0.05)\n")
         else:
-            print(f"\n✗ Distribution is BIASED (p < 0.05)\n")
+            print(f"\nWARN: Distribution is BIASED (p < 0.05)\n")
         
         print(f"Per-die breakdown:")
         print(f"{'d6':>3} | {'Count':>5} | {'%':>6} | {'Ratio':>6} | Status")
-        print(f"{'─'*3}─┼─{'─'*5}─┼─{'─'*6}─┼─{'─'*6}─┼────────")
+        print(f"{'-'*3}-+-{'-'*5}-+-{'-'*6}-+-{'-'*6}-+--------")
         
         for i in range(1, 7):
             count = counter.get(i, 0)
             pct = (count / len(all_d6_rolls)) * 100 if all_d6_rolls else 0
             expected_pct = 100 / 6
             ratio = (count / expected[0]) if expected[0] > 0 else 0
-            status = "✓" if 0.5 < ratio < 1.5 else "!"
+            status = "OK" if 0.5 < ratio < 1.5 else "!"
             print(f"{i:3d} | {count:5d} | {pct:5.1f}% | {ratio:5.2f}x | {status}")
         
         return True
     else:
-        print("❌ No d6 rolls found in files!")
+        print("ERROR: No d6 rolls found in files!")
         return False
 
 if __name__ == "__main__":
@@ -106,7 +106,7 @@ if __name__ == "__main__":
             version_dir = versions[0]
             print(f"Using latest version: {version_dir}")
         else:
-            print("❌ No version directories found (runs_v*)")
+            print("ERROR: No version directories found (runs_v*)")
             sys.exit(1)
     
     analyze_version(version_dir)

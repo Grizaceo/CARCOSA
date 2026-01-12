@@ -61,11 +61,11 @@ def main():
     versions = sorted(glob.glob("runs_v*"), reverse=True)
     
     if not versions:
-        print("❌ No version directories found (runs_v*)")
+        print("ERROR: No version directories found (runs_v*)")
         return
     
     print(f"\n{'='*90}")
-    print(f"COMPARING D6 DISTRIBUTIONS ACROSS CODE VERSIONS")
+    print("COMPARING D6 DISTRIBUTIONS ACROSS CODE VERSIONS")
     print(f"{'='*90}\n")
     
     results = []
@@ -76,25 +76,25 @@ def main():
             results.append(result)
     
     # Display comparison table
-    print(f"{'Commit':>7} | {'Branch':<8} | {'Rolls':>6} | {'Chi²':>7} | {'P-value':>8} | Uniform?")
-    print(f"{'─'*7}─┼─{'─'*8}─┼─{'─'*6}─┼─{'─'*7}─┼─{'─'*8}─┼──────────")
+    print(f"{'Commit':>7} | {'Branch':<8} | {'Rolls':>6} | {'Chi2':>7} | {'P-value':>8} | Uniform?")
+    print(f"{'-'*7}-+-{'-'*8}-+-{'-'*6}-+-{'-'*7}-+-{'-'*8}-+----------")
     
     for r in results:
-        status = "✓ YES" if r["is_uniform"] else "✗ NO"
+        status = "OK YES" if r["is_uniform"] else "NO"
         print(f"{r['commit']:>7} | {r['branch']:<8} | {r['total_rolls']:>6} | {r['chi2']:>7.2f} | {r['p_value']:>8.4f} | {status}")
     
     # Detailed view of most recent
     if results:
         latest = results[0]
-        print(f"\n{'─'*90}")
+        print(f"\n{'-'*90}")
         print(f"LATEST VERSION: {latest['commit']} ({latest['timestamp']})")
-        print(f"{'─'*90}\n")
+        print(f"{'-'*90}\n")
         
         print(f"Distribution: {latest['distribution']}")
         print(f"Total rolls: {latest['total_rolls']}")
         print(f"Chi-square: {latest['chi2']:.2f}")
         print(f"P-value: {latest['p_value']:.6f}")
-        print(f"Status: {'✓ UNIFORM' if latest['is_uniform'] else '✗ BIASED'}\n")
+        print(f"Status: {'OK UNIFORM' if latest['is_uniform'] else 'BIASED'}\n")
         
         print("Per-die breakdown:")
         dist = latest['distribution']
@@ -104,7 +104,7 @@ def main():
             pct = (count / total) * 100 if total else 0
             expected_pct = 100 / 6
             ratio = (count / (total / 6)) if total else 0
-            status = "✓" if 0.5 < ratio < 1.5 else "!"
+            status = "OK" if 0.5 < ratio < 1.5 else "!"
             print(f"  d6={i}: {count:3d} rolls ({pct:5.1f}%) | expected {expected_pct:5.1f}% | ratio {ratio:5.2f}x | {status}")
 
 if __name__ == "__main__":
