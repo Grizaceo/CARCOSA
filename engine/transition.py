@@ -128,7 +128,8 @@ def _apply_minus5_transitions(s, cfg):
     for pid, p in s.players.items():
         if p.sanity <= cfg.S_LOSS:  # At or below -5
             if not p.at_minus5:  # Just crossed into -5
-                # Destroy keys and objects
+                # Destroy keys and objects, track globally
+                s.keys_destroyed += p.keys
                 p.keys = 0
                 p.objects = []
                 
@@ -168,9 +169,22 @@ def _advance_turn_or_king(s):
 
 
 def _presence_damage_for_round(round_n: int) -> int:
-    """Damage per round from King presence (P0.5)."""
-    # Ronda 1: sin daño. Ronda 2+: 1 punto por ronda (KING_PRESENCE_DAMAGE en config)
-    return 1 if round_n >= 2 else 0
+    """
+    Damage per round from King presence (P0.5).
+    Canon table (confirmed):
+    - Rounds 1-3: 1 damage
+    - Rounds 4-6: 2 damage
+    - Rounds 7-9: 3 damage
+    - Rounds 10+: 4 damage
+    """
+    if round_n <= 3:
+        return 1
+    elif round_n <= 6:
+        return 2
+    elif round_n <= 9:
+        return 3
+    else:
+        return 4
 
 
 def _shuffle_all_room_decks(s, rng: RNG):
@@ -210,8 +224,15 @@ def _expel_players_from_floor(s, floor: int):
 
 
 def _attract_players_to_floor(s, floor: int):
+    """
+    Attract (atraer) all players to the corridor of the specified floor.
+    P0.4b: Exception: don't move players on false_king_floor (if it exists).
+    """
     target = corridor_id(floor)
     for p in s.players.values():
+        # Don't move if player is on false_king_floor
+        if s.false_king_floor is not None and floor_of(p.room) == s.false_king_floor:
+            continue
         p.room = target
 
 

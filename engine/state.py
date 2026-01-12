@@ -67,6 +67,7 @@ class GameState:
     # Rey
     king_floor: int = 1
     king_vanish_ends: int = 0
+    false_king_floor: Optional[int] = None  # P0.4b: Falso Rey en piso (None = no existe)
 
     # Escaleras
     stairs: Dict[int, RoomId] = field(default_factory=dict)
