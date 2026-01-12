@@ -118,7 +118,7 @@ def main():
         run_files.append(out_file)
     
     print(f"\n{'='*60}")
-    print(f"✓ All runs completed!")
+    print("All runs completed!")
     print(f"Results saved to: {version_dir}/")
     print(f"Files: {len(run_files)} runs")
     print(f"{'='*60}\n")
