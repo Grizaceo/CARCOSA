@@ -361,7 +361,9 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                     if floor_of(p.room) == s.king_floor:
                         p.sanity -= pres
 
-            d6 = int(action.data["d6"])
+            # Generar d6 aleatoriamente (NO desde action.data)
+            d6 = rng.randint(1, 6)
+            rng.last_king_d6 = d6  # Track for logging
             if d6 == 1:
                 _shuffle_all_room_decks(s, rng)
             elif d6 == 2:

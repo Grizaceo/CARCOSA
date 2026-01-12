@@ -103,10 +103,15 @@ def run_episode(
 
         next_state = step(state, action, rng, cfg)
 
+        # Track d6 if KING_ENDROUND
+        action_dict = {"actor": actor, "type": action.type.value, "data": action.data}
+        if action.type.value == "KING_ENDROUND" and rng.last_king_d6 is not None:
+            action_dict["d6"] = rng.last_king_d6
+
         records.append(
             transition_record(
                 state=state,
-                action={"actor": actor, "type": action.type.value, "data": action.data},
+                action=action_dict,
                 next_state=next_state,
                 cfg=cfg,
                 step_idx=step_idx,

@@ -21,12 +21,12 @@ def _state(round_n: int, king_floor: int, p_floor: int) -> GameState:
 
 
 def test_king_no_damage_on_departure_only_arrival():
-    rng = RNG(1)
+    rng = RNG(2)  # Seed 2 generates d6=1 first, no additional sanity loss beyond house loss
     cfg = Config(KING_PRESENCE_START_ROUND=1)  # presencia habilitada desde ronda 1 para el test
 
     s = _state(round_n=2, king_floor=1, p_floor=1)  # jugadores en piso 1
     # Rey se va a piso 2; si pegara al salir, dañaría a jugadores en piso 1 (NO debe ocurrir)
-    a = Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 2, "d6": 1})
+    a = Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 2})
     s2 = step(s, a, rng, cfg)
 
     # Solo -1 global (casa). Sin presencia porque llegó a piso 2 y jugadores están en piso 1.
@@ -39,7 +39,7 @@ def test_toggle_skip_presence_round1():
     cfg = Config(KING_PRESENCE_START_ROUND=2)
 
     s = _state(round_n=1, king_floor=1, p_floor=1)
-    a = Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1, "d6": 1})
+    a = Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1})
     s2 = step(s, a, rng, cfg)
 
     # En ronda 1: solo -1 global; presencia se omite por toggle.

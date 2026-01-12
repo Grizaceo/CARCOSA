@@ -69,6 +69,48 @@ tools/            # Development utilities
 docs/             # Canon documentation
 ```
 
+## Running Simulations
+
+The simulator uses **versioned runs** to ensure clean data isolation between code versions.
+
+### Generate Runs
+
+Generate 5 seed runs for the current code version:
+
+```bash
+# Windows PowerShell
+wsl bash -c "cd /home/gris/CARCOSA && source .venv/bin/activate && python run_versioned.py --all-seeds"
+
+# WSL bash
+python run_versioned.py --all-seeds
+```
+
+This creates a directory like `runs_v4fee5ba_main_20260112_161915/` with:
+- `metadata.json` - Commit hash, branch, timestamp
+- `seed{1-5}.jsonl` - 5 complete game simulations
+
+### Analyze Runs
+
+Analyze d6 distribution (RNG uniformity):
+
+```bash
+# Latest version
+python analyze_version.py
+
+# Specific version
+python analyze_version.py runs_v4fee5ba_main_20260112_161915
+
+# Compare multiple versions
+python compare_versions.py
+```
+
+### Run Organization
+
+- **`runs_v{COMMIT}_{BRANCH}_{TIMESTAMP}/`** - Current code version runs
+- **`runs_archive/`** - Archived runs from previous code versions
+
+See [RUNS_ORGANIZATION.md](RUNS_ORGANIZATION.md) for detailed structure.
+
 ## Running Specific Test Classes
 
 ```bash

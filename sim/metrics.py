@@ -45,13 +45,18 @@ def transition_record(
     T0 = tension_T(state, cfg)
     T1 = tension_T(next_state, cfg)
 
+    # Prepare action_data, including d6 if present
+    action_data = action.get("data", {}).copy()
+    if "d6" in action:
+        action_data["d6"] = action["d6"]
+
     rec: Dict[str, Any] = {
         "step": step_idx,
         "round": state.round,
         "phase": state.phase,
         "actor": action["actor"],
         "action_type": action["type"],
-        "action_data": action.get("data", {}),
+        "action_data": action_data,
 
         "T_pre": T0,
         "T_post": T1,

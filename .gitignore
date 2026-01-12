@@ -13,8 +13,11 @@ build/
 dist/
 *.egg-info/
 
-# runs/output (si no quieres versionarlos)
+# runs & simulation data (use runs_archive/ for historical reference)
 runs/
+runs_v*/
+runs_archive/
+data/
 
 # OS/editor
 .DS_Store

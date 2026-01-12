@@ -59,10 +59,12 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
     if state.phase == "KING":
         if actor != "KING":
             return []
+        # NOTA: El d6 NO debe ser elegido por política, debe ser aleatorio.
+        # Por tanto, solo generamos acciones para cada floor (3 opciones).
+        # El d6 se generará ALEATORIAMENTE en la transición.
         acts: List[Action] = []
         for floor in (1, 2, 3):
-            for d6 in (1, 2, 3, 4, 5, 6):
-                acts.append(Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": floor, "d6": d6}))
+            acts.append(Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": floor}))
         return acts
 
     return []
