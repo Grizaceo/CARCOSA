@@ -1,7 +1,7 @@
 """
 Tests for P0 Core updates (P0.4a, P0.4b, P0.5 revised).
 - P0.4a: Keys destroyed counter coherence
-- P0.4b: Attract with false_king_floor exception
+- P0.4b: Attract with crown holder floor exception
 - P0.5 (revised): Presence damage by round table
 """
 
@@ -98,10 +98,10 @@ class TestP04aKeysDestroyedCoherence:
 
 
 class TestP04bAttractWithFalseKing:
-    """Test attract action respects false_king_floor exception."""
+    """Test attract action respects crown-holder false king floor exception."""
     
     def test_attract_all_without_false_king(self):
-        """Without false_king_floor, all players go to corridor."""
+        """Without crown holder, all players go to corridor."""
         cfg = Config()
         p1 = PlayerState(player_id=PlayerId("p1"), sanity=5, room=room_id(1, 1))
         p2 = PlayerState(player_id=PlayerId("p2"), sanity=5, room=room_id(2, 2))
@@ -122,7 +122,7 @@ class TestP04bAttractWithFalseKing:
         assert s.players[PlayerId("p3")].room == target
     
     def test_attract_excludes_false_king_floor(self):
-        """Players on false_king_floor should NOT move."""
+        """Players on crown holder floor should NOT move."""
         cfg = Config()
         p1 = PlayerState(player_id=PlayerId("p1"), sanity=5, room=room_id(1, 1))
         p2 = PlayerState(player_id=PlayerId("p2"), sanity=5, room=room_id(2, 2))
@@ -131,22 +131,22 @@ class TestP04bAttractWithFalseKing:
         s = GameState(
             round=1,
             players={PlayerId("p1"): p1, PlayerId("p2"): p2, PlayerId("p3"): p3},
-            false_king_floor=2  # Falso Rey on floor 2
+            flags={"CROWN_YELLOW": True, "CROWN_HOLDER": "p2"}
         )
         
         # Attract to floor 1
         _attract_players_to_floor(s, 1)
         
         target = corridor_id(1)
-        # p1 should move (not on false_king_floor)
+        # p1 should move (not on crown holder floor)
         assert s.players[PlayerId("p1")].room == target
-        # p2 should NOT move (on floor 2, which is false_king_floor)
+        # p2 should NOT move (on crown holder floor)
         assert s.players[PlayerId("p2")].room == room_id(2, 2)
-        # p3 should move (not on false_king_floor)
+        # p3 should move (not on crown holder floor)
         assert s.players[PlayerId("p3")].room == target
     
     def test_attract_false_king_different_floor(self):
-        """Attract to false_king_floor: only players NOT on it move."""
+        """Attract to crown holder floor: only players NOT on it move."""
         cfg = Config()
         p1 = PlayerState(player_id=PlayerId("p1"), sanity=5, room=room_id(1, 1))
         p2 = PlayerState(player_id=PlayerId("p2"), sanity=5, room=room_id(2, 2))
@@ -154,16 +154,16 @@ class TestP04bAttractWithFalseKing:
         s = GameState(
             round=1,
             players={PlayerId("p1"): p1, PlayerId("p2"): p2},
-            false_king_floor=2
+            flags={"CROWN_YELLOW": True, "CROWN_HOLDER": "p2"}
         )
         
-        # Attract TO floor 2 (where false king is)
+        # Attract TO floor 2 (where crown holder is)
         _attract_players_to_floor(s, 2)
         
         target = corridor_id(2)
-        # p1 should move (not on false_king_floor)
+        # p1 should move (not on crown holder floor)
         assert s.players[PlayerId("p1")].room == target
-        # p2 should NOT move (on false_king_floor)
+        # p2 should NOT move (on crown holder floor)
         assert s.players[PlayerId("p2")].room == room_id(2, 2)
 
 

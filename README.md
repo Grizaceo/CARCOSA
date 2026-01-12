@@ -165,8 +165,8 @@ pytest tests/test_p0_canon.py::TestP05KingPresenceDamage -v
 
 ### P0.4b - Attract (Atraer) with False King Exception
 - **File**: `engine/transition.py::_attract_players_to_floor()`
-- **Rule**: All players move to corridor of specified floor, EXCEPT those on `false_king_floor`
-- **State**: `GameState.false_king_floor` (int | None)
+- **Rule**: All players move to corridor of specified floor, EXCEPT those on the crown holder floor
+- **State**: `GameState.flags["CROWN_HOLDER"]` (player id)
 - **Tests**: 3 tests in `TestP04bAttractWithFalseKing`
 
 ### P0.5 - King Presence Damage (REVISED TABLE)
