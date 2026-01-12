@@ -28,7 +28,7 @@ def test_win_triggers_on_endround_when_conditions_met():
     s = GameState(round=5, players=players, rooms=rooms, phase="KING", king_floor=2)
     rng = RNG(1)
 
-    a = Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 2, "d6": 1})
+    a = Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 2})
     s2 = step(s, a, rng, cfg)
 
     assert s2.game_over is True

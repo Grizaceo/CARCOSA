@@ -36,7 +36,7 @@ def test_minus5_is_reversible_and_only_limits_while_at_minus5():
     rng = RNG(1)
 
     # Fin de ronda: Casa -1 => P1 pasa de -4 a -5 (pero no pierden porque P2 no está en -5)
-    s2 = step(s, Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1, "d6": 1}), rng, cfg)
+    s2 = step(s, Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1}), rng, cfg)
 
     assert s2.phase == "PLAYER"
     assert s2.players[PlayerId("P1")].sanity == -5

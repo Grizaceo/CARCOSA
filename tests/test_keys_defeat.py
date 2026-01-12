@@ -23,7 +23,7 @@ def test_lose_when_keys_in_game_leq_threshold():
     s = GameState(round=5, players=players, rooms=rooms, phase="KING", keys_destroyed=3, king_floor=1)
     rng = RNG(1)
 
-    a = Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1, "d6": 1})
+    a = Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1})
     s2 = step(s, a, rng, cfg)
 
     assert s2.game_over is True

@@ -20,7 +20,7 @@ def test_sanity_never_goes_below_minus5():
     s = GameState(round=1, players=players, rooms=rooms, phase="KING", king_floor=1)
     rng = RNG(1)
 
-    s2 = step(s, Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1, "d6": 1}), rng, cfg)
+    s2 = step(s, Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1}), rng, cfg)
 
     assert s2.players[PlayerId("P1")].sanity >= cfg.S_LOSS
     assert s2.players[PlayerId("P2")].sanity >= cfg.S_LOSS

@@ -14,6 +14,7 @@ class RNG:
     seed: int
     _r: random.Random = None
     log: List[Tuple[str, Any]] = None
+    last_king_d6: int = None  # Track last d6 generated for KING_ENDROUND
 
     def __post_init__(self) -> None:
         self._r = random.Random(self.seed)
