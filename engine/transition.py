@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional
 
 from engine.actions import Action, ActionType
-from engine.board import corridor_id, floor_of
+from engine.board import corridor_id, floor_of, ruleta_floor
 from engine.config import Config
 from engine.legality import get_legal_actions
 from engine.rng import RNG
@@ -108,7 +108,12 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg):
         return
     
     if s_str == "CROWN":
-        s.flags["CROWN_YELLOW"] = True
+        # CAMBIO 4: Inicializar Falso Rey cuando se revela CROWN
+        if not s.flags.get("CROWN_YELLOW"):
+            s.flags["CROWN_YELLOW"] = True
+            # Falso Rey aparece en piso aleatorio
+            s.false_king_floor = rng.randint(1, 3)
+            s.false_king_round_appeared = None  # Será seteado en fin de ronda si es necesario
         return
 
 
@@ -292,7 +297,13 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
     s = state.clone()
 
     legal = get_legal_actions(s, action.actor)
-    if action not in legal:
+    
+    # Validación: KING_ENDROUND puede tener cualquier data (se ignora y se usa RNG)
+    if action.type == ActionType.KING_ENDROUND and action.actor == "KING":
+        # Solo verificar que existe al menos una acción KING_ENDROUND legal
+        if not any(a.type == ActionType.KING_ENDROUND for a in legal):
+            raise ValueError(f"Illegal action for actor={action.actor}: {action}")
+    elif action not in legal:
         raise ValueError(f"Illegal action for actor={action.actor}: {action}")
 
     s.action_log.append(
@@ -344,24 +355,45 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
     # FASE REY (fin de ronda)
     # -------------------------
     if s.phase == "KING" and action.type == ActionType.KING_ENDROUND:
-        # Paso 1: casa (configurable) a todos
+        # PASO 1: Casa (configurable) a todos
         for p in s.players.values():
             p.sanity -= cfg.HOUSE_LOSS_PER_ROUND
 
         if s.king_vanish_ends > 0:
             s.king_vanish_ends -= 1
         else:
-            # Tu cambio: pega SOLO al llegar (no al salir)
-            new_floor = int(action.data.get("floor", s.king_floor))
+            # PASO 3: Ruleta d4 para determinar nuevo piso (canon P0)
+            # Si action.data tiene "floor", usarlo (compatibilidad hacia atrás para tests)
+            # De lo contrario, tirar d4 + ruleta (comportamiento canon)
+            if "floor" in action.data and action.data["floor"]:
+                new_floor = int(action.data["floor"])
+                rng.last_king_d4 = None  # No se lanzó d4
+            else:
+                d4 = rng.randint(1, 4)
+                rng.last_king_d4 = d4  # Track for logging
+                new_floor = ruleta_floor(s.king_floor, d4)
+            
+            # Excepción: si cae en piso del Falso Rey, repetir (máx 3 intentos)
+            attempts = 0
+            while new_floor == s.false_king_floor and attempts < 3:
+                if "floor" not in action.data or not action.data["floor"]:
+                    d4 = rng.randint(1, 4)
+                    new_floor = ruleta_floor(s.king_floor, d4)
+                else:
+                    # Si floor fue explícito, no repetir
+                    break
+                attempts += 1
+            
             s.king_floor = new_floor
 
+            # PASO 2: Daño por presencia del Rey (en piso NUEVO, después de llegar)
             if s.round >= cfg.KING_PRESENCE_START_ROUND:
                 pres = _presence_damage_for_round(s.round)
                 for p in s.players.values():
                     if floor_of(p.room) == s.king_floor:
                         p.sanity -= pres
 
-            # Generar d6 aleatoriamente (NO desde action.data)
+            # PASO 4: Efecto d6 aleatorio
             d6 = rng.randint(1, 6)
             rng.last_king_d6 = d6  # Track for logging
             if d6 == 1:
@@ -380,7 +412,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                     if p.objects:
                         p.objects.pop()
 
-        # Tick estados
+        # PASO 5: Tick estados (decremento de duraciones)
         for p in s.players.values():
             for st in p.statuses:
                 st.remaining_rounds -= 1

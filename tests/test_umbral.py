@@ -25,8 +25,17 @@ def test_umbral_is_floor1_corridor_reachable_via_stairs():
 
     rng = RNG(1)
 
-    a = Action(actor="P1", type=ActionType.MOVE, data={"to": "F1_P"})
-    s2 = step(s, a, rng, cfg)
+    # Movimiento 1: Usar escaleras para ir a la habitación con escalera del piso 1 (F1_R1)
+    a1 = Action(actor="P1", type=ActionType.MOVE, data={"to": "F1_R1"})
+    s2 = step(s, a1, rng, cfg)
+    assert str(s2.players[PlayerId("P1")].room) == "F1_R1"
+    assert s2.players[PlayerId("P1")].at_umbral is False  # Aún no está en Umbral (es F1_P)
+    
+    # Movimiento 2: Moverse del F1_R1 al pasillo F1_P (vecinos directos por topología)
+    a2 = Action(actor="P1", type=ActionType.MOVE, data={"to": "F1_P"})
+    s3 = step(s2, a2, rng, cfg)
+    
+    # Ahora sí está en Umbral
+    assert s3.players[PlayerId("P1")].at_umbral is True
+    assert str(s3.players[PlayerId("P1")].room) == "F1_P"
 
-    assert s2.players[PlayerId("P1")].at_umbral is True
-    assert str(s2.players[PlayerId("P1")].room) == "F1_P"
