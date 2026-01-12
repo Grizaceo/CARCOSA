@@ -121,19 +121,35 @@ class TestP03StairsReroll:
 
 
 class TestP05KingPresenceDamage:
-    """Test King presence damage (P0.5)."""
+    """Test King presence damage (P0.5) - UPDATED canon table."""
     
-    def test_presence_damage_round_1_is_zero(self):
-        """Round 1: no damage from King presence."""
+    def test_presence_damage_round_1_to_3_is_one(self):
+        """Rounds 1-3: 1 damage from King presence."""
         from engine.transition import _presence_damage_for_round
-        assert _presence_damage_for_round(1) == 0
-    
-    def test_presence_damage_round_2_plus_is_one(self):
-        """Round 2+: 1 damage per round from King presence."""
-        from engine.transition import _presence_damage_for_round
+        assert _presence_damage_for_round(1) == 1
         assert _presence_damage_for_round(2) == 1
         assert _presence_damage_for_round(3) == 1
-        assert _presence_damage_for_round(10) == 1
+    
+    def test_presence_damage_round_4_to_6_is_two(self):
+        """Rounds 4-6: 2 damage per round from King presence."""
+        from engine.transition import _presence_damage_for_round
+        assert _presence_damage_for_round(4) == 2
+        assert _presence_damage_for_round(5) == 2
+        assert _presence_damage_for_round(6) == 2
+    
+    def test_presence_damage_round_7_to_9_is_three(self):
+        """Rounds 7-9: 3 damage per round."""
+        from engine.transition import _presence_damage_for_round
+        assert _presence_damage_for_round(7) == 3
+        assert _presence_damage_for_round(8) == 3
+        assert _presence_damage_for_round(9) == 3
+    
+    def test_presence_damage_round_10_plus_is_four(self):
+        """Rounds 10+: 4 damage per round."""
+        from engine.transition import _presence_damage_for_round
+        assert _presence_damage_for_round(10) == 4
+        assert _presence_damage_for_round(11) == 4
+        assert _presence_damage_for_round(20) == 4
 
 
 class TestP02ExpelFromFloor:

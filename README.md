@@ -41,6 +41,34 @@ export PYTHONPATH=/home/gris/CARCOSA:$PYTHONPATH
 pytest -q
 ```
 
+## Project Structure
+
+```
+engine/          # Core simulation engine
+├── board.py      # P0.1: Canonical room adjacencies
+├── state.py      # Game state (P0.4b: false_king_floor)
+├── transition.py # P0 transitions (P0.2, P0.3, P0.4a, P0.5)
+├── config.py     # Game configuration
+└── effects/      # Status effects
+
+sim/              # Simulation & AI policies
+├── runner.py
+├── policies.py
+└── metrics.py
+
+tests/            # Test suite (65 tests)
+├── test_p0_canon.py    # P0 canonical mechanics
+├── test_p0_updates.py  # P0 updates (keys, attract, presence)
+└── [13 more test files]
+
+tools/            # Development utilities
+├── setup/        # Historical implementation scripts
+├── debug/        # Debugging tools
+└── validate/     # Validation scripts
+
+docs/             # Canon documentation
+```
+
 ## Running Specific Test Classes
 
 ```bash
@@ -113,26 +141,51 @@ docs/
   - Other players lose 1 sanity when someone crosses
   - Player at -5 has 1 action per turn; restores 2 actions when leaving to -4
   - Event fires only once on crossing (tracked by `at_minus5` flag)
-- **Tests**: 6 tests in `TestP04MinusFiveEvent` (crossing, non-repetition, recovery)
+- **Tests**: 9 tests (basic + keys coherence + multiple players)
 
-### P0.5 - King Presence Damage
+### P0.4b - Attract (Atraer) with False King Exception
+- **File**: `engine/transition.py::_attract_players_to_floor()`
+- **Rule**: All players move to corridor of specified floor, EXCEPT those on `false_king_floor`
+- **State**: `GameState.false_king_floor` (int | None)
+- **Tests**: 3 tests in `TestP04bAttractWithFalseKing`
+
+### P0.5 - King Presence Damage (REVISED TABLE)
 - **File**: `engine/transition.py::_presence_damage_for_round()`
-- **Rule**: Round 1: 0 damage. Round 2+: 1 damage per round (only to players on King's floor)
-- **Parametrization**: `Config.KING_PRESENCE_DAMAGE` can be adjusted; currently 1
-- **Tests**: 2 tests in `TestP05KingPresenceDamage`
+- **Canon Table** (confirmed):
+  - Rounds 1–3: 1 damage per round
+  - Rounds 4–6: 2 damage per round
+  - Rounds 7–9: 3 damage per round
+  - Rounds 10+: 4 damage per round
+- **Application**: Only to players on King's floor
+- **Tests**: 15 tests (4 in old P05, 12 parametrized in test_p0_updates)
 
 ## Test Summary
 
-- **Total**: 43 tests passing
-  - P0.1: 6 tests
-  - P0.2: 4 tests
-  - P0.3: 3 tests
-  - P0.4: 6 tests
-  - P0.5: 2 tests
-  - Existing: 22 tests
+- **Total**: 65 tests passing ✅
+  - P0.1 Adjacencies: 6 tests
+  - P0.2 Expel: 4 tests
+  - P0.3 Stairs: 3 tests
+  - P0.4a Minus5: 9 tests (+ keys coherence)
+  - P0.4b Attract: 3 tests
+  - P0.5 Presence: 15 tests (updated table)
+  - Other integration: 25 tests
 
-All tests are **deterministic** and use **seeded RNG** for reproducibility.
+All tests are **deterministic**, use **fixed seeds**, and **no warnings**.
 
-## Canon Compliance
+## P0 Implementation Status
 
-See `NOTES.md` for parametrization decisions and any pending canon clarifications.
+| Feature | File | Implementation | Tests | Status |
+|---------|------|---|---|---|
+| P0.1 Adjacencies | `engine/board.py` | Canonical R1↔R2, R3↔R4 | 6 | ✅ |
+| P0.2 Expel | `engine/transition.py` | Floor mapping to stairs | 4 | ✅ |
+| P0.3 Stairs Reroll | `engine/transition.py` | 1d4 per floor RNG | 3 | ✅ |
+| P0.4a Event -5 | `engine/transition.py` | Key destruction + counter | 9 | ✅ |
+| P0.4b Attract | `engine/transition.py` | With false_king exception | 3 | ✅ |
+| P0.5 Presence | `engine/transition.py` | Canon table (R1-3→1, R4-6→2, ...) | 15 | ✅ |
+
+## Development Utilities
+
+See `tools/README.md` for:
+- **Setup scripts**: Historical implementation records
+- **Debug tools**: Step-by-step debugging
+- **Validation**: Syntax, imports, and quick P0 checks
