@@ -2,7 +2,8 @@ from __future__ import annotations
 from typing import Optional
 
 from engine.actions import Action, ActionType
-from engine.board import corridor_id, floor_of, ruleta_floor
+from engine.board import corridor_id, floor_of, ruleta_floor, rotate_boxes
+from engine.boxes import active_deck_for_room, sync_room_decks_from_boxes
 from engine.config import Config
 from engine.legality import get_legal_actions
 from engine.rng import RNG
@@ -41,11 +42,14 @@ def _finalize_step(s, cfg):
 
     # pérdida por agotamiento de mazos (modo simulación)
     if (not s.game_over) and getattr(cfg, "LOSE_ON_DECK_EXHAUSTION", False):
-        remaining = 0
-        for rid, room in s.rooms.items():
-            if str(rid).endswith("_P"):  # pasillos
-                continue
-            remaining += room.deck.remaining()
+        if s.boxes:
+            remaining = sum(box.deck.remaining() for box in s.boxes.values())
+        else:
+            remaining = 0
+            for rid, room in s.rooms.items():
+                if str(rid).endswith("_P"):  # pasillos
+                    continue
+                remaining += room.deck.remaining()
         if remaining <= 0:
             s.game_over = True
             s.outcome = "LOSE_DECK"
@@ -66,10 +70,11 @@ def _reveal_one(s, room_id: RoomId):
     room = s.rooms.get(room_id)
     if room is None:
         return None
-    if room.deck.remaining() <= 0:
+    deck = active_deck_for_room(s, room_id)
+    if deck is None or deck.remaining() <= 0:
         return None
-    card = room.deck.cards[room.deck.top]
-    room.deck.top += 1
+    card = deck.cards[deck.top]
+    deck.top += 1
     room.revealed += 1
     return card
 
@@ -204,11 +209,15 @@ def _presence_damage_for_round(round_n: int) -> int:
 
 
 def _shuffle_all_room_decks(s, rng: RNG):
-    for room in s.rooms.values():
-        if room.deck.remaining() > 1:
-            tail = room.deck.cards[room.deck.top :]
+    if s.boxes:
+        decks = [box.deck for box in s.boxes.values()]
+    else:
+        decks = [room.deck for room in s.rooms.values()]
+    for deck in decks:
+        if deck.remaining() > 1:
+            tail = deck.cards[deck.top :]
             rng.shuffle(tail)
-            room.deck.cards[room.deck.top :] = tail
+            deck.cards[deck.top :] = tail
 
 
 def _expel_players_from_floor(s, floor: int):
@@ -460,6 +469,8 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         _update_umbral_flags(s, cfg)
         _apply_minus5_transitions(s, cfg)
         _roll_stairs(s, rng)
+        s.box_at_room = rotate_boxes(s.box_at_room)
+        sync_room_decks_from_boxes(s)
 
         _end_of_round_checks(s, cfg)
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 from engine.types import RoomId
 
 
@@ -29,6 +29,34 @@ def room_from_d4(floor: int, roll: int) -> RoomId:
     # d4 => R1..R4
     r = ((roll - 1) % ROOMS_PER_FLOOR) + 1
     return room_id(floor, r)
+
+
+def canonical_room_ids() -> List[RoomId]:
+    return [room_id(f, r) for f in range(1, FLOORS + 1) for r in range(1, ROOMS_PER_FLOOR + 1)]
+
+
+SUSHI_CYCLE: Dict[RoomId, RoomId] = {
+    room_id(1, 1): room_id(1, 4),
+    room_id(1, 4): room_id(1, 3),
+    room_id(1, 3): room_id(1, 2),
+    room_id(1, 2): room_id(2, 3),
+    room_id(2, 3): room_id(2, 2),
+    room_id(2, 2): room_id(3, 3),
+    room_id(3, 3): room_id(3, 2),
+    room_id(3, 2): room_id(3, 1),
+    room_id(3, 1): room_id(3, 4),
+    room_id(3, 4): room_id(2, 1),
+    room_id(2, 1): room_id(2, 4),
+    room_id(2, 4): room_id(1, 1),
+}
+
+
+def rotate_boxes(box_at_room: Dict[RoomId, str]) -> Dict[RoomId, str]:
+    rotated = dict(box_at_room)
+    for src, dst in SUSHI_CYCLE.items():
+        if src in box_at_room:
+            rotated[dst] = box_at_room[src]
+    return rotated
 
 
 def neighbors(room: RoomId) -> List[RoomId]:

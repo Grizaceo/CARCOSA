@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 import copy
 
 from engine.types import PlayerId, RoomId, CardId
+from engine.boxes import sync_room_decks_from_boxes
 
 
 @dataclass
@@ -57,12 +58,20 @@ class RoomState:
 
 
 @dataclass
+class BoxState:
+    box_id: str
+    deck: DeckState
+
+
+@dataclass
 class GameState:
     round: int
     players: Dict[PlayerId, PlayerState]
 
     monsters: List[MonsterState] = field(default_factory=list)
     rooms: Dict[RoomId, RoomState] = field(default_factory=dict)
+    boxes: Dict[str, BoxState] = field(default_factory=dict)
+    box_at_room: Dict[RoomId, str] = field(default_factory=dict)
 
     # Rey
     king_floor: int = 1
@@ -114,6 +123,24 @@ class GameState:
             for f in (1, 2, 3):
                 self.stairs[f] = RoomId(f"F{f}_R1")
 
+        if not self.boxes or not self.box_at_room:
+            self._init_boxes()
+        sync_room_decks_from_boxes(self)
+
+    def _init_boxes(self) -> None:
+        from engine.board import canonical_room_ids
+
+        for rid in canonical_room_ids():
+            box_id = str(rid)
+            if box_id not in self.boxes:
+                if rid in self.rooms:
+                    deck = self.rooms[rid].deck
+                else:
+                    deck = DeckState(cards=[])
+                self.boxes[box_id] = BoxState(box_id=box_id, deck=deck)
+            if rid not in self.box_at_room:
+                self.box_at_room[rid] = box_id
+
     def clone(self) -> "GameState":
         return copy.deepcopy(self)
 
@@ -151,6 +178,16 @@ class GameState:
                 revealed=rdata.get("revealed", 0),
             )
 
+        boxes: Dict[str, BoxState] = {}
+        for bid, bdata in d.get("boxes", {}).items():
+            deck = DeckState(
+                cards=[CardId(x) for x in bdata["deck"]["cards"]],
+                top=bdata["deck"].get("top", 0),
+            )
+            boxes[str(bid)] = BoxState(box_id=str(bid), deck=deck)
+
+        box_at_room = {RoomId(k): str(v) for k, v in d.get("box_at_room", {}).items()}
+
         turn_order = [PlayerId(x) for x in d.get("turn_order", list(players.keys()))]
         remaining_actions = {PlayerId(k): int(v) for k, v in d.get("remaining_actions", {}).items()}
 
@@ -161,6 +198,8 @@ class GameState:
             players=players,
             monsters=monsters,
             rooms=rooms,
+            boxes=boxes,
+            box_at_room=box_at_room,
             king_floor=int(d.get("king_floor", 1)),
             king_vanish_ends=int(d.get("king_vanish_ends", 0)),
             false_king_floor=int(d["false_king_floor"]) if d.get("false_king_floor") else None,
