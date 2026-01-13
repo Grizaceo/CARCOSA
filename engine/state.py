@@ -23,6 +23,7 @@ class PlayerState:
     sanity_max: Optional[int] = None
     keys: int = 0
     objects: List[str] = field(default_factory=list)
+    soulbound_items: List[str] = field(default_factory=list)
     statuses: List[StatusInstance] = field(default_factory=list)
 
     at_umbral: bool = False
@@ -159,6 +160,7 @@ class GameState:
                 sanity_max=pdata.get("sanity_max", None),
                 keys=pdata.get("keys", 0),
                 objects=pdata.get("objects", []),
+                soulbound_items=pdata.get("soulbound_items", []),
                 statuses=statuses,
                 at_umbral=pdata.get("at_umbral", False),
                 at_minus5=pdata.get("at_minus5", False),

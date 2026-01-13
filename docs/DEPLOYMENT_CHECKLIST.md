@@ -14,9 +14,9 @@
 - [x] New uniformity tests added (test_rng_distribution.py)
 
 ## Tools & Utilities
-- [x] run_versioned.py - Versioned run generation
-- [x] analyze_version.py - Distribution analysis
-- [x] compare_versions.py - Cross-version comparison
+- [x] tools/run_versioned.py - Versioned run generation
+- [x] tools/analyze_version.py - Distribution analysis
+- [x] tools/compare_versions.py - Cross-version comparison
 - [x] 4 additional analysis tools created
 
 ## Documentation
@@ -30,7 +30,7 @@
 
 ## Repository Management
 - [x] Old runs archived (runs_archive/v0_original_biased_rng/)
-- [x] .gitignore updated (runs_v*, data/, etc.)
+- [x] .gitignore updated (runs/, runs_v*, data/, etc.)
 - [x] Versioned runs system implemented
 - [x] Clean git history (no merge conflicts)
 

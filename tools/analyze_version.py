@@ -101,7 +101,10 @@ if __name__ == "__main__":
     else:
         # Find the latest versioned directory
         import glob
-        versions = sorted(glob.glob("runs_v*"), reverse=True)
+        versions = []
+        for pattern in ("runs_v*", "runs/runs_v*", "runs_archive/runs_v*"):
+            versions.extend(glob.glob(pattern))
+        versions = sorted(versions, reverse=True)
         if versions:
             version_dir = versions[0]
             print(f"Using latest version: {version_dir}")

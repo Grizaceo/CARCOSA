@@ -117,6 +117,8 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
         if not s.flags.get("CROWN_YELLOW"):
             s.flags["CROWN_YELLOW"] = True
             s.flags["CROWN_HOLDER"] = str(pid)
+            if "CROWN" not in p.soulbound_items:
+                p.soulbound_items.append("CROWN")
             # Piso inicial del Falso Rey (cuando se revela CROWN)
             s.false_king_floor = floor_of(p.room)
             s.false_king_round_appeared = s.round
@@ -162,6 +164,7 @@ def _apply_minus5_transitions(s, cfg):
 
 
 def _current_false_king_floor(s) -> Optional[int]:
+    _sync_crown_holder(s)
     holder_id = s.flags.get("CROWN_HOLDER") if s.flags else None
     if not holder_id:
         return s.false_king_floor
@@ -169,6 +172,26 @@ def _current_false_king_floor(s) -> Optional[int]:
     if holder is None:
         return s.false_king_floor
     return floor_of(holder.room)
+
+
+def _sync_crown_holder(s) -> None:
+    if s.flags is None:
+        return
+    holder_id = s.flags.get("CROWN_HOLDER")
+    if holder_id:
+        holder = s.players.get(PlayerId(holder_id))
+        if holder is not None and "CROWN" not in holder.soulbound_items:
+            holder.soulbound_items.append("CROWN")
+        if not s.flags.get("CROWN_YELLOW"):
+            s.flags["CROWN_YELLOW"] = True
+        return
+    for pid, player in s.players.items():
+        if player is None:
+            continue
+        if "CROWN" in player.soulbound_items:
+            s.flags["CROWN_HOLDER"] = str(pid)
+            s.flags["CROWN_YELLOW"] = True
+            return
 
 def _advance_turn_or_king(s):
     order = s.turn_order

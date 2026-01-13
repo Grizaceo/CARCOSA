@@ -133,6 +133,7 @@ class TestP04bAttractWithFalseKing:
             players={PlayerId("p1"): p1, PlayerId("p2"): p2, PlayerId("p3"): p3},
             flags={"CROWN_YELLOW": True, "CROWN_HOLDER": "p2"}
         )
+        p2.soulbound_items.append("CROWN")
         
         # Attract to floor 1
         _attract_players_to_floor(s, 1)
@@ -156,6 +157,7 @@ class TestP04bAttractWithFalseKing:
             players={PlayerId("p1"): p1, PlayerId("p2"): p2},
             flags={"CROWN_YELLOW": True, "CROWN_HOLDER": "p2"}
         )
+        p2.soulbound_items.append("CROWN")
         
         # Attract TO floor 2 (where crown holder is)
         _attract_players_to_floor(s, 2)
