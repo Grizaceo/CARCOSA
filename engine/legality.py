@@ -3,6 +3,7 @@ from typing import List
 
 from engine.actions import Action, ActionType
 from engine.board import neighbors, floor_of, is_corridor, corridor_id
+from engine.boxes import active_deck_for_room
 from engine.state import GameState
 from engine.types import PlayerId, RoomId
 
@@ -43,11 +44,10 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                 if dest_stair:
                     acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
 
-        # SEARCH solo en habitación
-        if not is_corridor(p.room):
-            r = state.rooms.get(p.room)
-            if r and r.deck.remaining() > 0:
-                acts.append(Action(actor=str(pid), type=ActionType.SEARCH, data={}))
+        # SEARCH solo en habitación con mazo activo
+        deck = active_deck_for_room(state, p.room)
+        if deck is not None and deck.remaining() > 0:
+            acts.append(Action(actor=str(pid), type=ActionType.SEARCH, data={}))
 
         # MEDITATE no se puede en pasillo del piso del Rey, salvo si el jugador esta en -5.
         in_king_corridor = is_corridor(p.room) and floor_of(p.room) == state.king_floor

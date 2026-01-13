@@ -178,6 +178,7 @@ python compare_versions.py
 - Fixed critical d6 bias (χ² p=0.290, UNIFORM ✓)
 - Updated 7 tests that expected old action format
 - Added 4 new RNG uniformity tests
+ - Implemented BoxState + sushi belt rotation (Phase 1)
 
 ✨ **New Tools:**
 - `run_versioned.py` - Versioned run generation
