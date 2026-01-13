@@ -58,7 +58,10 @@ def analyze_version(version_dir: str) -> dict:
 
 def main():
     # Find all version directories
-    versions = sorted(glob.glob("runs_v*"), reverse=True)
+    versions = []
+    for pattern in ("runs_v*", "runs/runs_v*", "runs_archive/runs_v*"):
+        versions.extend(glob.glob(pattern))
+    versions = sorted(versions, reverse=True)
     
     if not versions:
         print("ERROR: No version directories found (runs_v*)")

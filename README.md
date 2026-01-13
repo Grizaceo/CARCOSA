@@ -83,13 +83,13 @@ Generate 5 seed runs for the current code version:
 
 ```bash
 # Windows PowerShell
-wsl bash -c "cd /home/gris/CARCOSA && source .venv/bin/activate && python run_versioned.py --all-seeds"
+wsl bash -c "cd /home/gris/CARCOSA && source .venv/bin/activate && python tools/run_versioned.py --all-seeds"
 
 # WSL bash
-python run_versioned.py --all-seeds
+python tools/run_versioned.py --all-seeds
 ```
 
-This creates a directory like `runs_v4fee5ba_main_20260112_161915/` with:
+This creates a directory like `runs/runs_v4fee5ba_main_20260112_161915/` with:
 - `metadata.json` - Commit hash, branch, timestamp
 - `seed{1-5}.jsonl` - 5 complete game simulations
 
@@ -99,21 +99,21 @@ Analyze d6 distribution (RNG uniformity):
 
 ```bash
 # Latest version
-python analyze_version.py
+python tools/analyze_version.py
 
 # Specific version
-python analyze_version.py runs_v4fee5ba_main_20260112_161915
+python tools/analyze_version.py runs/runs_v4fee5ba_main_20260112_161915
 
 # Compare multiple versions
-python compare_versions.py
+python tools/compare_versions.py
 ```
 
 ### Run Organization
 
-- **`runs_v{COMMIT}_{BRANCH}_{TIMESTAMP}/`** - Current code version runs
+- **`runs/runs_v{COMMIT}_{BRANCH}_{TIMESTAMP}/`** - Current code version runs
 - **`runs_archive/`** - Archived runs from previous code versions
 
-See [RUNS_ORGANIZATION.md](RUNS_ORGANIZATION.md) for detailed structure.
+See [docs/RUNS_ORGANIZATION.md](docs/RUNS_ORGANIZATION.md) for detailed structure.
 
 ## Running Specific Test Classes
 

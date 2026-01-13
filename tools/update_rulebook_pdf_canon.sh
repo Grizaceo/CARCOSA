@@ -43,11 +43,11 @@ cp -f "$WIN_PDF" "$RELEASE_PDF"
 echo "OK: CANON  -> $CANON_PDF"
 echo "OK: RELEASE-> $RELEASE_PDF"
 
-echo "== Actualizando DOCUMENTATION_INDEX.md (si existe) =="
-if [ -f "DOCUMENTATION_INDEX.md" ]; then
+echo "== Actualizando docs/DOCUMENTATION_INDEX.md (si existe) =="
+if [ -f "docs/DOCUMENTATION_INDEX.md" ]; then
   # Agrega/normaliza una seccion canonica (idempotente: no duplica si ya existe)
-  if ! grep -q "Carcosa_Libro_Tecnico_CANON.pdf" DOCUMENTATION_INDEX.md; then
-    cat >> DOCUMENTATION_INDEX.md <<EOF
+  if ! grep -q "Carcosa_Libro_Tecnico_CANON.pdf" docs/DOCUMENTATION_INDEX.md; then
+    cat >> docs/DOCUMENTATION_INDEX.md <<EOF
 
 ## Regla canonica vigente (Libro Tecnico)
 - $CANON_PDF (vigente, nombre estable)
@@ -56,12 +56,12 @@ if [ -f "DOCUMENTATION_INDEX.md" ]; then
 ## Archivo
 - $ARCHIVE_DIR/ (versiones anteriores; ver nombres con fecha)
 EOF
-    echo "OK: DOCUMENTATION_INDEX.md actualizado."
+    echo "OK: docs/DOCUMENTATION_INDEX.md actualizado."
   else
-    echo "OK: DOCUMENTATION_INDEX.md ya referencia el CANON (sin cambios)."
+    echo "OK: docs/DOCUMENTATION_INDEX.md ya referencia el CANON (sin cambios)."
   fi
 else
-  echo "WARN: DOCUMENTATION_INDEX.md no existe (se omite actualizacion)."
+  echo "WARN: docs/DOCUMENTATION_INDEX.md no existe (se omite actualizacion)."
 fi
 
 echo "== Git stage =="
@@ -76,4 +76,3 @@ git commit -m "Docs: set canonical technical rulebook PDF (CANON) and archive ol
 echo
 echo "Listo. Ahora ejecuta:"
 echo "  git push"
-

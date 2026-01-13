@@ -19,7 +19,7 @@ def test_minus5_is_reversible_and_only_limits_while_at_minus5():
 
     # Dos jugadores para evitar derrota automática por "todos en -5"
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=-4, room=corridor_id(2)),
+        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=-4, room=corridor_id(3)),
         PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(1)),
     }
 
@@ -33,7 +33,7 @@ def test_minus5_is_reversible_and_only_limits_while_at_minus5():
         starter_pos=1,  # con 2 jugadores, _start_new_round hará (1+1)%2=0 => empieza P1
         turn_pos=1,
     )
-    rng = RNG(1)
+    rng = RNG(2)
 
     # Fin de ronda: Casa -1 => P1 pasa de -4 a -5 (pero no pierden porque P2 no está en -5)
     s2 = step(s, Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1}), rng, cfg)
