@@ -16,7 +16,7 @@
 ## Complete Documentation Map
 
 ### 🎯 Project Overview
-- **[README.md](README.md)** - Main project readme
+- **[README.md](../README.md)** - Main project readme
 - **[SESSION_SUMMARY.md](SESSION_SUMMARY.md)** - What was accomplished this session
 
 ### 🔧 Technical Details
@@ -37,13 +37,16 @@
   - Command reference
   - Expected results
 
+### 📖 Canon vigente
+- **[Carcosa_Libro_Tecnico_CANON.md](Carcosa_Libro_Tecnico_CANON.md)** - Canon source of truth
+- **[Carcosa_Libro_Tecnico_CANON_LEGACY.pdf](Carcosa_Libro_Tecnico_CANON_LEGACY.pdf)** - Legacy PDF (historical reference)
+
 ### 📖 Game Rules
-- **[docs/Carcosa_Libro_Tecnico_CANON.md](docs/Carcosa_Libro_Tecnico_CANON.md)** - Canon source of truth
-- **[docs/Carcosa_Canon_P0_extracted.md](docs/Carcosa_Canon_P0_extracted.md)** - P0 Canonical rules
-- **[docs/Carcosa_Libro_Tecnico_v0_1_extracted.md](docs/Carcosa_Libro_Tecnico_v0_1_extracted.md)** - Legacy technical book (PDF pending regen)
+- **[Carcosa_Canon_P0_extracted.md](Carcosa_Canon_P0_extracted.md)** - P0 Canonical rules
+- **[archive/Carcosa_Libro_Tecnico_v0_1_extracted_archived_2026-01-12.md](archive/Carcosa_Libro_Tecnico_v0_1_extracted_archived_2026-01-12.md)** - Legacy technical book (archived)
 
 ### 📝 Reports & Analysis
-- **[AUDIT_P0_REPORT.md](docs/AUDIT_P0_REPORT.md)** - P0 mechanics audit
+- **[AUDIT_P0_REPORT.md](AUDIT_P0_REPORT.md)** - P0 mechanics audit
 - **[VALIDATION_REPORT.md](VALIDATION_REPORT.md)** - Test validation
 - **[NOTES.md](NOTES.md)** - Development notes
 
@@ -217,8 +220,9 @@ python tools/compare_versions.py
 **Start with:** [WORKFLOW_AFTER_CHANGES.md](WORKFLOW_AFTER_CHANGES.md) if you're new!
 
 ## Regla canonica vigente (Libro Tecnico)
-- docs/Carcosa_Libro_Tecnico_CANON.pdf (vigente, nombre estable)
-- docs/releases/Carcosa_Libro_Tecnico_v0_2.pdf (release/versionado)
+- Carcosa_Libro_Tecnico_CANON.md (vigente, fuente de verdad)
+- Carcosa_Libro_Tecnico_CANON_LEGACY.pdf (referencia historica)
+- releases/Carcosa_Libro_Tecnico_v0_2.pdf (release/versionado)
 
 ## Archivo
-- docs/archive/ (versiones anteriores; ver nombres con fecha)
+- archive/ (versiones anteriores; ver nombres con fecha)

@@ -52,11 +52,40 @@ SUSHI_CYCLE: Dict[RoomId, RoomId] = {
 
 
 def rotate_boxes(box_at_room: Dict[RoomId, str]) -> Dict[RoomId, str]:
+    _validate_box_mapping(box_at_room)
     rotated = dict(box_at_room)
     for src, dst in SUSHI_CYCLE.items():
         if src in box_at_room:
             rotated[dst] = box_at_room[src]
     return rotated
+
+
+def _validate_box_mapping(box_at_room: Dict[RoomId, str]) -> None:
+    canonical = set(canonical_room_ids())
+    keys = set(box_at_room.keys())
+
+    extra = sorted(str(k) for k in keys - canonical)
+    missing = sorted(str(k) for k in canonical - keys)
+    corridors = sorted(str(k) for k in keys if is_corridor(k))
+
+    values = list(box_at_room.values())
+    value_counts = {}
+    for v in values:
+        value_counts[v] = value_counts.get(v, 0) + 1
+    duplicates = sorted(str(v) for v, c in value_counts.items() if c > 1)
+
+    if extra or missing or corridors or duplicates:
+        parts = []
+        if missing:
+            parts.append(f"missing={missing}")
+        if extra:
+            parts.append(f"extra={extra}")
+        if corridors:
+            parts.append(f"corridors={corridors}")
+        if duplicates:
+            parts.append(f"duplicate_box_ids={duplicates}")
+        detail = "; ".join(parts)
+        raise ValueError(f"Invalid box mapping: {detail}")
 
 
 def neighbors(room: RoomId) -> List[RoomId]:
