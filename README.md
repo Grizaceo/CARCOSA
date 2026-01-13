@@ -69,8 +69,9 @@ tools/            # Development utilities
   validate/        # Validation scripts
 
 docs/             # Canon documentation
-  Carcosa_Canon_P0_extracted.md            # Canon (primary source of truth)
-  Carcosa_Libro_Tecnico_v0_1_extracted.md  # Technical manual (secondary)
+  Carcosa_Libro_Tecnico_CANON.md           # Canon (primary source of truth)
+  Carcosa_Libro_Tecnico_CANON_LEGACY.pdf   # Legacy PDF reference
+  Carcosa_Canon_P0_extracted.md            # P0 canonical rules (supporting)
 ```
 
 ## Running Simulations

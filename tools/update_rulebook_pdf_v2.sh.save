@@ -11,7 +11,7 @@ OLD_MD="docs/Carcosa_Libro_Tecnico_v0_1_extracted.md"
 ARCHIVE_DIR="docs/archive"
 
 # --- NEW DOCS (repo) ---
-CANON_PDF="docs/Carcosa_Libro_Tecnico_CANON.pdf"              # estable (vigente)
+CANON_PDF="docs/Carcosa_Libro_Tecnico_CANON_LEGACY.pdf"       # legacy (historico)
 RELEASES_DIR="docs/releases"
 RELEASE_PDF="$RELEASES_DIR/Carcosa_Libro_Tecnico_v0_2.pdf"    # versionado (ajusta v0_2 si corresponde)
 

@@ -64,6 +64,18 @@ class BoxState:
     deck: DeckState
 
 
+def ensure_canonical_rooms(state: "GameState") -> None:
+    from engine.board import canonical_room_ids, corridor_id, FLOORS
+
+    for rid in canonical_room_ids():
+        if rid not in state.rooms:
+            state.rooms[rid] = RoomState(room_id=rid, deck=DeckState(cards=[]))
+    for floor in range(1, FLOORS + 1):
+        rid = corridor_id(floor)
+        if rid not in state.rooms:
+            state.rooms[rid] = RoomState(room_id=rid, deck=DeckState(cards=[]))
+
+
 @dataclass
 class GameState:
     round: int
@@ -107,6 +119,8 @@ class GameState:
     keys_destroyed: int = 0
 
     def __post_init__(self) -> None:
+        ensure_canonical_rooms(self)
+
         if not self.turn_order:
             self.turn_order = sorted(self.players.keys(), key=lambda x: str(x))
 

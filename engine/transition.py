@@ -7,7 +7,7 @@ from engine.boxes import active_deck_for_room, sync_room_decks_from_boxes
 from engine.config import Config
 from engine.legality import get_legal_actions
 from engine.rng import RNG
-from engine.state import GameState, StatusInstance
+from engine.state import GameState, StatusInstance, ensure_canonical_rooms
 from engine.types import PlayerId, RoomId
 
 def _clamp_all_sanity(s, cfg):
@@ -439,7 +439,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         if s.king_vanish_ends > 0:
             s.king_vanish_ends -= 1
         else:
-            # PASO 3: Ruleta d4 para determinar nuevo piso (canon P0)
+            # PASO 2: Ruleta d4 para determinar nuevo piso (canon P0)
             d4 = rng.randint(1, 4)
             rng.last_king_d4 = d4  # Track for logging
             new_floor = ruleta_floor(s.king_floor, d4)
@@ -454,7 +454,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             
             s.king_floor = new_floor
 
-            # PASO 2: Daño por presencia del Rey (en piso NUEVO, después de llegar)
+            # PASO 3: Daño por presencia del Rey (en piso NUEVO, después de llegar)
             if s.round >= cfg.KING_PRESENCE_START_ROUND:
                 pres = _presence_damage_for_round(s.round)
                 for p in s.players.values():
@@ -493,6 +493,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         _apply_minus5_transitions(s, cfg)
         _roll_stairs(s, rng)
         s.box_at_room = rotate_boxes(s.box_at_room)
+        ensure_canonical_rooms(s)
         sync_room_decks_from_boxes(s)
 
         _end_of_round_checks(s, cfg)
