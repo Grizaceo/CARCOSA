@@ -3,14 +3,33 @@ Test para validar que el RNG produce distribuciones uniformes de d6 y d4
 """
 import pytest
 from collections import Counter
-from scipy import stats
 from engine.rng import RNG
+
+
+def _chi_square_test(observed, expected, alpha=0.05):
+    """
+    Implementación minimalista de chi-square test.
+    Retorna (chi2_stat, p_value_approx).
+    La distribución es uniforme si chi2_stat es bajo.
+    """
+    chi2_stat = sum((o - e) ** 2 / e for o, e in zip(observed, expected))
+    # Aproximación: para df=5 o df=3, chi2 crítico ~11.07 (α=0.05)
+    # Para nuestro test: si chi2 < crítico, asumir p >= 0.05 (uniforme)
+    df = len(observed) - 1
+    if df == 5:  # d6: 6 valores
+        critical = 11.07
+    elif df == 3:  # d4: 4 valores
+        critical = 7.81
+    else:
+        critical = 12.0
+    # Si chi2 < crítico, p > alpha (uniforme)
+    p_value = 0.1 if chi2_stat < critical else 0.01
+    return chi2_stat, p_value
 
 
 def test_rng_d6_uniformity():
     """
     Validar que rng.randint(1, 6) produce distribución uniforme de d6.
-    Usamos chi-square test con significancia 0.05.
     """
     rng = RNG(seed=42)
     rolls = [rng.randint(1, 6) for _ in range(1000)]
@@ -22,8 +41,8 @@ def test_rng_d6_uniformity():
     # Esperado: 1000/6 ≈ 166.67 por valor
     expected = [1000 / 6] * 6
     
-    # Chi-square test
-    chi2_stat, p_value = stats.chisquare(observed, expected)
+    # Chi-square test minimalista
+    chi2_stat, p_value = _chi_square_test(observed, expected)
     
     # Si p_value > 0.05, la distribución es uniforme
     assert p_value > 0.05, f"d6 distribution not uniform: p={p_value:.4f}, chi2={chi2_stat:.2f}, observed={observed}"
@@ -46,8 +65,8 @@ def test_rng_d4_uniformity():
     # Esperado: 1000/4 = 250 por valor
     expected = [1000 / 4] * 4
     
-    # Chi-square test
-    chi2_stat, p_value = stats.chisquare(observed, expected)
+    # Chi-square test minimalista
+    chi2_stat, p_value = _chi_square_test(observed, expected)
     
     assert p_value > 0.05, f"d4 distribution not uniform: p={p_value:.4f}, chi2={chi2_stat:.2f}, observed={observed}"
     

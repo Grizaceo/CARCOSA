@@ -108,6 +108,16 @@ class GameState:
 
     # Cola y logs
     event_queue: List[Dict[str, Any]] = field(default_factory=list)
+    
+    # B2: MOTEMEY deck y estado
+    motemey_deck: DeckState = field(default_factory=lambda: DeckState(cards=[]))
+    motemey_event_active: bool = False  # Supuesto: hay evento MOTEMEY activo
+    
+    # B5: Peek flag (una vez por turno)
+    peek_used_this_turn: Dict[PlayerId, bool] = field(default_factory=dict)
+    
+    # B6: Armory storage (por room_id, lista de items, capacidad 2)
+    armory_storage: Dict[RoomId, List[str]] = field(default_factory=dict)
     action_log: List[Dict[str, Any]] = field(default_factory=list)
 
     # RNG seed y fin de juego

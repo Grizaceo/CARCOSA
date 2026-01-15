@@ -2,13 +2,60 @@ from __future__ import annotations
 from typing import Optional
 
 from engine.actions import Action, ActionType
-from engine.board import corridor_id, floor_of, ruleta_floor, rotate_boxes
+from engine.board import corridor_id, floor_of, ruleta_floor, rotate_boxes, rotate_boxes_intra_floor
 from engine.boxes import active_deck_for_room, sync_room_decks_from_boxes
 from engine.config import Config
 from engine.legality import get_legal_actions
 from engine.rng import RNG
 from engine.state import GameState, StatusInstance, ensure_canonical_rooms
 from engine.types import PlayerId, RoomId
+
+
+def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[int] = None) -> int:
+    """
+    Determina el costo de acción de un ActionType.
+    
+    Respeta:
+    - Acciones de movimiento/búsqueda/meditación: costo 1
+    - Acciones de habitación especial (Motemey, Peek, Armería): costo 0
+    - Puertas Amarillas: costo 1
+    - SACRIFICE, ESCAPE_TRAPPED: costo 1
+    - cost_override: si se pasa, prevalece (para excepciones como DPS)
+    
+    Returns:
+        int: Número de acciones a descontar (0 o 1 usualmente)
+    """
+    if cost_override is not None:
+        return cost_override
+    
+    # Acciones que NO consumen acción
+    free_action_types = {
+        ActionType.USE_MOTEMEY_BUY,
+        ActionType.USE_MOTEMEY_SELL,
+        ActionType.USE_PEEK_ROOMS,
+        ActionType.USE_ARMORY_DROP,
+        ActionType.USE_ARMORY_TAKE,
+    }
+    
+    if action_type in free_action_types:
+        return 0
+    
+    # Acciones que consumen 1
+    paid_action_types = {
+        ActionType.MOVE,
+        ActionType.SEARCH,
+        ActionType.MEDITATE,
+        ActionType.SACRIFICE,
+        ActionType.ESCAPE_TRAPPED,
+        ActionType.USE_YELLOW_DOORS,
+    }
+    
+    if action_type in paid_action_types:
+        return 1
+    
+    # Default: no consume
+    return 0
+
 
 def _clamp_all_sanity(s, cfg):
     # -5 es piso: no se puede bajar más
@@ -365,6 +412,12 @@ def _start_new_round(s, cfg):
                 actions = min(actions, 1)
         if s.players[pid].sanity <= cfg.S_LOSS:
             actions = min(actions, 1)
+        
+        # B1: ILUMINADO otorga +1 acción
+        p = s.players[pid]
+        if any(st.status_id == "ILLUMINATED" for st in p.statuses):
+            actions += 1
+        
         s.remaining_actions[pid] = actions
 
     s.limited_action_floor_next = None
@@ -394,10 +447,8 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
     if s.phase == "PLAYER":
         pid = PlayerId(action.actor)
         p = s.players[pid]
-        cost = 0
 
         if action.type == ActionType.MOVE:
-            cost = 1
             to = RoomId(action.data["to"])
             p.room = to
             card = _reveal_one(s, to)
@@ -405,18 +456,114 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                 _resolve_card_minimal(s, pid, card, cfg, rng)
 
         elif action.type == ActionType.SEARCH:
-            cost = 1
             card = _reveal_one(s, p.room)
             if card is not None:
                 _resolve_card_minimal(s, pid, card, cfg, rng)
 
         elif action.type == ActionType.MEDITATE:
-            cost = 1
             p.sanity = min(p.sanity + 1, p.sanity_max or p.sanity)
+
+        elif action.type == ActionType.SACRIFICE:
+            # A4: Sacrificio al caer a -5
+            # Efecto: sanity -> 0, sanity_max -= 1 (costo), at_minus5 = False
+            p.sanity = 0
+            p.sanity_max = max(cfg.S_LOSS, (p.sanity_max or 5) - 1)
+            p.at_minus5 = False
+
+        elif action.type == ActionType.ESCAPE_TRAPPED:
+            # A5: Intento de liberarse del estado TRAPPED
+            # Requiere d6 >= 3 para éxito. Cuesta 1 acción en ambos casos.
+            d6 = rng.randint(1, 6)
+            if d6 >= 3:
+                # Éxito: remover TRAPPED
+                p.statuses = [st for st in p.statuses if st.status_id != "TRAPPED"]
+                # Aplicar STUN al monstruo en la sala (si existe)
+                for monster in s.monsters:
+                    if monster.room == p.room:
+                        # Flag para marcar que el monstruo está stunned esta ronda
+                        s.flags[f"STUN_{monster.monster_id}_ROUND_{s.round}"] = True
+            # else: Fracaso -> mantiene TRAPPED, se remueve solo por tick de ronda
 
         elif action.type == ActionType.END_TURN:
             s.remaining_actions[pid] = 0
 
+        # ===== B2: MOTEMEY (buy/sell) =====
+        elif action.type == ActionType.USE_MOTEMEY_BUY:
+            # Compra: -2 sanidad, ofrece 2 cartas, elige 1
+            # Supuesto: no consume acción (es acción de habitación)
+            if p.sanity >= 2:
+                p.sanity -= 2
+                deck = s.motemey_deck
+                # Ofertar 2 cartas
+                if deck.remaining() >= 2:
+                    card1 = deck.cards[deck.top]
+                    card2 = deck.cards[deck.top + 1]
+                    deck.top += 2
+                    
+                    # Elige la 1ª (data["chosen_index"] = 0 o 1)
+                    chosen_idx = int(action.data.get("chosen_index", 0))
+                    chosen = card1 if chosen_idx == 0 else card2
+                    rejected = card2 if chosen_idx == 0 else card1
+                    
+                    # Elegida al inventario, rechazada al final del mazo
+                    p.objects.append(str(chosen))
+                    deck.cards.append(rejected)
+
+        elif action.type == ActionType.USE_MOTEMEY_SELL:
+            # Venta: objeto normal +1, tesoro +3, clamped a sanity_max
+            item_name = action.data.get("item_name", "")
+            if item_name in p.objects:
+                p.objects.remove(item_name)
+                # Determinar si es tesoro (TREASURE_*) u objeto
+                if str(item_name).startswith("TREASURE"):
+                    p.sanity = min(p.sanity + 3, p.sanity_max or p.sanity)
+                else:
+                    p.sanity = min(p.sanity + 1, p.sanity_max or p.sanity)
+
+        # ===== B4: PUERTAS AMARILLO (teleport) =====
+        elif action.type == ActionType.USE_YELLOW_DOORS:
+            # Teleporta a habitación del objetivo, objetivo pierde -1 sanidad
+            target_id = PlayerId(action.data.get("target_player", ""))
+            if target_id in s.players:
+                target = s.players[target_id]
+                # Actor teleportado a habitación del target
+                p.room = target.room
+                # Target pierde -1 sanidad
+                target.sanity -= 1
+                # Reveal card en la habitación destino (on_enter)
+                card = _reveal_one(s, p.room)
+                if card is not None:
+                    _resolve_card_minimal(s, pid, card, cfg, rng)
+
+        # ===== B5: PEEK (mirar 2 habitaciones) =====
+        elif action.type == ActionType.USE_PEEK_ROOMS:
+            # Pagar 1 cordura, mirar 2 habitaciones sin extraer, no consume acción
+            # Flag once-per-turn
+            p.sanity -= 1
+            s.peek_used_this_turn[pid] = True
+            # No extrae, solo visualiza (no cambia el estado del juego aparte de sanidad)
+
+        # ===== B6: ARMERÍA (drop/take) =====
+        elif action.type == ActionType.USE_ARMORY_DROP:
+            # Dejar objeto en armería (max 2)
+            item_name = action.data.get("item_name", "")
+            if item_name in p.objects:
+                p.objects.remove(item_name)
+                armory_room = p.room
+                if armory_room not in s.armory_storage:
+                    s.armory_storage[armory_room] = []
+                if len(s.armory_storage[armory_room]) < 2:
+                    s.armory_storage[armory_room].append(item_name)
+
+        elif action.type == ActionType.USE_ARMORY_TAKE:
+            # Tomar objeto de armería
+            armory_room = p.room
+            if armory_room in s.armory_storage and len(s.armory_storage[armory_room]) > 0:
+                item = s.armory_storage[armory_room].pop()
+                p.objects.append(item)
+
+        # Descuento de acciones respetando free actions
+        cost = _consume_action_if_needed(action.type)
         if cost > 0:
             s.remaining_actions[pid] = max(0, s.remaining_actions.get(pid, 0) - cost)
 
@@ -427,8 +574,6 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             _advance_turn_or_king(s)
 
         return _finalize_and_return(s, cfg)
-
-    # -------------------------
     # FASE REY (fin de ronda)
     # -------------------------
     if s.phase == "KING" and action.type == ActionType.KING_ENDROUND:
@@ -465,7 +610,8 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             d6 = rng.randint(1, 6)
             rng.last_king_d6 = d6  # Track for logging
             if d6 == 1:
-                _shuffle_all_room_decks(s, rng)
+                # _shuffle_all_room_decks(s, rng) -> REPLACED by intra-floor rotation flag
+                s.flags["king_d6_intra_rotation"] = True
             elif d6 == 2:
                 for p in s.players.values():
                     p.sanity -= 1
@@ -492,7 +638,12 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         _update_umbral_flags(s, cfg)
         _apply_minus5_transitions(s, cfg)
         _roll_stairs(s, rng)
-        s.box_at_room = rotate_boxes(s.box_at_room)
+        if s.flags.get("king_d6_intra_rotation"):
+            s.box_at_room = rotate_boxes_intra_floor(s.box_at_room)
+            # Consumir flag
+            s.flags["king_d6_intra_rotation"] = False
+        else:
+            s.box_at_room = rotate_boxes(s.box_at_room)
         ensure_canonical_rooms(s)
         sync_room_decks_from_boxes(s)
 
