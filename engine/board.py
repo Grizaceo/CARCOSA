@@ -60,6 +60,39 @@ def rotate_boxes(box_at_room: Dict[RoomId, str]) -> Dict[RoomId, str]:
     return rotated
 
 
+def rotate_boxes_intra_floor(box_at_room: Dict[RoomId, str]) -> Dict[RoomId, str]:
+    """
+    Rotación intra-piso: R1->R4->R3->R2->R1 en cada piso.
+    No cruza pisos.
+    """
+    _validate_box_mapping(box_at_room)
+    rotated = dict(box_at_room)
+    
+    # Ciclo por piso: R1 (src) -> R4 (dst) ??? 
+    # Espérate, el ciclo P0 dice: R1->R4->R3->R2->R1 ??
+    # El prompt dice: (R1→R4→R3→R2→R1 por piso).
+    # O sea:
+    # R1 va a R4? No, R1 es source, R4 es destination?
+    # R1 -> R4
+    # R4 -> R3
+    # R3 -> R2
+    # R2 -> R1
+    
+    for floor in range(1, FLOORS + 1):
+        # Mapeo intra-piso
+        cycle = {
+            room_id(floor, 1): room_id(floor, 4),
+            room_id(floor, 4): room_id(floor, 3),
+            room_id(floor, 3): room_id(floor, 2),
+            room_id(floor, 2): room_id(floor, 1),
+        }
+        for src, dst in cycle.items():
+            if src in box_at_room:
+                rotated[dst] = box_at_room[src]
+                
+    return rotated
+
+
 def _validate_box_mapping(box_at_room: Dict[RoomId, str]) -> None:
     canonical = set(canonical_room_ids())
     keys = set(box_at_room.keys())

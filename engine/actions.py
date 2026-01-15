@@ -14,6 +14,25 @@ class ActionType(str, Enum):
     # Incluye elección de manifestación (floor o d4) y el efecto d6 (1..6).
     KING_ENDROUND = "KING_ENDROUND"
 
+    # Mechanic specific actions
+    SACRIFICE = "SACRIFICE"
+    ESCAPE_TRAPPED = "ESCAPE_TRAPPED"
+    
+    # B2: Motemey
+    USE_MOTEMEY_SELL = "USE_MOTEMEY_SELL"
+    USE_MOTEMEY_BUY = "USE_MOTEMEY_BUY"
+    
+    # B4: Yellow Doors
+    USE_YELLOW_DOORS = "USE_YELLOW_DOORS"
+    
+    # B5: Peek
+    USE_PEEK_ROOMS = "USE_PEEK_ROOMS"
+    
+    # B6: Armory
+    USE_ARMORY_DROP = "USE_ARMORY_DROP"
+    USE_ARMORY_TAKE = "USE_ARMORY_TAKE"
+
+
 
 @dataclass(frozen=True)
 class Action:

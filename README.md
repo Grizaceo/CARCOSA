@@ -204,6 +204,19 @@ All tests are **deterministic**, use **fixed seeds**, and **no warnings**.
 | P0.4b Attract | `engine/transition.py` | With false_king exception | 3 | OK |
 | P0.5 Presence | `engine/transition.py` | Canon table (R1-3->1, R4-6->2, ...) | 15 | OK |
 
+## Nuevas Mecánicas (En Progreso)
+
+### Habitaciones Especiales
+ Sistema dinámico de habitaciones con acciones únicas:
+ - **Tipos**: MOTEMEY, Cámara Letal, Salón de Belleza, Puertas, Taberna, Armería.
+ - **Acción**: `USE_SPECIAL_ROOM`.
+
+### Mecánicas de Jugador
+ - **Sacrificio**: Opción en -5 Cordura para evitar daño grupal a cambio de penalización permanente.
+ - **Atrapado**: Estado que requiere acción (d6>=3) para liberarse.
+ - **Escaleras (d6=1)**: Regla de movimiento vertical condicionada.
+
+
 ## Development Utilities
 
 See `tools/README.md` for:
