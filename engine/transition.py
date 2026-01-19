@@ -152,6 +152,14 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
         if cap <= 0 or len(s.monsters) < cap:
             from engine.state import MonsterState
             s.monsters.append(MonsterState(monster_id=mid, room=p.room))
+
+            # B6: Hook destrucción de Armería cuando monstruo entra
+            if "_ARMERY" in str(p.room):
+                # Marcar armería como destruida
+                s.flags[f"ARMORY_DESTROYED_{p.room}"] = True
+                # Vaciar almacenamiento de la armería
+                if p.room in s.armory_storage:
+                    s.armory_storage[p.room] = []
         return
     
     if s_str.startswith("STATE:"):
@@ -405,6 +413,9 @@ def _start_new_round(s, cfg):
     s.turn_pos = s.starter_pos
     s.phase = "PLAYER"
 
+    # B5: Reset de Peek al inicio de nueva ronda
+    s.peek_used_this_turn = {}
+
     for pid in order:
         actions = 2
         if s.limited_action_floor_next is not None:
@@ -412,12 +423,12 @@ def _start_new_round(s, cfg):
                 actions = min(actions, 1)
         if s.players[pid].sanity <= cfg.S_LOSS:
             actions = min(actions, 1)
-        
+
         # B1: ILUMINADO otorga +1 acción
         p = s.players[pid]
         if any(st.status_id == "ILLUMINATED" for st in p.statuses):
             actions += 1
-        
+
         s.remaining_actions[pid] = actions
 
     s.limited_action_floor_next = None

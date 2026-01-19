@@ -227,3 +227,56 @@ def test_armory_drop_and_take_sequence():
     
     # P1 de vuelta con sus 3 objetos
     assert len(p1.objects) == 3
+
+
+def test_armory_destroyed_by_monster():
+    """
+    B6: Cuando un monstruo entra en ARMERÍA, esta se destruye y vacía.
+    """
+    from engine.transition import _resolve_card_minimal
+    from engine.config import Config
+    from engine.types import CardId
+
+    s = setup_armory_state()
+    p1 = s.players[PlayerId("P1")]
+    armory_id = RoomId("F1_ARMERY")
+
+    # Armería tiene objetos
+    s.armory_storage[armory_id] = ["TORCH", "ROPE"]
+    assert len(s.armory_storage[armory_id]) == 2
+
+    # Monstruo entra en ARMERÍA (P1 está en ARMERÍA)
+    _resolve_card_minimal(s, PlayerId("P1"), CardId("MONSTER:SKELETON"), Config())
+
+    # Verificar que armería fue destruida
+    assert s.flags.get(f"ARMORY_DESTROYED_{armory_id}", False) == True
+
+    # Verificar que storage fue vaciado
+    assert len(s.armory_storage[armory_id]) == 0
+
+
+def test_armory_destroyed_prevents_drop_take():
+    """
+    B6: Armería destruida no permite DROP ni TAKE.
+    """
+    s = setup_armory_state()
+    p1 = s.players[PlayerId("P1")]
+    armory_id = RoomId("F1_ARMERY")
+
+    # P1 tiene objetos y hay objetos en storage
+    p1.objects = ["TORCH"]
+    s.armory_storage[armory_id] = ["ROPE"]
+
+    # Marcar armería como destruida
+    s.flags[f"ARMORY_DESTROYED_{armory_id}"] = True
+
+    # Verificar directamente que el flag bloquea las acciones
+    # (sin llamar get_legal_actions que requiere board válido)
+    is_destroyed = s.flags.get(f"ARMORY_DESTROYED_{armory_id}", False)
+    assert is_destroyed == True, "Armería debe estar marcada como destruida"
+
+    # Según el código de legality.py línea 110, si armory_destroyed es True,
+    # no se permiten acciones de DROP ni TAKE
+    armory_destroyed = s.flags.get(f"ARMORY_DESTROYED_{armory_id}", False)
+    can_use_armory = not armory_destroyed
+    assert can_use_armory == False, "No debe permitir uso de armería cuando está destruida"

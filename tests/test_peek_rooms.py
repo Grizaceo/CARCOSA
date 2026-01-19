@@ -189,3 +189,25 @@ def test_peek_on_rooms_with_multiple_cards():
     # Ambos peeked sin extraer
     assert len(r1.deck.cards) == 3, "R1 deck intacto"
     assert len(r2.deck.cards) == 2, "R2 deck intacto"
+
+
+def test_peek_resets_at_new_round():
+    """
+    B5: PEEK se resetea automáticamente al iniciar una nueva ronda.
+    """
+    from engine.transition import _start_new_round
+    from engine.config import Config
+
+    s = setup_peek_state()
+    p1_id = PlayerId("P1")
+
+    # Turno actual: P1 usa PEEK
+    s.peek_used_this_turn[p1_id] = True
+    assert s.peek_used_this_turn.get(p1_id, False) == True
+
+    # Iniciar nueva ronda (esto debe resetear peek_used_this_turn)
+    _start_new_round(s, Config())
+
+    # Verificar que el flag fue reseteado
+    assert s.peek_used_this_turn.get(p1_id, False) == False
+    assert len(s.peek_used_this_turn) == 0, "peek_used_this_turn debe estar vacío"
