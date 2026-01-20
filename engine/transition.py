@@ -186,6 +186,30 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
         return
 
 
+def _on_player_enters_room(s: GameState, pid: PlayerId, room: RoomId) -> None:
+    """
+    P1 - FASE 1.5.2: Hook cuando un jugador entra a una habitación.
+
+    Si la habitación tiene una carta especial boca abajo, la revela automáticamente.
+    Revelación NO consume acciones (free action).
+
+    IMPORTANTE: Esta función se llama ANTES de revelar la carta del mazo (mecánica LIFO).
+    """
+    if room not in s.rooms:
+        return
+
+    room_state = s.rooms[room]
+
+    # Si hay una carta especial boca abajo, revelarla
+    if (room_state.special_card_id is not None and
+        not room_state.special_revealed and
+        not room_state.special_destroyed):
+
+        room_state.special_revealed = True
+        # Log o tracking de revelación
+        s.flags[f"SPECIAL_REVEALED_{room}_{room_state.special_card_id}"] = s.round
+
+
 def _resolve_event(s: GameState, pid: PlayerId, event_id: str, cfg: Config, rng: RNG):
     """
     Resuelve un evento por su ID.
@@ -622,6 +646,12 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         if action.type == ActionType.MOVE:
             to = RoomId(action.data["to"])
             p.room = to
+
+            # P1 - FASE 1.5.2: Hook revelación de habitación especial
+            # Mecánica de cadena (LIFO): primero se revela la habitación especial, luego la carta del mazo
+            _on_player_enters_room(s, pid, to)
+
+            # Revelar primera carta del mazo (regla general)
             card = _reveal_one(s, to)
             if card is not None:
                 _resolve_card_minimal(s, pid, card, cfg, rng)
