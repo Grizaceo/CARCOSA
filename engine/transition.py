@@ -269,11 +269,12 @@ def _resolve_event(s: GameState, pid: PlayerId, event_id: str, cfg: Config, rng:
     # ... más eventos se agregarán en FASE 2 ...
 
     # Evento vuelve al fondo del mazo (convención)
-    # SUPUESTO: Los eventos no se descartan, vuelven al fondo
+    # CORRECCIÓN: Usar put_bottom() para no duplicar la carta
+    # La carta ya fue extraída del mazo por _reveal_one (avanzó deck.top)
     from engine.boxes import active_deck_for_room
     deck = active_deck_for_room(s, p.room)
     if deck is not None:
-        deck.cards.append(CardId(f"EVENT:{event_id}"))
+        deck.put_bottom(CardId(f"EVENT:{event_id}"))
 
 
 # Funciones placeholder para los 7 eventos existentes
@@ -435,10 +436,16 @@ def _apply_status_effects_end_of_round(s: GameState) -> None:
     FASE 3: Aplica efectos de estados al final de ronda, ANTES del tick de duración.
 
     Estados implementados:
+    - SANGRADO: El jugador pierde 1 cordura
     - MALDITO: Todas las Pobres Almas en el mismo piso pierden 1 cordura
     - SANIDAD: El jugador recupera 1 cordura
     """
     from engine.board import floor_of
+
+    # SANGRADO: Pierde 1 cordura
+    for p in s.players.values():
+        if any(st.status_id == "SANGRADO" for st in p.statuses):
+            p.sanity -= 1
 
     # MALDITO: Afecta a otros jugadores en el mismo piso
     for pid, p in s.players.items():
@@ -929,8 +936,11 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         # PASO 5: Tick estados (decremento de duraciones)
         for p in s.players.values():
             for st in p.statuses:
-                st.remaining_rounds -= 1
-            p.statuses = [st for st in p.statuses if st.remaining_rounds > 0]
+                # No decrementar estados permanentes (remaining_rounds == -1)
+                if st.remaining_rounds != -1:
+                    st.remaining_rounds -= 1
+            # Remover estados expirados (pero mantener permanentes)
+            p.statuses = [st for st in p.statuses if st.remaining_rounds > 0 or st.remaining_rounds == -1]
 
         # PASO 6: Check del Falso Rey
         _false_king_check(s, rng, cfg)

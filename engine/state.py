@@ -50,6 +50,35 @@ class DeckState:
     def remaining(self) -> int:
         return max(0, len(self.cards) - self.top)
 
+    def draw_top(self) -> Optional[CardId]:
+        """
+        Extrae (peek) la carta del top sin removerla físicamente del array.
+        Avanza el puntero top.
+        Retorna None si no quedan cartas.
+        """
+        if self.remaining() <= 0:
+            return None
+        card = self.cards[self.top]
+        self.top += 1
+        return card
+
+    def put_bottom(self, card: CardId) -> None:
+        """
+        Inserta una carta al fondo del mazo (después de todas las cartas físicas).
+        No duplica - asume que la carta ya fue extraída/consumida del mazo.
+
+        Implementa compactación automática: si top >= len(cards) / 2, compacta el mazo
+        removiendo cartas consumidas y reiniciando top a 0.
+        """
+        self.cards.append(card)
+
+        # Compactación automática para evitar crecimiento indefinido
+        # Umbral: cuando top alcanza la mitad del array
+        if self.top >= len(self.cards) // 2 and self.top > 0:
+            # Remover cartas consumidas (antes de top)
+            self.cards = self.cards[self.top:]
+            self.top = 0
+
 
 @dataclass
 class RoomState:
@@ -208,6 +237,11 @@ class GameState:
                 room_id=RoomId(rdata["room_id"]),
                 deck=deck,
                 revealed=rdata.get("revealed", 0),
+                # P1: Campos de habitaciones especiales
+                special_card_id=rdata.get("special_card_id", None),
+                special_revealed=rdata.get("special_revealed", False),
+                special_destroyed=rdata.get("special_destroyed", False),
+                special_activation_count=rdata.get("special_activation_count", 0),
             )
 
         boxes: Dict[str, BoxState] = {}
@@ -224,6 +258,22 @@ class GameState:
         remaining_actions = {PlayerId(k): int(v) for k, v in d.get("remaining_actions", {}).items()}
 
         stairs = {int(k): RoomId(v) for k, v in d.get("stairs", {}).items()}
+
+        # B2: MOTEMEY deck
+        motemey_deck_data = d.get("motemey_deck")
+        if motemey_deck_data:
+            motemey_deck = DeckState(
+                cards=[CardId(x) for x in motemey_deck_data.get("cards", [])],
+                top=motemey_deck_data.get("top", 0),
+            )
+        else:
+            motemey_deck = DeckState(cards=[])
+
+        # B5: Peek used this turn
+        peek_used_this_turn = {PlayerId(k): bool(v) for k, v in d.get("peek_used_this_turn", {}).items()}
+
+        # B6: Armory storage
+        armory_storage = {RoomId(k): list(v) for k, v in d.get("armory_storage", {}).items()}
 
         return GameState(
             round=int(d["round"]),
@@ -250,4 +300,11 @@ class GameState:
             game_over=bool(d.get("game_over", False)),
             outcome=d.get("outcome", None),
             keys_destroyed=int(d.get("keys_destroyed", 0)),
+            # B2: MOTEMEY
+            motemey_deck=motemey_deck,
+            motemey_event_active=bool(d.get("motemey_event_active", False)),
+            # B5: PEEK
+            peek_used_this_turn=peek_used_this_turn,
+            # B6: ARMORY
+            armory_storage=armory_storage,
         )

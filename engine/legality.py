@@ -1,11 +1,32 @@
 from __future__ import annotations
-from typing import List
+from typing import List, Optional
 
 from engine.actions import Action, ActionType
 from engine.board import neighbors, floor_of, is_corridor, corridor_id
 from engine.boxes import active_deck_for_room
-from engine.state import GameState
+from engine.state import GameState, RoomState
 from engine.types import PlayerId, RoomId
+
+
+def _get_special_room_type(state: GameState, room_id: RoomId) -> Optional[str]:
+    """
+    Helper: Retorna el tipo de habitación especial en una ubicación, o None.
+    Usa RoomState.special_card_id en lugar de sufijos en RoomId.
+
+    Solo considera una habitación especial como "activa" si:
+    - Tiene special_card_id definido
+    - Ha sido revelada (special_revealed=True)
+    - No ha sido destruida (special_destroyed=False)
+    """
+    room_state = state.rooms.get(room_id)
+    if room_state is None:
+        return None
+    # Solo considerar si está revelada y no destruida
+    if (room_state.special_card_id and
+        room_state.special_revealed and
+        not room_state.special_destroyed):
+        return room_state.special_card_id
+    return None
 
 
 def _current_player_id(state: GameState) -> PlayerId:
@@ -97,9 +118,8 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         # ===== B2: MOTEMEY (buy/sell) =====
         # Disponible si actor está en habitación MOTEMEY o evento es activo
-        motemey_room_pattern = "_MOTEMEY"
-        is_in_motemey = motemey_room_pattern in str(p.room)
-        
+        is_in_motemey = _get_special_room_type(state, p.room) == "MOTEMEY"
+
         if is_in_motemey or state.motemey_event_active:
             # BUY: requiere sanidad >= 2 para poder pagar
             if p.sanity >= 2:
@@ -112,20 +132,18 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         # ===== B4: PUERTAS AMARILLO =====
         # Disponible si actor está en habitación PUERTAS y existe al menos otro jugador
-        puertas_room_pattern = "_PUERTAS"
-        is_in_puertas = puertas_room_pattern in str(p.room)
+        is_in_puertas = _get_special_room_type(state, p.room) == "PUERTAS"
         other_players = [p2_id for p2_id in state.players if p2_id != pid]
-        
+
         if is_in_puertas and other_players:
             for target_pid in other_players:
                 acts.append(Action(actor=str(pid), type=ActionType.USE_YELLOW_DOORS, data={"target_player": str(target_pid)}))
 
         # ===== B5: PEEK =====
         # Disponible si actor está en habitación PEEK, no ha usado esta ronda, y existen al menos 2 rooms distintos
-        peek_room_pattern = "_PEEK"
-        is_in_peek = peek_room_pattern in str(p.room)
+        is_in_peek = _get_special_room_type(state, p.room) == "PEEK"
         peek_used = state.peek_used_this_turn.get(pid, False)
-        
+
         if is_in_peek and not peek_used and len(state.rooms) >= 2:
             # Offrezamos 2 cuartos cualquiera distintos
             room_ids = list(state.rooms.keys())
@@ -136,8 +154,9 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         # ===== B6: ARMERÍA =====
         # Disponible si actor está en habitación ARMERÍA y armería no está destruida
-        armory_room_pattern = "_ARMERY"
-        is_in_armory = armory_room_pattern in str(p.room)
+        is_in_armory = _get_special_room_type(state, p.room) == "ARMERY"
+        # La destrucción ya está manejada por special_destroyed en _get_special_room_type
+        # pero mantenemos compatibilidad con flag por si acaso
         armory_destroyed = state.flags.get(f"ARMORY_DESTROYED_{p.room}", False)
 
         if is_in_armory and not armory_destroyed:
