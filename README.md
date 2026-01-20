@@ -11,35 +11,55 @@ A deterministic game engine for CARCOSA (P0 core), ready for iteration.
 
 ### Setup
 
-From **Windows PowerShell** or **Command Prompt**, navigate to the repo and run:
+**Important:** WSL uses its own Linux filesystem. Do not mix Windows paths with WSL paths. These commands assume you have a separate clone in WSL at `/home/<user>/CARCOSA` (adjust to your actual WSL path).
 
+**Windows PowerShell (native)**
 ```powershell
-wsl bash -c "cd /home/gris/CARCOSA && python -m pip install -e ."
+python -m pip install -e .
 ```
 
-Or inside **WSL bash terminal** directly:
+**WSL bash**
 
 ```bash
-cd /home/gris/CARCOSA
+cd /home/<user>/CARCOSA
+python -m pip install -e .
+```
+
+### Working with a virtual environment (recommended)
+Use a local venv for all commands in this repo.
+
+**Windows PowerShell**
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+```
+
+**WSL bash**
+```bash
+python -m venv .venv
+source .venv/bin/activate
 python -m pip install -e .
 ```
 
 ## Running Tests
 
-From **Windows PowerShell**, run the full test suite:
-
+**Windows PowerShell (native)**
 ```powershell
-wsl bash -c "cd /home/gris/CARCOSA && source .venv/bin/activate && PYTHONPATH=/home/gris/CARCOSA pytest -q"
+.\.venv\Scripts\Activate.ps1
+python -m pytest tests/ -q
 ```
 
-Or inside **WSL bash terminal**:
+**WSL bash**
 
 ```bash
-cd /home/gris/CARCOSA
+cd /home/<user>/CARCOSA
 source .venv/bin/activate
-export PYTHONPATH=/home/gris/CARCOSA:$PYTHONPATH
+export PYTHONPATH=/home/<user>/CARCOSA:$PYTHONPATH
 pytest -q
 ```
+
+**Note:** If you use the venv, activate it before running tests.
 
 ## Project Structure
 
@@ -82,11 +102,16 @@ The simulator uses **versioned runs** to ensure clean data isolation between cod
 
 Generate 5 seed runs for the current code version:
 
-```bash
-# Windows PowerShell
-wsl bash -c "cd /home/gris/CARCOSA && source .venv/bin/activate && python tools/run_versioned.py --all-seeds"
+**Windows PowerShell**
+```powershell
+.\.venv\Scripts\Activate.ps1
+python tools\run_versioned.py --all-seeds
+```
 
-# WSL bash
+**WSL bash**
+```bash
+cd /home/<user>/CARCOSA
+source .venv/bin/activate
 python tools/run_versioned.py --all-seeds
 ```
 
@@ -98,7 +123,23 @@ This creates a directory like `runs/runs_v4fee5ba_main_20260112_161915/` with:
 
 Analyze d6 distribution (RNG uniformity):
 
+**Windows PowerShell**
+```powershell
+.\.venv\Scripts\Activate.ps1
+python tools\analyze_version.py
+
+# Specific version
+python tools\analyze_version.py runs/runs_v4fee5ba_main_20260112_161915
+
+# Compare multiple versions
+python tools\compare_versions.py
+```
+
+**WSL bash**
 ```bash
+cd /home/<user>/CARCOSA
+source .venv/bin/activate
+
 # Latest version
 python tools/analyze_version.py
 
@@ -118,7 +159,31 @@ See [docs/RUNS_ORGANIZATION.md](docs/RUNS_ORGANIZATION.md) for detailed structur
 
 ## Running Specific Test Classes
 
+**Windows PowerShell**
+```powershell
+.\.venv\Scripts\Activate.ps1
+
+# P0.1 - Canonical adjacencies (R1<->R2, R3<->R4)
+python -m pytest tests/test_p0_canon.py::TestP01Adjacencies -v
+
+# P0.2 - King expel (move to stair room in adjacent floor)
+python -m pytest tests/test_p0_canon.py::TestP02ExpelFromFloor -v
+
+# P0.3 - Stair reroll (1d4 per floor at end of round)
+python -m pytest tests/test_p0_canon.py::TestP03StairsReroll -v
+
+# P0.4 - Event on crossing to -5 (key/object destruction, sanity loss for others)
+python -m pytest tests/test_p0_canon.py::TestP04MinusFiveEvent -v
+
+# P0.5 - King presence damage (per round)
+python -m pytest tests/test_p0_canon.py::TestP05KingPresenceDamage -v
+```
+
+**WSL bash**
 ```bash
+cd /home/<user>/CARCOSA
+source .venv/bin/activate
+
 # P0.1 - Canonical adjacencies (R1<->R2, R3<->R4)
 pytest tests/test_p0_canon.py::TestP01Adjacencies -v
 
@@ -133,6 +198,22 @@ pytest tests/test_p0_canon.py::TestP04MinusFiveEvent -v
 
 # P0.5 - King presence damage (per round)
 pytest tests/test_p0_canon.py::TestP05KingPresenceDamage -v
+```
+
+## Command Usage Format (for future edits)
+When adding or editing commands in this README, always include both variants and keep Windows and WSL paths separate.
+
+**Windows PowerShell**
+```powershell
+.\.venv\Scripts\Activate.ps1
+<COMMAND>
+```
+
+**WSL bash**
+```bash
+cd /home/<user>/CARCOSA
+source .venv/bin/activate
+<COMMAND>
 ```
 
 ## Core Features (P0)
