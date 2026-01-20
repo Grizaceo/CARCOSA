@@ -24,19 +24,34 @@ def test_setup_selects_3_special_rooms():
 
 
 def test_each_special_room_has_3_floors():
-    """Cada habitación especial se asigna a los 3 pisos"""
+    """
+    CORRECCIÓN A: Cada habitación especial se asigna a SOLO UN piso (reglas físicas).
+
+    El juego físico asigna 3 tipos especiales a 3 pisos (1 tipo por piso).
+    """
     rng = RNG(1)
     special_room_locations = _setup_special_rooms(rng)
 
-    for special_type, locations in special_room_locations.items():
-        # Debe tener asignación para F1, F2, F3
-        assert 1 in locations
-        assert 2 in locations
-        assert 3 in locations
+    # Total: 3 tipos especiales
+    assert len(special_room_locations) == 3
 
-        # Cada asignación debe ser R1-R4 (resultado de D4)
+    # Cada tipo especial debe tener asignación a SOLO UN piso
+    for special_type, locations in special_room_locations.items():
+        # Debe tener exactamente 1 piso asignado
+        assert len(locations) == 1, f"{special_type} debe estar en SOLO 1 piso, encontrado en {len(locations)} pisos"
+
+        # La asignación debe ser R1-R4 (resultado de D4)
         for floor, room_num in locations.items():
+            assert floor in [1, 2, 3], f"Piso debe ser 1, 2 o 3"
             assert 1 <= room_num <= 4, f"{special_type} en piso {floor} tiene room_num {room_num} (debe ser 1-4)"
+
+    # Verificar que cada piso tiene EXACTAMENTE un tipo especial
+    floors_assigned = []
+    for special_type, locations in special_room_locations.items():
+        for floor in locations.keys():
+            floors_assigned.append(floor)
+
+    assert sorted(floors_assigned) == [1, 2, 3], "Debe haber 1 especial por piso"
 
 
 def test_special_rooms_marked_in_state():
@@ -81,7 +96,12 @@ def test_camara_letal_flag_set_when_selected():
 
 
 def test_room_state_has_special_card_id_assigned():
-    """Habitaciones canónicas tienen special_card_id asignado si corresponde"""
+    """
+    CORRECCIÓN A: Exactamente 3 habitaciones tienen special_card_id (reglas físicas).
+
+    Antes había hasta 9 habitaciones especiales (3 tipos x 3 pisos).
+    Ahora hay exactamente 3 (1 tipo por piso, sin duplicación).
+    """
     cfg = Config()
     state = make_smoke_state(seed=1, cfg=cfg)
 
@@ -93,9 +113,8 @@ def test_room_state_has_special_card_id_assigned():
         if room_state.special_card_id is not None:
             rooms_with_special += 1
 
-    # Debe haber entre 3 y 9 habitaciones con special_card_id
-    # (Mínimo 3 si todas coinciden en misma ubicación, máximo 9 si todas únicas)
-    assert 3 <= rooms_with_special <= 9
+    # CORRECCIÓN A: Debe haber EXACTAMENTE 3 habitaciones con special_card_id
+    assert rooms_with_special == 3, f"Debe haber exactamente 3 especiales, encontradas {rooms_with_special}"
 
     # Verificar que efectivamente tenemos 3 tipos de habitaciones especiales
     special_types_found = set()
