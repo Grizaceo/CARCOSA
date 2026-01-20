@@ -32,6 +32,9 @@ class ActionType(str, Enum):
     USE_ARMORY_DROP = "USE_ARMORY_DROP"
     USE_ARMORY_TAKE = "USE_ARMORY_TAKE"
 
+    # B3: Cámara Letal
+    USE_CAMARA_LETAL_RITUAL = "USE_CAMARA_LETAL_RITUAL"
+
 
 
 @dataclass(frozen=True)
