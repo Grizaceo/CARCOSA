@@ -15,9 +15,50 @@ from sim.policies import GoalDirectedPlayerPolicy, HeuristicKingPolicy
 from sim.metrics import transition_record, write_jsonl
 
 
+def _setup_special_rooms(rng: RNG) -> Dict[str, Dict[int, int]]:
+    """
+    P1 - FASE 1.5.1: Sortea 3 habitaciones especiales y las asigna a ubicaciones.
+
+    Returns:
+        Dict mapeando special_room_type -> {floor: room_number}
+        Ejemplo: {"CAMARA_LETAL": {1: 2, 2: 3, 3: 1}, ...}
+    """
+    available_special_rooms = [
+        "MOTEMEY",      # B2
+        "CAMARA_LETAL", # B3
+        "PUERTAS",      # B4 (Puertas Amarillas)
+        "PEEK",         # B5 (Mirador)
+        "ARMERY"        # B6 (Armería)
+    ]
+
+    # Sortear 3 habitaciones especiales
+    selected_special_rooms = rng.sample(available_special_rooms, 3)
+
+    # Asignar ubicaciones con D4 para cada piso
+    special_room_locations = {}
+
+    for special_room in selected_special_rooms:
+        # Tirar D4 para cada piso (F1, F2, F3)
+        f1_roll = rng.randint(1, 4)  # D4 para piso 1
+        f2_roll = rng.randint(1, 4)  # D4 para piso 2
+        f3_roll = rng.randint(1, 4)  # D4 para piso 3
+
+        # Mapeo: 1→R1, 2→R2, 3→R3, 4→R4
+        special_room_locations[special_room] = {
+            1: f1_roll,
+            2: f2_roll,
+            3: f3_roll
+        }
+
+    return special_room_locations
+
+
 def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     cfg = cfg or Config()
     rng = RNG(seed)
+
+    # P1: Sortear habitaciones especiales
+    special_room_locations = _setup_special_rooms(rng)
 
     rooms: Dict[RoomId, RoomState] = {}
     room_ids: List[RoomId] = []
@@ -27,7 +68,23 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
         for r in (1, 2, 3, 4):
             rid = room_id(f, r)
             room_ids.append(rid)
-            rooms[rid] = RoomState(room_id=rid, deck=DeckState(cards=[]))
+
+            # P1: Verificar si esta ubicación tiene una habitación especial
+            special_card_id = None
+            for special_type, locations in special_room_locations.items():
+                if locations[f] == r:
+                    special_card_id = special_type
+                    break
+
+            # Crear habitación con datos especiales si corresponde
+            rooms[rid] = RoomState(
+                room_id=rid,
+                deck=DeckState(cards=[]),
+                special_card_id=special_card_id,
+                special_revealed=False,
+                special_destroyed=False,
+                special_activation_count=0
+            )
 
     # Pool global de llaves: el juego físico tiene 6 cartas de Llave.:contentReference[oaicite:2]{index=2}
     key_pool = [CardId("KEY") for _ in range(cfg.KEYS_TOTAL)]
@@ -74,7 +131,16 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
         PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(2)),
     }
 
-    return GameState(round=1, players=players, rooms=rooms, seed=seed, king_floor=1)
+    # P1: Crear GameState con flags de habitaciones especiales
+    state = GameState(round=1, players=players, rooms=rooms, seed=seed, king_floor=1)
+
+    # P1: Guardar información de habitaciones especiales en flags
+    selected_types = list(special_room_locations.keys())
+    state.flags["SPECIAL_ROOMS_SELECTED"] = selected_types
+    state.flags["SPECIAL_ROOM_LOCATIONS"] = special_room_locations
+    state.flags["CAMARA_LETAL_PRESENT"] = "CAMARA_LETAL" in selected_types
+
+    return state
 
 
 def run_episode(

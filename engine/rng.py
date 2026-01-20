@@ -37,6 +37,14 @@ class RNG:
         self._r.shuffle(seq)
         self.log.append(("shuffle", len(seq)))
 
+    def sample(self, population: Sequence[Any], k: int) -> List[Any]:
+        """Muestrea k elementos de la población sin reemplazo."""
+        if not population:
+            raise ValueError("sample() on empty population")
+        result = self._r.sample(list(population), k)
+        self.log.append(("sample", (len(population), k, result)))
+        return result
+
     def fork(self, tag: str) -> "RNG":
         """
         Deriva un nuevo RNG a partir de (seed, tag).
