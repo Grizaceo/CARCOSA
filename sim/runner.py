@@ -19,35 +19,41 @@ def _setup_special_rooms(rng: RNG) -> Dict[str, Dict[int, int]]:
     """
     P1 - FASE 1.5.1: Sortea 3 habitaciones especiales y las asigna a ubicaciones.
 
+    CORRECCIÓN A: Reglas físicas correctas
+    - Sortear 3 tipos distintos del pool
+    - Asignar 1 tipo a 1 piso (F1, F2, F3)
+    - Usar D4 para determinar R1-R4
+
     Returns:
         Dict mapeando special_room_type -> {floor: room_number}
-        Ejemplo: {"CAMARA_LETAL": {1: 2, 2: 3, 3: 1}, ...}
+        Ejemplo: {"CAMARA_LETAL": {1: 2}, "MOTEMEY": {2: 3}, "PUERTAS": {3: 1}}
     """
     available_special_rooms = [
         "MOTEMEY",      # B2
         "CAMARA_LETAL", # B3
         "PUERTAS",      # B4 (Puertas Amarillas)
-        "PEEK",         # B5 (Mirador)
+        "PEEK",         # B5 (Mirador / Taberna)
         "ARMERY"        # B6 (Armería)
     ]
 
     # Sortear 3 habitaciones especiales
     selected_special_rooms = rng.sample(available_special_rooms, 3)
 
-    # Asignar ubicaciones con D4 para cada piso
+    # Shuffle para asignación aleatoria a pisos
+    rng.shuffle(selected_special_rooms)
+
+    # Asignar ubicaciones: 1 tipo por piso
     special_room_locations = {}
 
-    for special_room in selected_special_rooms:
-        # Tirar D4 para cada piso (F1, F2, F3)
-        f1_roll = rng.randint(1, 4)  # D4 para piso 1
-        f2_roll = rng.randint(1, 4)  # D4 para piso 2
-        f3_roll = rng.randint(1, 4)  # D4 para piso 3
+    for i, floor_num in enumerate([1, 2, 3]):
+        special_type = selected_special_rooms[i]
 
-        # Mapeo: 1→R1, 2→R2, 3→R3, 4→R4
-        special_room_locations[special_room] = {
-            1: f1_roll,
-            2: f2_roll,
-            3: f3_roll
+        # Tirar D4: 1→R1, 2→R2, 3→R3, 4→R4
+        d4_roll = rng.randint(1, 4)
+
+        # Cada tipo solo aparece en UN piso
+        special_room_locations[special_type] = {
+            floor_num: d4_roll
         }
 
     return special_room_locations
@@ -70,9 +76,10 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
             room_ids.append(rid)
 
             # P1: Verificar si esta ubicación tiene una habitación especial
+            # CORRECCIÓN A: ahora locations solo tiene {floor: room_num} para el piso asignado
             special_card_id = None
             for special_type, locations in special_room_locations.items():
-                if locations[f] == r:
+                if f in locations and locations[f] == r:
                     special_card_id = special_type
                     break
 
@@ -139,6 +146,10 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     state.flags["SPECIAL_ROOMS_SELECTED"] = selected_types
     state.flags["SPECIAL_ROOM_LOCATIONS"] = special_room_locations
     state.flags["CAMARA_LETAL_PRESENT"] = "CAMARA_LETAL" in selected_types
+
+    # CORRECCIÓN A: Validar invariantes de habitaciones especiales
+    from engine.setup import validate_special_rooms_invariants
+    validate_special_rooms_invariants(state)
 
     return state
 
