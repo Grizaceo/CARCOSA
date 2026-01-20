@@ -205,3 +205,76 @@ def test_event_cambia_caras():
     # P1 está en posición 0, izquierda es P2
     assert p1.room == initial_p2_room
     assert p2.room == initial_p1_room
+
+
+def test_event_comida_servida_total_0():
+    """Una Comida Servida con Total 0: -3 cordura"""
+    s = setup_event_state()
+    p1 = s.players[PlayerId("P1")]
+    cfg = Config()
+
+    # Forzar Total 0 con cordura muy negativa
+    p1.sanity = -10
+    rng = RNG(1)
+
+    initial_sanity = p1.sanity
+    _resolve_card_minimal(s, PlayerId("P1"), CardId("EVENT:COMIDA_SERVIDA"), cfg, rng)
+
+    # Con Total 0, -3 cordura
+    assert p1.sanity == initial_sanity - 3
+
+
+def test_event_comida_servida_total_high():
+    """Una Comida Servida con Total alto: trae otro jugador y +2 cordura"""
+    s = setup_event_state()
+    p1 = s.players[PlayerId("P1")]
+    p2 = s.players[PlayerId("P2")]
+    cfg = Config()
+
+    # Forzar Total alto
+    p1.sanity = 10
+    rng = RNG(1)  # d6 + 10 = Total >= 7
+
+    initial_p1_sanity = p1.sanity
+    initial_p2_sanity = p2.sanity
+    initial_p2_room = p2.room
+
+    _resolve_card_minimal(s, PlayerId("P1"), CardId("EVENT:COMIDA_SERVIDA"), cfg, rng)
+
+    # Con Total 7+, P2 debería estar en la habitación de P1
+    assert p2.room == p1.room
+    # Ambos +2 cordura
+    assert p1.sanity == min(initial_p1_sanity + 2, 10)
+    assert p2.sanity == min(initial_p2_sanity + 2, 10)
+
+
+def test_event_furia_amarillo_total_0():
+    """La Furia de Amarillo con Total 0: dobla efecto del Rey"""
+    s = setup_event_state()
+    p1 = s.players[PlayerId("P1")]
+    cfg = Config()
+
+    # Forzar Total 0
+    p1.sanity = -10
+    rng = RNG(1)
+
+    _resolve_card_minimal(s, PlayerId("P1"), CardId("EVENT:FURIA_AMARILLO"), cfg, rng)
+
+    # Con Total 0, dobla daño del Rey por 2 rondas
+    assert s.flags.get("KING_DAMAGE_DOUBLE_UNTIL") == s.round + 2
+
+
+def test_event_furia_amarillo_total_high():
+    """La Furia de Amarillo con Total alto: aturde al Rey"""
+    s = setup_event_state()
+    p1 = s.players[PlayerId("P1")]
+    cfg = Config()
+
+    # Forzar Total alto
+    p1.sanity = 10
+    rng = RNG(1)  # d6 + 10 = Total >= 5
+
+    _resolve_card_minimal(s, PlayerId("P1"), CardId("EVENT:FURIA_AMARILLO"), cfg, rng)
+
+    # Con Total 5+, aturde al Rey 1 ronda
+    assert s.king_vanish_ends == s.round + 1
