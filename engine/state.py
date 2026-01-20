@@ -57,6 +57,12 @@ class RoomState:
     deck: DeckState
     revealed: int = 0
 
+    # P1: Sistema de habitaciones especiales
+    special_card_id: Optional[str] = None  # ID de la habitación especial ("CAMARA_LETAL", "PEEK", etc.)
+    special_revealed: bool = False          # Si la carta especial ha sido revelada
+    special_destroyed: bool = False         # Si fue destruida por monstruo
+    special_activation_count: int = 0       # Contador de activaciones (para Salón de Belleza, etc.)
+
 
 @dataclass
 class BoxState:
