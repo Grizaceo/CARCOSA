@@ -179,6 +179,166 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
             s.false_king_round_appeared = s.round
         return
 
+    # FASE 0: Resolución de eventos
+    if s_str.startswith("EVENT:"):
+        event_id = s_str.split(":", 1)[1]
+        _resolve_event(s, pid, event_id, cfg, rng)
+        return
+
+
+def _resolve_event(s: GameState, pid: PlayerId, event_id: str, cfg: Config, rng: RNG):
+    """
+    Resuelve un evento por su ID.
+
+    Convención: Total = d6 + cordura_actual (clamp mínimo 0)
+    """
+    from engine.types import CardId
+    p = s.players[pid]
+
+    # Calcular Total (usado por muchos eventos)
+    d6 = rng.randint(1, 6)
+    total = max(0, d6 + p.sanity)
+
+    # Dispatch por event_id
+    if event_id == "REFLEJO_AMARILLO":
+        _event_reflejo_amarillo(s, pid, cfg)
+    elif event_id == "ESPEJO_AMARILLO":
+        _event_espejo_amarillo(s, pid, cfg)
+    elif event_id == "HAY_CADAVER":
+        _event_hay_cadaver(s, pid, total, cfg, rng)
+    elif event_id == "COMIDA_SERVIDA":
+        _event_comida_servida(s, pid, total, cfg, rng)
+    elif event_id == "DIVAN_AMARILLO":
+        _event_divan_amarillo(s, pid, total, cfg)
+    elif event_id == "CAMBIA_CARAS":
+        _event_cambia_caras(s, pid, total, cfg)
+    elif event_id == "FURIA_AMARILLO":
+        _event_furia_amarillo(s, pid, total, cfg, rng)
+    # ... más eventos se agregarán en FASE 2 ...
+
+    # Evento vuelve al fondo del mazo (convención)
+    # SUPUESTO: Los eventos no se descartan, vuelven al fondo
+    from engine.boxes import active_deck_for_room
+    deck = active_deck_for_room(s, p.room)
+    if deck is not None:
+        deck.cards.append(CardId(f"EVENT:{event_id}"))
+
+
+# Funciones placeholder para los 7 eventos existentes
+# Se implementarán en FASE 2
+
+def _event_reflejo_amarillo(s: GameState, pid: PlayerId, cfg: Config) -> None:
+    """El reflejo de Amarillo: -2 cordura."""
+    p = s.players[pid]
+    p.sanity -= 2
+
+
+def _event_espejo_amarillo(s: GameState, pid: PlayerId, cfg: Config) -> None:
+    """Espejo de Amarillo: invierte la cordura (cordura × -1)."""
+    p = s.players[pid]
+    p.sanity = -p.sanity
+
+
+def _event_hay_cadaver(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+    """
+    Hay un cadáver: según Total.
+    0-2: Pierdes turno siguiente
+    3-4: -1 cordura
+    5+: Obtienes objeto contundente
+    """
+    p = s.players[pid]
+
+    if total <= 2:
+        # Pierdes turno: flag para saltar próximo turno
+        s.flags[f"SKIP_TURN_{pid}"] = True
+    elif total <= 4:
+        p.sanity -= 1
+    else:  # total >= 5
+        # Obtener objeto contundente
+        p.objects.append("BLUNT")
+
+
+def _event_comida_servida(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+    """
+    Una comida servida: según Total.
+    0: -3 cordura
+    1-2: Estado Sangrado
+    3-6: +2 cordura
+    7+: Trae otro jugador a tu habitación, ambos +2 cordura
+    """
+    from engine.effects.event_utils import add_status
+    p = s.players[pid]
+
+    if total == 0:
+        p.sanity -= 3
+    elif total <= 2:
+        add_status(p, "SANGRADO", duration=2)
+    elif total <= 6:
+        p.sanity = min(p.sanity + 2, p.sanity_max or p.sanity + 2)
+    else:  # total >= 7
+        # Traer otro jugador (aleatorio)
+        other_pids = [pid2 for pid2 in s.players if pid2 != pid]
+        if other_pids:
+            target_pid = rng.choice(other_pids)
+            s.players[target_pid].room = p.room
+            # Ambos +2 cordura
+            p.sanity = min(p.sanity + 2, p.sanity_max or p.sanity + 2)
+            target = s.players[target_pid]
+            target.sanity = min(target.sanity + 2, target.sanity_max or target.sanity + 2)
+
+
+def _event_divan_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config) -> None:
+    """
+    Un diván de Amarillo: según Total.
+    0-3: Quita todos los estados
+    4-7: Quita estados + 1 cordura
+    8+: Obtiene estado Sanidad
+    """
+    from engine.effects.event_utils import add_status
+    p = s.players[pid]
+
+    if total <= 3:
+        p.statuses = []
+    elif total <= 7:
+        p.statuses = []
+        p.sanity = min(p.sanity + 1, p.sanity_max or p.sanity + 1)
+    else:  # total >= 8
+        add_status(p, "SANIDAD", duration=2)
+
+
+def _event_cambia_caras(s: GameState, pid: PlayerId, total: int, cfg: Config) -> None:
+    """
+    Cambia caras: según Total.
+    0-3: Swap con jugador a la derecha (orden turno +1)
+    4+: Swap con jugador a la izquierda (orden turno -1)
+    """
+    from engine.effects.event_utils import swap_positions, get_player_by_turn_offset
+
+    if len(s.turn_order) < 2:
+        return  # No hay con quién intercambiar
+
+    offset = 1 if total <= 3 else -1
+    target_pid = get_player_by_turn_offset(s, pid, offset)
+    swap_positions(s, pid, target_pid)
+
+
+def _event_furia_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+    """
+    La furia de Amarillo: según Total.
+    0: Dobla efecto del Rey por 2 rondas (SUPUESTO: no permanente)
+    1-4: Rey se mueve al piso del jugador activo
+    5+: Aturde al Rey 1 ronda (no se manifiesta)
+    """
+    p = s.players[pid]
+
+    if total == 0:
+        # SUPUESTO: Limitado a 2 rondas
+        s.flags["KING_DAMAGE_DOUBLE_UNTIL"] = s.round + 2
+    elif total <= 4:
+        s.king_floor = floor_of(p.room)
+    else:  # total >= 5
+        s.king_vanish_ends = s.round + 1
+
 
 def _update_umbral_flags(s, cfg):
     for p in s.players.values():
