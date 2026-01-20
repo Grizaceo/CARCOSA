@@ -154,6 +154,11 @@ class GameState:
     # B2: MOTEMEY deck y estado
     motemey_deck: DeckState = field(default_factory=lambda: DeckState(cards=[]))
     motemey_event_active: bool = False  # Supuesto: hay evento MOTEMEY activo
+
+    # CORRECCIÓN D: Sistema de elección de 2 pasos para Motemey
+    # Almacena {player_id: [card1, card2]} cuando jugador inicia compra
+    # None cuando no hay elección pendiente
+    pending_motemey_choice: Optional[Dict[str, List[CardId]]] = None
     
     # B5: Peek flag (una vez por turno)
     peek_used_this_turn: Dict[PlayerId, bool] = field(default_factory=dict)
@@ -276,6 +281,15 @@ class GameState:
         else:
             motemey_deck = DeckState(cards=[])
 
+        # CORRECCIÓN D: Motemey pending choice
+        pending_motemey_choice_data = d.get("pending_motemey_choice")
+        pending_motemey_choice = None
+        if pending_motemey_choice_data:
+            pending_motemey_choice = {
+                pid: [CardId(c) for c in cards]
+                for pid, cards in pending_motemey_choice_data.items()
+            }
+
         # B5: Peek used this turn
         peek_used_this_turn = {PlayerId(k): bool(v) for k, v in d.get("peek_used_this_turn", {}).items()}
 
@@ -310,6 +324,7 @@ class GameState:
             # B2: MOTEMEY
             motemey_deck=motemey_deck,
             motemey_event_active=bool(d.get("motemey_event_active", False)),
+            pending_motemey_choice=pending_motemey_choice,
             # B5: PEEK
             peek_used_this_turn=peek_used_this_turn,
             # B6: ARMORY

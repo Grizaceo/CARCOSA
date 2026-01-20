@@ -121,11 +121,18 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         is_in_motemey = _get_special_room_type(state, p.room) == "MOTEMEY"
 
         if is_in_motemey or state.motemey_event_active:
-            # BUY: requiere sanidad >= 2 para poder pagar
-            if p.sanity >= 2:
-                acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY, data={"chosen_index": 0}))
-            
-            # SELL: requiere tener al menos un objeto
+            # CORRECCIÓN D: Sistema de elección de 2 pasos
+            # Si hay pending_choice para este jugador: solo CHOOSE es legal
+            if state.pending_motemey_choice and str(pid) in state.pending_motemey_choice:
+                # Paso 2: Elegir carta (0 o 1)
+                acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_CHOOSE, data={"chosen_index": 0}))
+                acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_CHOOSE, data={"chosen_index": 1}))
+            else:
+                # Paso 1: Iniciar compra (requiere sanidad >= 2)
+                if p.sanity >= 2 and state.motemey_deck.remaining() >= 2:
+                    acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_START, data={}))
+
+            # SELL: requiere tener al menos un objeto (siempre disponible)
             if p.objects:
                 for idx, item in enumerate(p.objects):
                     acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_SELL, data={"item_name": item}))

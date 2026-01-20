@@ -814,6 +814,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
         # ===== B2: MOTEMEY (buy/sell) =====
         elif action.type == ActionType.USE_MOTEMEY_BUY:
+            # DEPRECATED: Mantener compatibilidad con código viejo
             # Compra: -2 sanidad, ofrece 2 cartas, elige 1
             # Supuesto: no consume acción (es acción de habitación)
             if p.sanity >= 2:
@@ -824,15 +825,51 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                     card1 = deck.cards[deck.top]
                     card2 = deck.cards[deck.top + 1]
                     deck.top += 2
-                    
+
                     # Elige la 1ª (data["chosen_index"] = 0 o 1)
                     chosen_idx = int(action.data.get("chosen_index", 0))
                     chosen = card1 if chosen_idx == 0 else card2
                     rejected = card2 if chosen_idx == 0 else card1
-                    
+
                     # Elegida al inventario, rechazada al final del mazo
                     p.objects.append(str(chosen))
-                    deck.cards.append(rejected)
+                    deck.put_bottom(rejected)
+
+        # CORRECCIÓN D: Motemey - Sistema de elección de 2 pasos
+        elif action.type == ActionType.USE_MOTEMEY_BUY_START:
+            # Paso 1: Cobra -2 cordura, extrae 2 cartas, guarda en pending_choice
+            p.sanity -= 2
+            deck = s.motemey_deck
+
+            if deck.remaining() >= 2:
+                card1 = deck.draw_top()
+                card2 = deck.draw_top()
+
+                # Guardar cartas ofertadas en pending_choice
+                if s.pending_motemey_choice is None:
+                    s.pending_motemey_choice = {}
+                s.pending_motemey_choice[str(pid)] = [card1, card2]
+
+        elif action.type == ActionType.USE_MOTEMEY_BUY_CHOOSE:
+            # Paso 2: Jugador elige carta (index 0 o 1)
+            if s.pending_motemey_choice and str(pid) in s.pending_motemey_choice:
+                cards = s.pending_motemey_choice[str(pid)]
+                chosen_idx = int(action.data.get("chosen_index", 0))
+
+                if 0 <= chosen_idx < len(cards):
+                    chosen = cards[chosen_idx]
+                    rejected = cards[1 - chosen_idx]
+
+                    # Elegida al inventario
+                    p.objects.append(str(chosen))
+
+                    # Rechazada vuelve al fondo del mazo de Motemey
+                    s.motemey_deck.put_bottom(rejected)
+
+                    # Limpiar pending_choice
+                    del s.pending_motemey_choice[str(pid)]
+                    if len(s.pending_motemey_choice) == 0:
+                        s.pending_motemey_choice = None
 
         elif action.type == ActionType.USE_MOTEMEY_SELL:
             # Venta: objeto normal +1, tesoro +3, clamped a sanity_max
