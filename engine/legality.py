@@ -12,6 +12,31 @@ def _current_player_id(state: GameState) -> PlayerId:
     return state.turn_order[state.turn_pos]
 
 
+def _is_paranoia_move_legal(state: GameState, pid: PlayerId, to_room: RoomId) -> bool:
+    """
+    FASE 3: Verifica si un movimiento es legal considerando el estado PARANOIA.
+
+    PARANOIA: No puede estar en misma habitación/pasillo que otra Pobre Alma.
+    - Si el jugador tiene PARANOIA, no puede entrar donde hay otros
+    - Si hay alguien con PARANOIA en la habitación destino, nadie puede entrar
+    """
+    p = state.players[pid]
+
+    # Si el jugador tiene PARANOIA, no puede entrar donde hay otros
+    if any(st.status_id == "PARANOIA" for st in p.statuses):
+        for other_pid, other in state.players.items():
+            if other_pid != pid and other.room == to_room:
+                return False
+
+    # Si hay alguien con PARANOIA en la habitación destino, nadie puede entrar
+    for other_pid, other in state.players.items():
+        if other_pid != pid and other.room == to_room:
+            if any(st.status_id == "PARANOIA" for st in other.statuses):
+                return False
+
+    return True
+
+
 def get_legal_actions(state: GameState, actor: str) -> List[Action]:
     if state.game_over:
         return []
@@ -29,7 +54,9 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         # MOVE a vecinos del nodo actual (misma planta: pasillo <-> habitaciones)
         for nb in neighbors(p.room):
-            acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(nb)}))
+            # FASE 3: Filtrar por PARANOIA
+            if _is_paranoia_move_legal(state, pid, RoomId(nb)):
+                acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(nb)}))
 
         # MOVE especial: si estás en la habitación que tiene escaleras en tu piso,
         # puedes moverte a la habitación con escalera del piso arriba/abajo (según canon P0).
@@ -38,11 +65,15 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             if f > 1:
                 dest_stair = state.stairs.get(f - 1)
                 if dest_stair:
-                    acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
+                    # FASE 3: Filtrar por PARANOIA
+                    if _is_paranoia_move_legal(state, pid, dest_stair):
+                        acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
             if f < 3:
                 dest_stair = state.stairs.get(f + 1)
                 if dest_stair:
-                    acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
+                    # FASE 3: Filtrar por PARANOIA
+                    if _is_paranoia_move_legal(state, pid, dest_stair):
+                        acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
 
         # SEARCH solo en habitación con mazo activo
         deck = active_deck_for_room(state, p.room)
@@ -50,7 +81,9 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             acts.append(Action(actor=str(pid), type=ActionType.SEARCH, data={}))
 
         # MEDITATE no se puede en pasillo del piso del Rey.
-        if not (is_corridor(p.room) and floor_of(p.room) == state.king_floor):
+        # FASE 3: VANIDAD bloquea MEDITATE
+        has_vanidad = any(st.status_id == "VANIDAD" for st in p.statuses)
+        if not (is_corridor(p.room) and floor_of(p.room) == state.king_floor) and not has_vanidad:
             acts.append(Action(actor=str(pid), type=ActionType.MEDITATE, data={}))
 
         # SACRIFICE: solo si status "SCARED" o sanity <= S_LOSS (si la regla lo permite)
@@ -106,17 +139,47 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         armory_room_pattern = "_ARMERY"
         is_in_armory = armory_room_pattern in str(p.room)
         armory_destroyed = state.flags.get(f"ARMORY_DESTROYED_{p.room}", False)
-        
+
         if is_in_armory and not armory_destroyed:
             # DROP: si tiene objetos y hay espacio (< 2)
             current_storage_count = len(state.armory_storage.get(p.room, []))
             if p.objects and current_storage_count < 2:
                 for obj in p.objects:
                     acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": obj}))
-            
+
             # TAKE: si hay ítems en almacenamiento
             if current_storage_count > 0:
                 acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_TAKE, data={}))
+
+        # ===== B3: CÁMARA LETAL =====
+        # P1 - FASE 1.5.4: Ritual para obtener 7ª llave
+        # Disponible si:
+        # - Actor está en habitación CÁMARA_LETAL
+        # - CAMARA_LETAL_PRESENT (sorteada en setup)
+        # - Ritual no completado todavía
+        # - Hay exactamente 2 jugadores en la habitación
+        # - Habitación no está destruida
+        if p.room in state.rooms:
+            room_state = state.rooms[p.room]
+            is_camara_letal = (room_state.special_card_id == "CAMARA_LETAL")
+            camara_letal_present = state.flags.get("CAMARA_LETAL_PRESENT", False)
+            ritual_completed = state.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False)
+            room_destroyed = room_state.special_destroyed
+
+            if (is_camara_letal and camara_letal_present and
+                not ritual_completed and not room_destroyed):
+                # Contar jugadores en la habitación
+                players_in_room = [
+                    p_id for p_id, player in state.players.items()
+                    if player.room == p.room
+                ]
+
+                if len(players_in_room) == 2:
+                    acts.append(Action(
+                        actor=str(pid),
+                        type=ActionType.USE_CAMARA_LETAL_RITUAL,
+                        data={}
+                    ))
 
         acts.append(Action(actor=str(pid), type=ActionType.END_TURN, data={}))
         return acts

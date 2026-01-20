@@ -10,11 +10,12 @@ def setup_armory_state():
     """Estado con habitación de ARMERÍA."""
     rooms = {
         RoomId("F1_ARMERY"): RoomState(
-            room_id=RoomId("F1_ARMERY"), 
-            deck=DeckState(cards=[])
+            room_id=RoomId("F1_ARMERY"),
+            deck=DeckState(cards=[]),
+            special_card_id="ARMERY"
         ),
         RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"), 
+            room_id=RoomId("F1_R1"),
             deck=DeckState(cards=[])
         ),
     }

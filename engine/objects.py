@@ -25,6 +25,12 @@ OBJECT_CATALOG = {
     "VIAL": ObjectDefinition("VIAL", "Vial", uses=1, is_blunt=False),
     "BLUNT": ObjectDefinition("BLUNT", "Objeto Contundente", uses=1, is_blunt=True),
     "ROPE": ObjectDefinition("ROPE", "Cuerda", uses=1, is_blunt=False),
+    # Tesoros
+    "TREASURE_RING": ObjectDefinition("TREASURE_RING", "Llavero", uses=None, is_blunt=False, is_treasure=True),
+    "TREASURE_STAIRS": ObjectDefinition("TREASURE_STAIRS", "Escaleras", uses=3, is_blunt=False, is_treasure=True),
+    "TREASURE_CROWN": ObjectDefinition("TREASURE_CROWN", "Corona", uses=None, is_blunt=False, is_treasure=True),
+    "TREASURE_SCROLL": ObjectDefinition("TREASURE_SCROLL", "Pergamino", uses=None, is_blunt=False, is_treasure=True),
+    "TREASURE_PENDANT": ObjectDefinition("TREASURE_PENDANT", "Colgante", uses=None, is_blunt=False, is_treasure=True),
 }
 
 
@@ -48,6 +54,9 @@ def use_object(s: GameState, pid: PlayerId, object_id: str, cfg, rng) -> bool:
         _use_vial(s, pid, cfg)
     elif object_id == "BLUNT":
         _use_blunt(s, pid, cfg)
+    elif object_id == "TREASURE_STAIRS":
+        _use_treasure_stairs(s, pid, cfg)
+    # Nota: TREASURE_RING tiene efecto pasivo, no se "usa"
     # ... más objetos ...
 
     # Consumir si tiene usos limitados
@@ -81,3 +90,44 @@ def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
         if monster.room == p.room:
             s.flags[f"STUN_{monster.monster_id}_UNTIL_ROUND"] = s.round + 2
             break
+
+
+def _use_treasure_stairs(s: GameState, pid: PlayerId, cfg) -> None:
+    """
+    Escaleras (Tesoro): 3 usos. Coloca escalera temporal en habitación actual.
+    Dura hasta fin de ronda.
+    """
+    p = s.players[pid]
+    # Registrar escalera temporal
+    s.flags[f"TEMP_STAIRS_{p.room}"] = s.round  # Válida solo esta ronda
+
+    # Decrementar usos (manejado automáticamente por el sistema en use_object)
+
+
+def has_treasure_ring(p: PlayerState) -> bool:
+    """Verifica si el jugador tiene el tesoro Llavero (efecto pasivo)."""
+    return "TREASURE_RING" in p.objects
+
+
+def get_max_keys_capacity(p: PlayerState) -> int:
+    """
+    Retorna la capacidad máxima de llaves del jugador.
+    Base: 1 llave
+    +1 si tiene Llavero (TREASURE_RING)
+    """
+    base_capacity = 1
+    if has_treasure_ring(p):
+        base_capacity += 1
+    return base_capacity
+
+
+def get_effective_sanity_max(p: PlayerState) -> int:
+    """
+    Retorna la cordura máxima efectiva del jugador.
+    Base: sanity_max del jugador (o 5 si no está definido)
+    +1 si tiene Llavero (TREASURE_RING)
+    """
+    base_max = p.sanity_max if p.sanity_max is not None else 5
+    if has_treasure_ring(p):
+        base_max += 1
+    return base_max

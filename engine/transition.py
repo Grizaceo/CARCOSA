@@ -35,6 +35,7 @@ def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[i
         ActionType.USE_PEEK_ROOMS,
         ActionType.USE_ARMORY_DROP,
         ActionType.USE_ARMORY_TAKE,
+        ActionType.USE_CAMARA_LETAL_RITUAL,
     }
     
     if action_type in free_action_types:
@@ -153,13 +154,8 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
             from engine.state import MonsterState
             s.monsters.append(MonsterState(monster_id=mid, room=p.room))
 
-            # B6: Hook destrucción de Armería cuando monstruo entra
-            if "_ARMERY" in str(p.room):
-                # Marcar armería como destruida
-                s.flags[f"ARMORY_DESTROYED_{p.room}"] = True
-                # Vaciar almacenamiento de la armería
-                if p.room in s.armory_storage:
-                    s.armory_storage[p.room] = []
+            # P1 - FASE 1.5.3: Hook destrucción de habitación especial cuando monstruo entra
+            _on_monster_enters_room(s, p.room)
         return
     
     if s_str.startswith("STATE:"):
@@ -208,6 +204,38 @@ def _on_player_enters_room(s: GameState, pid: PlayerId, room: RoomId) -> None:
         room_state.special_revealed = True
         # Log o tracking de revelación
         s.flags[f"SPECIAL_REVEALED_{room}_{room_state.special_card_id}"] = s.round
+
+
+def _on_monster_enters_room(s: GameState, room: RoomId) -> None:
+    """
+    P1 - FASE 1.5.3: Hook cuando un monstruo entra a una habitación.
+
+    Si la habitación tiene una habitación especial activa (no destruida), la destruye.
+    Según P1: cuando un monstruo entra, la habitación especial se destruye, pero el nodo
+    y su mazo permanecen intactos.
+
+    ESPECÍFICO: Para Armería, además vacía su almacenamiento.
+    """
+    if room not in s.rooms:
+        return
+
+    room_state = s.rooms[room]
+
+    # Si hay una habitación especial no destruida, destruirla
+    if (room_state.special_card_id is not None and
+        not room_state.special_destroyed):
+
+        # Marcar como destruida
+        room_state.special_destroyed = True
+
+        # ESPECÍFICO: Armería vacía su almacenamiento
+        if room_state.special_card_id == "ARMERY":
+            if room in s.armory_storage:
+                s.armory_storage[room] = []
+
+        # LEGACY: Mantener flag para compatibilidad con tests existentes
+        if room_state.special_card_id == "ARMERY":
+            s.flags[f"ARMORY_DESTROYED_{room}"] = True
 
 
 def _resolve_event(s: GameState, pid: PlayerId, event_id: str, cfg: Config, rng: RNG):
@@ -400,6 +428,30 @@ def _apply_minus5_transitions(s, cfg):
                 # Restore to 2 actions
                 p.at_minus5 = False
                 s.remaining_actions[pid] = 2
+
+
+def _apply_status_effects_end_of_round(s: GameState) -> None:
+    """
+    FASE 3: Aplica efectos de estados al final de ronda, ANTES del tick de duración.
+
+    Estados implementados:
+    - MALDITO: Todas las Pobres Almas en el mismo piso pierden 1 cordura
+    - SANIDAD: El jugador recupera 1 cordura
+    """
+    from engine.board import floor_of
+
+    # MALDITO: Afecta a otros jugadores en el mismo piso
+    for pid, p in s.players.items():
+        if any(st.status_id == "MALDITO" for st in p.statuses):
+            player_floor = floor_of(p.room)
+            for other_pid, other in s.players.items():
+                if other_pid != pid and floor_of(other.room) == player_floor:
+                    other.sanity -= 1
+
+    # SANIDAD: Recupera 1 cordura
+    for p in s.players.values():
+        if any(st.status_id == "SANIDAD" for st in p.statuses):
+            p.sanity += 1
 
 
 def _current_false_king_floor(s) -> Optional[int]:
@@ -763,6 +815,50 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                 item = s.armory_storage[armory_room].pop()
                 p.objects.append(item)
 
+        # ===== B3: CÁMARA LETAL (ritual) =====
+        # P1 - FASE 1.5.4: Ritual para obtener 7ª llave
+        elif action.type == ActionType.USE_CAMARA_LETAL_RITUAL:
+            if not s.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False):
+                players_in_room = [
+                    p_id for p_id, player in s.players.items()
+                    if player.room == p.room
+                ]
+
+                if len(players_in_room) == 2:
+                    # Lanzar D6 para determinar distribución de cordura
+                    d6 = rng.randint(1, 6)
+
+                    # action.data debe contener:
+                    #   - "sanity_distribution": [cost_p1, cost_p2]
+                    #   - "key_recipient": pid del jugador que recibe la llave
+                    sanity_costs = action.data.get("sanity_distribution", [0, 0])
+                    key_recipient = action.data.get("key_recipient", players_in_room[0])
+
+                    # Validar distribución según D6
+                    valid = False
+                    if d6 in [1, 2]:
+                        # Un jugador paga 7 (el otro 0)
+                        valid = sorted(sanity_costs) == [0, 7]
+                    elif d6 in [3, 4]:
+                        # Reparto fijo: 3 y 4
+                        valid = sorted(sanity_costs) == [3, 4]
+                    elif d6 in [5, 6]:
+                        # Reparto libre: suma total = 7
+                        valid = sum(sanity_costs) == 7 and len(sanity_costs) == 2
+
+                    if valid:
+                        # Aplicar costos de cordura
+                        for i, pid_in_room in enumerate(players_in_room):
+                            cost = sanity_costs[i]
+                            s.players[pid_in_room].sanity -= cost
+
+                        # Agregar llave al jugador designado
+                        s.players[key_recipient].keys += 1
+
+                        # Marcar ritual como completado
+                        s.flags["CAMARA_LETAL_RITUAL_COMPLETED"] = True
+                        s.flags["CAMARA_LETAL_D6"] = d6  # Para tracking
+
         # Descuento de acciones respetando free actions
         cost = _consume_action_if_needed(action.type)
         if cost > 0:
@@ -826,6 +922,9 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                 for p in s.players.values():
                     if p.objects:
                         p.objects.pop()
+
+        # PASO 4.5: Aplicar efectos de estados al final de ronda (ANTES de tick)
+        _apply_status_effects_end_of_round(s)
 
         # PASO 5: Tick estados (decremento de duraciones)
         for p in s.players.values():
