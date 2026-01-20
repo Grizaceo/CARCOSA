@@ -12,6 +12,9 @@ class StatusInstance:
     status_id: str
     remaining_rounds: int
     stacks: int = 1
+    # CORRECCIÓN B: Metadata para estados complejos
+    # Para TRAPPED_SPIDER: almacena monster_id fuente del trap
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -40,6 +43,10 @@ class PlayerState:
 class MonsterState:
     monster_id: str
     room: RoomId
+    # CORRECCIÓN B: STUN para monstruos
+    # Contundente: 2 turnos, Liberación de trap: 1 turno
+    # Rey de Amarillo: inmune (no puede ser stuneado)
+    stunned_remaining_rounds: int = 0
 
 
 @dataclass

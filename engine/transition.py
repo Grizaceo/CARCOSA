@@ -460,6 +460,11 @@ def _apply_status_effects_end_of_round(s: GameState) -> None:
         if any(st.status_id == "SANIDAD" for st in p.statuses):
             p.sanity += 1
 
+    # CORRECCIÓN B: Decrementar STUN de monstruos
+    for monster in s.monsters:
+        if monster.stunned_remaining_rounds > 0:
+            monster.stunned_remaining_rounds -= 1
+
 
 def _current_false_king_floor(s) -> Optional[int]:
     _sync_crown_holder(s)
@@ -646,6 +651,54 @@ def _end_of_round_checks(s, cfg):
         s.outcome = "WIN"
 
 
+def _handle_trapped_escape_attempts(s, pid: PlayerId, rng: RNG) -> bool:
+    """
+    CORRECCIÓN B: Maneja intento automático de escape para jugadores con TRAPPED_SPIDER.
+
+    Se ejecuta al inicio del turno del jugador.
+    - Roll: d6 + cordura_actual >= 3 para liberarse
+    - Si éxito: remueve TRAPPED_SPIDER, aplica STUN 1 turno al monstruo fuente
+    - Si falla: jugador pierde las 2 acciones ese turno (actions_left = 0)
+
+    Returns:
+        bool: True si el jugador está trapped y falló el escape (pierde el turno completo)
+    """
+    p = s.players[pid]
+
+    # Buscar estado TRAPPED_SPIDER
+    trapped_status = None
+    for st in p.statuses:
+        if st.status_id == "TRAPPED_SPIDER":
+            trapped_status = st
+            break
+
+    if not trapped_status:
+        return False  # No está trapped
+
+    # Intento automático de escape
+    d6 = rng.randint(1, 6)
+    total = d6 + p.sanity  # Puede ser negativo
+
+    if total >= 3:
+        # ÉXITO: Liberarse
+        p.statuses = [st for st in p.statuses if st.status_id != "TRAPPED_SPIDER"]
+
+        # Aplicar STUN 1 turno al monstruo fuente
+        source_monster_id = trapped_status.metadata.get("source_monster_id")
+        if source_monster_id:
+            for monster in s.monsters:
+                if monster.monster_id == source_monster_id:
+                    # Rey de Amarillo es inmune al STUN
+                    if "YELLOW_KING" not in monster.monster_id and "KING" not in monster.monster_id:
+                        monster.stunned_remaining_rounds = max(monster.stunned_remaining_rounds, 1)
+                    break
+
+        return False  # Se liberó, puede actuar normalmente
+    else:
+        # FALLA: Pierde el turno completo (0 acciones)
+        return True  # Indica que debe setear actions = 0
+
+
 def _start_new_round(s, cfg):
     order = s.turn_order
     if not order:
@@ -701,6 +754,18 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
     if s.phase == "PLAYER":
         pid = PlayerId(action.actor)
         p = s.players[pid]
+
+        # CORRECCIÓN B: Intento automático de escape al inicio del turno del jugador
+        # Se ejecuta solo una vez por turno (flag para evitar repeticiones)
+        escape_attempt_flag = f"ESCAPE_ATTEMPT_{pid}_ROUND_{s.round}"
+        if not s.flags.get(escape_attempt_flag, False):
+            s.flags[escape_attempt_flag] = True  # Marcar que ya se intentó en este turno
+
+            if _handle_trapped_escape_attempts(s, pid, rng):
+                # Jugador falló el escape: pierde las 2 acciones
+                s.remaining_actions[pid] = 0
+                # No procesar la acción actual, solo return
+                return _finalize_and_return(s, cfg)
 
         if action.type == ActionType.MOVE:
             to = RoomId(action.data["to"])

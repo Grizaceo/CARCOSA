@@ -118,7 +118,7 @@ def test_use_blunt():
     p1.objects.append("BLUNT")
 
     # Hay un monstruo en la habitación de P1
-    s.monsters.append(MonsterState(monster_id="SKELETON", room=RoomId("F1_R1")))
+    s.monsters.append(MonsterState(monster_id="SKELETON", room=RoomId("F1_R1"), stunned_remaining_rounds=0))
 
     # Usar contundente
     result = use_object(s, PlayerId("P1"), "BLUNT", cfg, rng)
@@ -126,10 +126,9 @@ def test_use_blunt():
     assert result == True
     assert "BLUNT" not in p1.objects  # Consumido
 
-    # Verificar que monstruo está aturdido
-    stun_flag = s.flags.get("STUN_SKELETON_UNTIL_ROUND")
-    assert stun_flag is not None
-    assert stun_flag == s.round + 2  # Aturdido por 2 rondas
+    # CORRECCIÓN B: Verificar que monstruo está aturdido por 2 turnos
+    skeleton = s.monsters[0]
+    assert skeleton.stunned_remaining_rounds == 2
 
 
 def test_use_object_not_in_inventory():

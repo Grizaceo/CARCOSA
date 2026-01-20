@@ -82,13 +82,18 @@ def _use_vial(s: GameState, pid: PlayerId, cfg) -> None:
 
 def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
     """
-    Objeto Contundente: Aturde monstruo en la habitación por 2 rondas.
-    SUPUESTO: Se marca en flags del GameState.
+    CORRECCIÓN B: Objeto Contundente aturde monstruo en la habitación por 2 turnos.
+
+    - Busca monstruo en misma habitación que el jugador
+    - Aplica STUN de 2 turnos (excepto Rey de Amarillo, que es inmune)
+    - Se consume al usarse (1 uso)
     """
     p = s.players[pid]
     for monster in s.monsters:
         if monster.room == p.room:
-            s.flags[f"STUN_{monster.monster_id}_UNTIL_ROUND"] = s.round + 2
+            # Rey de Amarillo es inmune al STUN
+            if "YELLOW_KING" not in monster.monster_id and "KING" not in monster.monster_id:
+                monster.stunned_remaining_rounds = max(monster.stunned_remaining_rounds, 2)
             break
 
 
