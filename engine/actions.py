@@ -20,7 +20,10 @@ class ActionType(str, Enum):
     
     # B2: Motemey
     USE_MOTEMEY_SELL = "USE_MOTEMEY_SELL"
-    USE_MOTEMEY_BUY = "USE_MOTEMEY_BUY"
+    USE_MOTEMEY_BUY = "USE_MOTEMEY_BUY"  # DEPRECATED: usar BUY_START + BUY_CHOOSE
+    # CORRECCIÓN D: Sistema de elección de 2 pasos
+    USE_MOTEMEY_BUY_START = "USE_MOTEMEY_BUY_START"     # Paso 1: cobra cordura, muestra 2 cartas
+    USE_MOTEMEY_BUY_CHOOSE = "USE_MOTEMEY_BUY_CHOOSE"   # Paso 2: elige carta (index 0 o 1)
     
     # B4: Yellow Doors
     USE_YELLOW_DOORS = "USE_YELLOW_DOORS"
