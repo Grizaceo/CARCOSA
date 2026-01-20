@@ -422,15 +422,52 @@ s.peek_used_this_turn = {}
 
 ---
 
-## FASE 1.5: HABITACIONES ESPECIALES
+## FASE 1.5: HABITACIONES ESPECIALES (P1)
 
-**Estimación Total:** 2 horas
+**Estimación Total:** 3 horas
+
+**Referencia:** Plan P1 - Habitaciones Especiales (imágenes compartidas 2026-01-20)
 
 ---
 
-### 1.5.1 Sistema de Habitaciones Especiales + Pool de Llaves (B3)
+### 1.5.0 Modelo de Datos para Habitaciones Especiales
 
-**CONTEXTO (Canon Confirmado):**
+**Archivo:** `engine/state.py`
+
+**Implementación:**
+```python
+@dataclass
+class RoomState:
+    room_id: RoomId
+    deck: DeckState
+    revealed: int = 0
+
+    # NUEVO P1: Sistema de habitaciones especiales
+    special_card_id: Optional[str] = None  # ID de la habitación especial ("CAMARA_LETAL", "PEEK", etc.)
+    special_revealed: bool = False          # Si la carta especial ha sido revelada
+    special_destroyed: bool = False         # Si fue destruida por monstruo
+    special_activation_count: int = 0       # Contador de activaciones (para Salón de Belleza, etc.)
+```
+
+**Tests:**
+```python
+# tests/test_special_rooms_model.py (NUEVO)
+def test_room_state_has_special_fields():
+    """RoomState tiene campos para habitaciones especiales"""
+    room = RoomState(room_id="F1_R1", deck=DeckState(cards=[]))
+    assert room.special_card_id is None
+    assert room.special_revealed is False
+    assert room.special_destroyed is False
+    assert room.special_activation_count == 0
+```
+
+**Estimación:** 15 minutos
+
+---
+
+### 1.5.1 Sistema de Sorteo y Asignación (Setup)
+
+**CONTEXTO (Canon Confirmado + P1):**
 
 Durante el setup del juego:
 1. Se eligen **3 habitaciones especiales al azar** de las 5 disponibles:
@@ -440,22 +477,29 @@ Durante el setup del juego:
    - B5: Peek (Mirador)
    - B6: Armería
 
-2. **Cámara Letal** (habitación especial):
+2. Para cada habitación especial seleccionada:
+   - Se lanza **D4 para cada piso** (F1, F2, F3)
+   - Resultado D4: `1→R1, 2→R2, 3→R3, 4→R4`
+   - Se coloca la carta especial **boca abajo** en esas ubicaciones
+
+3. **Cámara Letal** (habitación especial):
    - NO tiene eventos asociados (a diferencia del Motemey)
    - Solo existe como habitación si sale en el sorteo de las 3
    - Cuando es **revelada**, se habilita la posibilidad de obtener la 7ª llave
    - Los jugadores activan un **ritual** en la Cámara Letal para obtener la llave
 
-3. **Motemey** (habitación especial + eventos):
+4. **Motemey** (habitación especial + eventos):
    - Es una habitación especial (puede salir en sorteo de 3)
    - **ADEMÁS** tiene eventos de Motemey que aparecen en otras habitaciones
    - Su mazo **siempre se arma** en setup (independiente del sorteo)
 
 **ESTADO ACTUAL DEL CÓDIGO:**
 - ❌ No existe lógica de sorteo de 3 habitaciones especiales
+- ❌ No existe asignación con D4
 - ✅ Motemey implementado (habitación + mazo de eventos)
 - ✅ Puertas, Peek, Armería implementados
 - ❌ Cámara Letal NO implementada
+- ❌ No existe sistema de revelación automática
 
 ---
 
@@ -557,7 +601,96 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
             # ...
 ```
 
-**Paso 3: Implementar Habitación Cámara Letal**
+**Paso 3: Hook - Revelación Automática al Entrar (P1)**
+
+**Archivo:** `engine/transition.py`
+
+**Ubicación:** En la función de `MOVE` o después de mover al jugador
+
+**Implementación:**
+```python
+def _on_player_enters_room(s: GameState, pid: PlayerId, room: RoomId) -> None:
+    """
+    Hook P1: Cuando un jugador entra a una habitación, revelar carta especial si existe.
+    Revelación NO consume acciones.
+    """
+    if room not in s.rooms:
+        return
+
+    room_state = s.rooms[room]
+
+    # Si hay una carta especial boca abajo, revelarla
+    if (room_state.special_card_id is not None and
+        not room_state.special_revealed and
+        not room_state.special_destroyed):
+
+        room_state.special_revealed = True
+        # Log o tracking de revelación
+        s.flags[f"SPECIAL_REVEALED_{room}_{room_state.special_card_id}"] = s.round
+```
+
+**Tests:**
+```python
+# tests/test_special_rooms_reveal.py (NUEVO)
+def test_player_enters_reveals_special():
+    """Primera entrada a habitación especial la revela automáticamente"""
+
+def test_reveal_is_idempotent():
+    """Segunda entrada no vuelve a revelar (idempotente)"""
+
+def test_reveal_does_not_consume_actions():
+    """Revelar especial NO reduce actions_left"""
+```
+
+**Estimación:** 30 minutos
+
+---
+
+**Paso 4: Hook - Destrucción por Monstruo (P1)**
+
+**Archivo:** `engine/transition.py`
+
+**Ubicación:** En `_resolve_card_minimal()` cuando se resuelve `MONSTER:*`
+
+**Implementación:**
+```python
+# En _resolve_card_minimal(), después de crear MonsterState
+if s_str.startswith("MONSTER:"):
+    # ... código existente que crea el monstruo ...
+
+    # P1: Hook destrucción de habitación especial
+    if p.room in s.rooms:
+        room_state = s.rooms[p.room]
+        if (room_state.special_card_id is not None and
+            not room_state.special_destroyed):
+
+            # Marcar como destruida
+            room_state.special_destroyed = True
+
+            # ESPECÍFICO: Armería vacía su almacenamiento
+            if "_ARMERY" in str(p.room):
+                if p.room in s.armory_storage:
+                    s.armory_storage[p.room] = []
+```
+
+**Tests:**
+```python
+# tests/test_special_rooms_destruction.py (NUEVO)
+def test_monster_destroys_special_room():
+    """Monstruo entrando destruye habitación especial"""
+
+def test_destroyed_room_prevents_activation():
+    """Habitación destruida no puede activarse"""
+
+def test_armory_specific_destruction():
+    """Armería destruida vacía su almacenamiento"""
+```
+
+**Estimación:** 20 minutos
+
+---
+
+**Paso 5: Implementar Habitación Cámara Letal**
 
 **Archivo:** `engine/actions.py`
 
@@ -679,7 +812,28 @@ def test_ritual_d6_distributions():
     """Verifica distribuciones de cordura según D6"""
 ```
 
-**Estimación:** 90 minutos
+**Estimación:** 45 minutos
+
+---
+
+**RESUMEN FASE 1.5:**
+
+| Paso | Descripción | Tiempo | Acumulado |
+|------|-------------|--------|-----------|
+| 1.5.0 | Modelo de Datos | 15 min | 15 min |
+| 1.5.1 | Sorteo y Asignación | 60 min | 75 min |
+| 1.5.2 | Hook Revelación | 30 min | 105 min |
+| 1.5.3 | Hook Destrucción | 20 min | 125 min |
+| 1.5.4 | Cámara Letal | 45 min | 170 min |
+| **TOTAL** | | **~3 horas** | |
+
+**Definition of Done P1:**
+- ✅ Setup crea exactamente 3 salas especiales boca abajo en habitaciones canónicas válidas
+- ✅ Primera entrada revela 1 vez (idempotente)
+- ✅ Activación no reduce actions_left
+- ✅ Segunda activación: al menos 1 sala demuestra contador de activación
+- ✅ Entrada/spawn de monstruo destruye la sala especial y esta deja de activarse
+- ✅ pytest -q sin fallos: tests deterministas
 
 ---
 
@@ -1743,8 +1897,12 @@ if __name__ == "__main__":
 | **FASE 1** | Hooks Básicos | 45 min | ✅ **COMPLETADO** |
 | 1.1 | Destrucción Armería | 25 min | ✅ |
 | 1.2 | Reset Peek | 10 min | ✅ |
-| **FASE 1.5** | Habitaciones Especiales | 2 horas | ❌ Pendiente |
-| 1.5.1 | Sorteo + Cámara Letal | 90 min | ❌ |
+| **FASE 1.5** | Habitaciones Especiales (P1) | 3 horas | ❌ Pendiente |
+| 1.5.0 | Modelo de Datos | 15 min | ❌ |
+| 1.5.1 | Sorteo y Asignación | 60 min | ❌ |
+| 1.5.2 | Hook Revelación | 30 min | ❌ |
+| 1.5.3 | Hook Destrucción | 20 min | ❌ |
+| 1.5.4 | Cámara Letal | 45 min | ❌ |
 | **FASE 2** | Eventos Existentes (7 eventos) | 3.5-4 horas | ❌ Pendiente |
 | 2.1 | Reflejo de Amarillo | 15 min | ❌ |
 | 2.2 | Espejo de Amarillo | 15 min | ❌ |
@@ -1771,7 +1929,7 @@ if __name__ == "__main__":
 | 6.2 | Herramienta Análisis RNG | 1 hora | ❌ |
 | **FASE 7** | Guardado Versionado | 45 min | ❌ Pendiente |
 | **FASE 8** | Optimización LLM | 1 hora | ❌ Pendiente |
-| **TOTAL** | | **~21-23 horas** | |
+| **TOTAL** | | **~22-24 horas** | |
 
 ---
 
@@ -1802,8 +1960,12 @@ FASE 0: Sistema Base Requerido
 ├── 0.2: Funciones Utilidad
 └── 0.3: Sistema Objetos
 
-🟡 FASE 1.5: Habitaciones Especiales [2h]
-└── Sorteo + Cámara Letal
+🟡 FASE 1.5: Habitaciones Especiales (P1) [3h]
+├── 1.5.0: Modelo de Datos
+├── 1.5.1: Sorteo y Asignación
+├── 1.5.2: Hook Revelación
+├── 1.5.3: Hook Destrucción
+└── 1.5.4: Cámara Letal
 
 🟡 FASE 2: Eventos Existentes [3.5-4h]
 ├── EVT-01: Reflejo de Amarillo
