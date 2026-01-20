@@ -1,4 +1,29 @@
-# Plan de Implementación - 19 Enero 2026
+# Plan de Implementación CARCOSA - 19 Enero 2026
+**Versión Unificada** | Integra sistema de eventos, objetos, estados y herramientas
+
+---
+
+## TABLA DE CONTENIDOS
+
+1. [Corrección de Informe](#corrección-de-informe)
+2. [Estado Actual del Engine](#estado-actual-del-engine)
+3. [FASE 0: Sistema Base Requerido (CRÍTICO)](#fase-0-sistema-base-requerido-crítico)
+4. [FASE 1: Hooks Básicos](#fase-1-hooks-básicos)
+5. [FASE 1.5: Habitaciones Especiales](#fase-15-habitaciones-especiales)
+6. [FASE 2: Eventos Existentes](#fase-2-eventos-existentes)
+7. [FASE 3: Estados Canónicos](#fase-3-estados-canónicos)
+8. [FASE 4: Objetos y Tesoros](#fase-4-objetos-y-tesoros)
+9. [FASE 5: Habitaciones Especiales Pendientes](#fase-5-habitaciones-especiales-pendientes)
+10. [FASE 6: Análisis y Tracking RNG](#fase-6-análisis-y-tracking-rng)
+11. [FASE 7: Sistema de Guardado Versionado](#fase-7-sistema-de-guardado-versionado)
+12. [FASE 8: Optimización para LLM](#fase-8-optimización-para-llm)
+13. [Resumen de Estimaciones](#resumen-de-estimaciones)
+14. [Orden de Implementación](#orden-de-implementación)
+15. [Cómo Reanudar el Trabajo](#cómo-reanudar-el-trabajo)
+16. [Propuestas No Aprobadas](#propuestas-no-aprobadas)
+17. [Referencias](#referencias)
+
+---
 
 ## CORRECCIÓN DE INFORME
 
@@ -33,81 +58,377 @@ elif action.type == ActionType.SEARCH:
 
 ---
 
-## PARTE 1: HOOKS PENDIENTES (P0-B6)
+## ESTADO ACTUAL DEL ENGINE
 
-### 1.1 Destrucción de Armería por Monstruo (B6)
+### ✅ Implementado
 
-**Archivo:** `engine/transition.py`
-
-**Ubicación:** Función `_resolve_card_minimal()` (línea ~200-250)
-
-**Implementación:**
-```python
-def _resolve_card_minimal(s, pid, card, cfg, rng):
-    """
-    Resuelve carta revelada.
-    Agregar hook: si MONSTER entra a ARMERÍA → destruir + vaciar
-    """
-
-    # ... código existente ...
-
-    if card_type == "MONSTER":
-        # ... código existente de crear monstruo ...
-
-        # NUEVO: Hook destrucción de Armería
-        if "_ARMERY" in str(p.room):  # Si monstruo aparece en Armería
-            s.flags[f"ARMORY_DESTROYED_{p.room}"] = True
-            s.armory_storage[p.room] = []  # Vaciar almacenamiento
+```
+engine/
+├── actions.py      → MOVE, SEARCH, MEDITATE, END_TURN, SACRIFICE, ESCAPE_TRAPPED
+│                     USE_MOTEMEY_BUY/SELL, USE_YELLOW_DOORS, USE_PEEK_ROOMS
+│                     USE_ARMORY_DROP/TAKE, KING_ENDROUND
+├── state.py        → PlayerState (sanity, keys, objects, statuses, soulbound_items)
+│                     StatusInstance (status_id, remaining_rounds, stacks)
+│                     MonsterState, DeckState, BoxState, GameState
+├── transition.py   → _resolve_card_minimal() [KEY, MONSTER:*, STATE:*, CROWN]
+│                     Fin de ronda: Casa, Ruleta d4, Presencia, d6, Estados
+│                     ✅ Hook: Armería destruida por monstruo (Fase 1)
+│                     ✅ Hook: Reset Peek al inicio de ronda (Fase 1)
+├── legality.py     → Acciones legales por fase y condición
+├── board.py        → Grafo de nodos, rotación sushi, escaleras
+└── config.py       → KEYS_TOTAL=6, S_LOSS=-5, etc.
 ```
 
-**Tests a Agregar:**
-```python
-# tests/test_armory.py
-def test_armory_destroyed_by_monster():
-    """Monstruo destruye armería y vacía storage"""
+### ❌ NO Implementado
 
-def test_armory_destroyed_prevents_drop_take():
-    """Armería destruida no permite DROP/TAKE"""
-```
+| Subsistema | Descripción | Fase |
+|------------|-------------|------|
+| **Resolución de EVENTOS** | `_resolve_card_minimal()` ignora `EVENT:*` | Fase 0 |
+| **Sistema Total** | `Total = d6 + cordura_actual` no existe | Fase 0 |
+| **Efectos de Objetos** | Brújula, Vial, Contundente son strings sin lógica | Fase 0 |
+| **Estados Canónicos** | Sangrado, Maldito, Paranoia, Sanidad, Vanidad | Fase 3 |
+| **Habitaciones** | Cámara Letal, Taberna, Salón de Belleza | Fase 1.5, 5 |
+| **7 Eventos Existentes** | EVT-01 a EVT-07 del juego físico | Fase 2 |
 
-**Estimación:** 15 minutos código + 10 minutos tests
+### ⚠️ Parcialmente Implementado
+
+| Elemento | Estado | Falta | Fase |
+|----------|--------|-------|------|
+| ILLUMINATED | Tests existen | No otorga +1 acción realmente | Fase 3 |
+| TRAPPED | ESCAPE_TRAPPED funciona | No se aplica desde cartas | - |
 
 ---
 
-### 1.2 Reset Automático de Peek al Final del Turno (B5)
+## FASE 0: SISTEMA BASE REQUERIDO (CRÍTICO)
 
-**Archivo:** `engine/transition.py`
+> **⚠️ BLOQUEANTE:** Esta fase debe completarse ANTES de implementar los 7 eventos existentes (Fase 2).
 
-**Ubicación:** Función `_start_new_round()` (línea ~373-400)
-
-**Implementación:**
-```python
-def _start_new_round(s: GameState, cfg: Config) -> None:
-    """
-    Reset de flags al inicio de nueva ronda.
-    Agregar: reset peek_used_this_turn
-    """
-    s.round += 1
-    s.turn_pos = 0
-
-    # NUEVO: Reset de Peek
-    s.peek_used_this_turn = {}
-
-    # ... resto del código existente ...
-```
-
-**Tests a Agregar:**
-```python
-# tests/test_peek_rooms.py
-def test_peek_resets_at_new_round():
-    """Peek se puede usar nuevamente al iniciar nueva ronda"""
-```
-
-**Estimación:** 5 minutos código + 5 minutos tests
+**Estimación Total:** 5-6 horas
 
 ---
 
-### 1.3 Sistema de Habitaciones Especiales + Pool de Llaves (B3)
+### 0.1 Sistema de Resolución de Eventos 🔴
+
+**Prioridad:** CRÍTICA (bloquea 7 eventos existentes)
+
+**Archivo:** `engine/transition.py`
+
+**Ubicación:** Función `_resolve_card_minimal()` (~línea 129)
+
+**Implementación:**
+```python
+def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None):
+    s_str = str(card)
+    p = s.players[pid]
+
+    # ... código existente para KEY, MONSTER, STATE, CROWN ...
+
+    # NUEVO: Resolución de eventos
+    if s_str.startswith("EVENT:"):
+        event_id = s_str.split(":", 1)[1]
+        _resolve_event(s, pid, event_id, cfg, rng)
+        return
+
+
+def _resolve_event(s: GameState, pid: PlayerId, event_id: str, cfg: Config, rng: RNG):
+    """
+    Resuelve un evento por su ID.
+
+    Convención: Total = d6 + cordura_actual (clamp mínimo 0)
+    """
+    p = s.players[pid]
+
+    # Calcular Total (usado por muchos eventos)
+    d6 = rng.randint(1, 6)
+    total = max(0, d6 + p.sanity)
+
+    # Dispatch por event_id
+    if event_id == "REFLEJO_AMARILLO":
+        _event_reflejo_amarillo(s, pid, cfg)
+    elif event_id == "ESPEJO_AMARILLO":
+        _event_espejo_amarillo(s, pid, cfg)
+    elif event_id == "HAY_CADAVER":
+        _event_hay_cadaver(s, pid, total, cfg, rng)
+    elif event_id == "COMIDA_SERVIDA":
+        _event_comida_servida(s, pid, total, cfg, rng)
+    elif event_id == "DIVAN_AMARILLO":
+        _event_divan_amarillo(s, pid, total, cfg)
+    elif event_id == "CAMBIA_CARAS":
+        _event_cambia_caras(s, pid, total, cfg)
+    elif event_id == "FURIA_AMARILLO":
+        _event_furia_amarillo(s, pid, total, cfg, rng)
+    # ... más eventos ...
+
+    # Evento vuelve al fondo del mazo (convención)
+    # SUPUESTO: Los eventos no se descartan, vuelven al fondo
+    from engine.board import active_deck_for_room
+    deck = active_deck_for_room(s, p.room)
+    if deck is not None:
+        deck.cards.append(CardId(f"EVENT:{event_id}"))
+```
+
+**Tests requeridos:**
+```python
+# tests/test_event_resolution.py (NUEVO ARCHIVO)
+def test_event_card_triggers_resolution():
+    """EVENT:X en mazo debe llamar a _resolve_event()"""
+
+def test_event_returns_to_bottom():
+    """Evento resuelto vuelve al fondo del mazo"""
+
+def test_total_calculation():
+    """Total = d6 + cordura, clamp mínimo 0"""
+    # Total con cordura positiva
+    # Total con cordura negativa (clamp a 0)
+    # Total con cordura 0
+```
+
+**Estimación:** 2-3 horas
+
+---
+
+### 0.2 Funciones de Utilidad para Eventos 🟡
+
+**Prioridad:** ALTA (reutilizadas por múltiples eventos)
+
+**Archivo:** `engine/effects/event_utils.py` (NUEVO)
+
+**Implementación:**
+```python
+# engine/effects/event_utils.py
+
+from engine.state import GameState, PlayerState, StatusInstance
+from engine.types import PlayerId, RoomId
+from typing import List
+
+
+def swap_positions(s: GameState, pid1: PlayerId, pid2: PlayerId) -> None:
+    """Intercambia ubicación de dos jugadores."""
+    p1, p2 = s.players[pid1], s.players[pid2]
+    p1.room, p2.room = p2.room, p1.room
+
+
+def move_player_to_room(s: GameState, pid: PlayerId, room: RoomId) -> None:
+    """Mueve un jugador a una habitación específica."""
+    s.players[pid].room = room
+
+
+def remove_all_statuses(p: PlayerState) -> None:
+    """Remueve todos los estados de un jugador."""
+    p.statuses = []
+
+
+def remove_status(p: PlayerState, status_id: str) -> bool:
+    """Remueve un estado específico. Retorna True si existía."""
+    original_len = len(p.statuses)
+    p.statuses = [st for st in p.statuses if st.status_id != status_id]
+    return len(p.statuses) < original_len
+
+
+def add_status(p: PlayerState, status_id: str, duration: int = 2) -> None:
+    """Agrega un estado con duración."""
+    p.statuses.append(StatusInstance(status_id=status_id, remaining_rounds=duration))
+
+
+def get_player_by_turn_offset(s: GameState, pid: PlayerId, offset: int) -> PlayerId:
+    """
+    Obtiene jugador a la derecha (+1) o izquierda (-1) según orden de turno.
+    """
+    idx = s.turn_order.index(pid)
+    new_idx = (idx + offset) % len(s.turn_order)
+    return s.turn_order[new_idx]
+
+
+def get_players_in_floor(s: GameState, floor: int) -> List[PlayerId]:
+    """Retorna lista de jugadores en un piso."""
+    from engine.board import floor_of
+    return [pid for pid, p in s.players.items() if floor_of(p.room) == floor]
+
+
+def invert_sanity(p: PlayerState) -> None:
+    """Invierte la cordura: cordura_nueva = cordura_actual × (-1)"""
+    p.sanity = -p.sanity
+```
+
+**Tests requeridos:**
+```python
+# tests/test_event_utils.py (NUEVO ARCHIVO)
+def test_swap_positions():
+    """Swap intercambia posiciones correctamente"""
+
+def test_remove_status():
+    """remove_status elimina estado específico"""
+
+def test_get_player_by_turn_offset():
+    """get_player_by_turn_offset obtiene jugador correcto"""
+```
+
+**Estimación:** 1 hora
+
+---
+
+### 0.3 Sistema de Objetos con Efectos 🟡
+
+**Prioridad:** MEDIA (necesario para objetos existentes)
+
+**Archivo:** `engine/objects.py` (NUEVO)
+
+**Implementación:**
+```python
+# engine/objects.py
+from dataclasses import dataclass
+from typing import Optional
+from engine.state import GameState, PlayerState
+from engine.types import PlayerId
+
+
+@dataclass
+class ObjectDefinition:
+    object_id: str
+    name: str
+    uses: Optional[int]  # None = infinito, 1 = consumible
+    is_blunt: bool = False  # Objeto contundente
+    is_treasure: bool = False
+
+
+# Catálogo de objetos existentes
+OBJECT_CATALOG = {
+    "COMPASS": ObjectDefinition("COMPASS", "Brújula", uses=1, is_blunt=False),
+    "VIAL": ObjectDefinition("VIAL", "Vial", uses=1, is_blunt=False),
+    "BLUNT": ObjectDefinition("BLUNT", "Objeto Contundente", uses=1, is_blunt=True),
+    "ROPE": ObjectDefinition("ROPE", "Cuerda", uses=1, is_blunt=False),
+}
+
+
+def use_object(s: GameState, pid: PlayerId, object_id: str, cfg, rng) -> bool:
+    """
+    Usa un objeto del inventario.
+    Retorna True si se usó exitosamente.
+    """
+    p = s.players[pid]
+    if object_id not in p.objects:
+        return False
+
+    obj_def = OBJECT_CATALOG.get(object_id)
+    if obj_def is None:
+        return False
+
+    # Aplicar efecto según tipo
+    if object_id == "COMPASS":
+        _use_compass(s, pid, cfg)
+    elif object_id == "VIAL":
+        _use_vial(s, pid, cfg)
+    elif object_id == "BLUNT":
+        _use_blunt(s, pid, cfg)
+    # ... más objetos ...
+
+    # Consumir si tiene usos limitados
+    if obj_def.uses is not None:
+        p.objects.remove(object_id)
+
+    return True
+
+
+def _use_compass(s: GameState, pid: PlayerId, cfg) -> None:
+    """Brújula: Mueve al pasillo del piso actual. Acción gratuita."""
+    from engine.board import floor_of, corridor_id
+    p = s.players[pid]
+    floor = floor_of(p.room)
+    p.room = corridor_id(floor)
+
+
+def _use_vial(s: GameState, pid: PlayerId, cfg) -> None:
+    """Vial: Recupera 2 de cordura. Acción gratuita."""
+    p = s.players[pid]
+    p.sanity = min(p.sanity + 2, p.sanity_max or p.sanity + 2)
+
+
+def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
+    """
+    Objeto Contundente: Aturde monstruo en la habitación por 2 rondas.
+    SUPUESTO: Se marca en flags del GameState.
+    """
+    p = s.players[pid]
+    for monster in s.monsters:
+        if monster.room == p.room:
+            s.flags[f"STUN_{monster.monster_id}_UNTIL_ROUND"] = s.round + 2
+            break
+```
+
+**Tests requeridos:**
+```python
+# tests/test_objects.py (NUEVO ARCHIVO)
+def test_use_vial():
+    """Vial recupera 2 cordura"""
+
+def test_use_compass():
+    """Brújula mueve al pasillo"""
+
+def test_use_blunt():
+    """Contundente aturde monstruo"""
+```
+
+**Estimación:** 2 horas
+
+---
+
+## FASE 1: HOOKS BÁSICOS
+
+> **✅ COMPLETADO** (Commit 334d9ec)
+
+**Estimación Total:** 45 minutos
+
+---
+
+### 1.1 Destrucción de Armería por Monstruo (B6) ✅
+
+**Archivo:** `engine/transition.py`
+
+**Implementación:**
+```python
+# En _resolve_card_minimal(), línea 156-162
+# B6: Hook destrucción de Armería cuando monstruo entra
+if "_ARMERY" in str(p.room):
+    # Marcar armería como destruida
+    s.flags[f"ARMORY_DESTROYED_{p.room}"] = True
+    # Vaciar almacenamiento de la armería
+    if p.room in s.armory_storage:
+        s.armory_storage[p.room] = []
+```
+
+**Tests agregados:**
+- `tests/test_armory.py:test_armory_destroyed_by_monster()` (líneas 232-255)
+- `tests/test_armory.py:test_armory_destroyed_prevents_drop_take()` (líneas 258-282)
+
+**Estimación:** 25 minutos ✅
+
+---
+
+### 1.2 Reset Automático de Peek al Final del Turno (B5) ✅
+
+**Archivo:** `engine/transition.py`
+
+**Implementación:**
+```python
+# En _start_new_round(), línea 417
+# B5: Reset de Peek al inicio de nueva ronda
+s.peek_used_this_turn = {}
+```
+
+**Tests agregados:**
+- `tests/test_peek_rooms.py:test_peek_resets_at_new_round()` (líneas 194-213)
+
+**Estimación:** 10 minutos ✅
+
+---
+
+## FASE 1.5: HABITACIONES ESPECIALES
+
+**Estimación Total:** 2 horas
+
+---
+
+### 1.5.1 Sistema de Habitaciones Especiales + Pool de Llaves (B3)
 
 **CONTEXTO (Canon Confirmado):**
 
@@ -138,11 +459,9 @@ Durante el setup del juego:
 
 ---
 
-**IMPLEMENTACIÓN REQUERIDA:**
-
 **Paso 1: Sistema de Sorteo de Habitaciones Especiales**
 
-**Archivo:** `sim/runner.py` (nuevo `engine/setup.py` en el futuro)
+**Archivo:** `sim/runner.py`
 
 **Ubicación:** Función `make_smoke_state()` (línea 18-77)
 
@@ -169,17 +488,6 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     state.flags["SPECIAL_ROOMS_SELECTED"] = selected_special_rooms
     state.flags["CAMARA_LETAL_PRESENT"] = "CAMARA_LETAL" in selected_special_rooms
 
-    # Determinar pool de llaves
-    # NOTA: La 7ª llave se obtiene mediante ritual en Cámara Letal DESPUÉS de revelarla
-    # Por ahora, siempre empezamos con 6 llaves distribuidas
-    keys_total = 6
-
-    # Distribución de llaves:
-    # - 5 llaves en mazos de habitaciones (F1_R1 a F1_R4, F2_R1)
-    # - 1 llave en MOTEMEY deck (siempre, independiente del sorteo)
-
-    # ... resto de distribución existente ...
-
     # SIEMPRE armar mazo de Motemey (independiente del sorteo)
     motemey_cards = [
         CardId("COMPASS"), CardId("COMPASS"), CardId("COMPASS"),
@@ -194,105 +502,15 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     state.motemey_deck = DeckState(cards=motemey_cards, top=0)
 ```
 
-**Paso 2: Implementar Habitación Cámara Letal**
+**Paso 2: Sistema de Asignación de Ubicaciones con D4**
 
-**Archivo:** `engine/actions.py`
+**Asignación de Ubicaciones (Canon Confirmado):**
+1. Se eligen 3 habitaciones especiales al azar
+2. Para cada habitación especial:
+   - Se lanza D4 secuencialmente para F1, F2, F3
+   - Resultado D4: `1→R1, 2→R2, 3→R3, 4→R4`
+   - Ejemplo: Si sale `[2, 3, 1]` → habitación va en `F1_R2`, `F2_R3`, `F3_R1`
 
-Agregar nueva acción:
-```python
-# Cámara Letal (B3)
-USE_CAMARA_LETAL_RITUAL = "USE_CAMARA_LETAL_RITUAL"
-```
-
-**Archivo:** `engine/legality.py`
-
-Agregar legalidad (después de línea 119):
-```python
-# B3 - Cámara Letal: Ritual para obtener 7ª llave
-camara_letal_pattern = "_CAMARA_LETAL"
-is_in_camara_letal = camara_letal_pattern in str(p.room)
-
-if is_in_camara_letal and s.flags.get("CAMARA_LETAL_PRESENT", False):
-    # Solo se puede hacer el ritual una vez por partida
-    if not s.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False):
-        # Verificar que hay exactamente 2 jugadores en la habitación
-        players_in_room = [
-            player for player in s.players
-            if player.room == p.room
-        ]
-
-        if len(players_in_room) == 2:
-            # NOTA: Requiere interacción entre jugadores para decidir:
-            # - Quién paga qué según el D6
-            # - Quién porta la llave resultante
-            # Por ahora, permitimos la acción si hay 2 jugadores
-            legal_actions.append(Action(
-                type=ActionType.USE_CAMARA_LETAL_RITUAL,
-                data={}
-            ))
-```
-
-**Archivo:** `engine/transition.py`
-
-Agregar transición (después de línea 563):
-```python
-elif action.type == ActionType.USE_CAMARA_LETAL_RITUAL:
-    # Ritual en Cámara Letal: agrega 7ª llave al pool
-    if not s.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False):
-        # Verificar que hay 2 jugadores en la habitación
-        players_in_room = [
-            pid for pid, player in enumerate(s.players)
-            if player.room == p.room
-        ]
-
-        if len(players_in_room) == 2:
-            # Lanzar D6 para determinar costo de cordura
-            d6 = rng.randint(1, 6)
-
-            # NOTA: En implementación real, esto requiere interacción
-            # entre jugadores. Por ahora, usamos una heurística:
-            # - action.data debe contener:
-            #   - "sanity_distribution": [cost_p1, cost_p2]
-            #   - "key_recipient": índice del jugador que recibe la llave
-
-            sanity_costs = action.data.get("sanity_distribution", [0, 0])
-            key_recipient = action.data.get("key_recipient", players_in_room[0])
-
-            # Validar distribución según D6
-            valid = False
-            if d6 in [1, 2]:
-                # Un jugador paga 7 (el otro 0)
-                valid = sorted(sanity_costs) == [0, 7]
-            elif d6 in [3, 4]:
-                # Reparto fijo: 3 y 4
-                valid = sorted(sanity_costs) == [3, 4]
-            elif d6 in [5, 6]:
-                # Reparto libre: suma total = 7
-                valid = sum(sanity_costs) == 7
-
-            if valid:
-                # Aplicar costos de cordura
-                for i, cost in enumerate(sanity_costs):
-                    player_idx = players_in_room[i]
-                    s.players[player_idx].sanity -= cost
-                    # Aplicar límite de -5
-                    if s.players[player_idx].sanity < -5:
-                        # Jugador puede elegir sacrificarse (según reglas generales)
-                        s.players[player_idx].sanity = -5
-
-                # Agregar llave al inventario del jugador designado
-                s.players[key_recipient].objects.append(CardId("KEY"))
-
-                # Marcar ritual como completado
-                s.flags["CAMARA_LETAL_RITUAL_COMPLETED"] = True
-                s.flags["CAMARA_LETAL_D6"] = d6  # Para tracking
-```
-
-**Paso 3: Sistema de Asignación de Ubicaciones con D4**
-
-**Archivo:** `sim/runner.py` (continuación de Paso 1)
-
-**Implementación:**
 ```python
 def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     # ... (código anterior de sorteo) ...
@@ -300,36 +518,26 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     selected_special_rooms = rng.sample(available_special_rooms, 3)
 
     # NUEVO: Asignar ubicaciones con D4
-    # Para cada habitación especial, tirar D4 por cada piso
     special_room_locations = {}
 
     for special_room in selected_special_rooms:
-        # Tirar D4 para cada piso (F1 y F2)
-        # PENDIENTE: Confirmar si van en ambos pisos o solo uno
-        # Por ahora, asumimos que van en ambos pisos
-
+        # Tirar D4 para cada piso (F1, F2, F3)
         f1_roll = rng.randint(1, 4)  # D4 para piso 1
         f2_roll = rng.randint(1, 4)  # D4 para piso 2
+        f3_roll = rng.randint(1, 4)  # D4 para piso 3
 
         # Mapeo: 1→R1, 2→R2, 3→R3, 4→R4
-        f1_room = f"F1_R{f1_roll}"
-        f2_room = f"F2_R{f2_roll}"
-
         special_room_locations[special_room] = {
-            "F1": f1_room,
-            "F2": f2_room
+            "F1": f"F1_R{f1_roll}",
+            "F2": f"F2_R{f2_roll}",
+            "F3": f"F3_R{f3_roll}"
         }
 
     # Guardar en state para referencia
     s.flags["SPECIAL_ROOM_LOCATIONS"] = special_room_locations
 
-    # AHORA: Crear habitaciones con nombres apropiados
-    # Ejemplo: si MOTEMEY sale en F1_R2, crear "F1_R2_MOTEMEY"
-
-    # ... resto del código de creación de habitaciones ...
-    # Cuando se crea una habitación, verificar si debe ser especial:
-
-    for floor in ["F1", "F2"]:
+    # Crear habitaciones con nombres apropiados
+    for floor in ["F1", "F2", "F3"]:
         for room_num in [1, 2, 3, 4]:
             base_room_id = f"{floor}_R{room_num}"
 
@@ -349,33 +557,87 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
             # ...
 ```
 
-**⚠️ DECISIÓN DE DISEÑO REQUERIDA:**
-¿Qué pasa si dos habitaciones especiales caen en la misma ubicación (ej: ambas en F1_R2)?
-- Opción A: Re-tirar D4 hasta que no haya colisión
-- Opción B: Permitir colisión y solo crear una (la primera)
-- Opción C: Cada habitación especial solo va en UN piso (no en ambos)
+**Paso 3: Implementar Habitación Cámara Letal**
 
-**Tests a Agregar:**
+**Archivo:** `engine/actions.py`
+
+Agregar nueva acción:
 ```python
-# tests/test_special_rooms_setup.py (NUEVO)
-def test_setup_selects_3_special_rooms():
-    """Setup sortea exactamente 3 habitaciones especiales"""
-
-def test_camara_letal_flag_set_when_selected():
-    """Flag CAMARA_LETAL_PRESENT se marca si sale en sorteo"""
-
-def test_motemey_deck_always_created():
-    """Mazo de Motemey se crea independiente del sorteo"""
-
-# tests/test_camara_letal.py (NUEVO)
-def test_camara_letal_ritual_adds_7th_key():
-    """Ritual en Cámara Letal agrega 7ª llave al pool"""
-
-def test_ritual_only_once():
-    """Ritual solo se puede hacer una vez por partida"""
+# Cámara Letal (B3)
+USE_CAMARA_LETAL_RITUAL = "USE_CAMARA_LETAL_RITUAL"
 ```
 
-**Estimación:** 60 minutos código + 30 minutos tests
+**Archivo:** `engine/legality.py`
+
+Agregar legalidad:
+```python
+# B3 - Cámara Letal: Ritual para obtener 7ª llave
+camara_letal_pattern = "_CAMARA_LETAL"
+is_in_camara_letal = camara_letal_pattern in str(p.room)
+
+if is_in_camara_letal and s.flags.get("CAMARA_LETAL_PRESENT", False):
+    if not s.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False):
+        # Verificar que hay exactamente 2 jugadores en la habitación
+        players_in_room = [
+            pid for pid in s.players
+            if s.players[pid].room == p.room
+        ]
+
+        if len(players_in_room) == 2:
+            legal_actions.append(Action(
+                type=ActionType.USE_CAMARA_LETAL_RITUAL,
+                data={}
+            ))
+```
+
+**Archivo:** `engine/transition.py`
+
+Agregar transición:
+```python
+elif action.type == ActionType.USE_CAMARA_LETAL_RITUAL:
+    # Ritual en Cámara Letal: agrega 7ª llave
+    if not s.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False):
+        players_in_room = [
+            pid for pid, player in s.players.items()
+            if player.room == p.room
+        ]
+
+        if len(players_in_room) == 2:
+            # Lanzar D6 para determinar costo de cordura
+            d6 = rng.randint(1, 6)
+
+            # action.data debe contener:
+            #   - "sanity_distribution": [cost_p1, cost_p2]
+            #   - "key_recipient": pid del jugador que recibe la llave
+
+            sanity_costs = action.data.get("sanity_distribution", [0, 0])
+            key_recipient = action.data.get("key_recipient", players_in_room[0])
+
+            # Validar distribución según D6
+            valid = False
+            if d6 in [1, 2]:
+                # Un jugador paga 7 (el otro 0)
+                valid = sorted(sanity_costs) == [0, 7]
+            elif d6 in [3, 4]:
+                # Reparto fijo: 3 y 4
+                valid = sorted(sanity_costs) == [3, 4]
+            elif d6 in [5, 6]:
+                # Reparto libre: suma total = 7
+                valid = sum(sanity_costs) == 7
+
+            if valid:
+                # Aplicar costos de cordura
+                for i, pid_in_room in enumerate(players_in_room):
+                    cost = sanity_costs[i]
+                    s.players[pid_in_room].sanity -= cost
+
+                # Agregar llave al jugador designado
+                s.players[key_recipient].keys += 1
+
+                # Marcar ritual como completado
+                s.flags["CAMARA_LETAL_RITUAL_COMPLETED"] = True
+                s.flags["CAMARA_LETAL_D6"] = d6  # Para tracking
+```
 
 **✅ DETALLES CONFIRMADOS:**
 
@@ -394,23 +656,725 @@ def test_ritual_only_once():
 - **NO consume acciones**
 - Revelar ≠ Activar efecto (activar efecto sí puede costar acciones)
 
-**Asignación de Ubicaciones:**
-1. Se eligen 3 habitaciones especiales al azar
-2. Para cada habitación especial:
-   - Se lanza D4 por piso (2 pisos = 2 tiradas por habitación)
-   - Resultado D4: `1→R1, 2→R2, 3→R3, 4→R4`
-   - Ejemplo: Si sale `[2, 3]` → habitación va en `F1_R2` y `F2_R3`
+**Tests a Agregar:**
+```python
+# tests/test_special_rooms_setup.py (NUEVO)
+def test_setup_selects_3_special_rooms():
+    """Setup sortea exactamente 3 habitaciones especiales"""
 
-**⚠️ PREGUNTA ADICIONAL:**
-- ¿Las habitaciones especiales aparecen en AMBOS pisos (F1 y F2) o solo en uno?
-- Si aparecen en ambos: ¿Se tiran 2 D4 por cada habitación especial (total 6 tiradas)?
-- Si solo en uno: ¿Cómo se decide en qué piso va cada habitación?
+def test_camara_letal_flag_set_when_selected():
+    """Flag CAMARA_LETAL_PRESENT se marca si sale en sorteo"""
+
+def test_motemey_deck_always_created():
+    """Mazo de Motemey se crea independiente del sorteo"""
+
+# tests/test_camara_letal.py (NUEVO)
+def test_camara_letal_ritual_adds_7th_key():
+    """Ritual en Cámara Letal agrega 7ª llave"""
+
+def test_ritual_only_once():
+    """Ritual solo se puede hacer una vez por partida"""
+
+def test_ritual_d6_distributions():
+    """Verifica distribuciones de cordura según D6"""
+```
+
+**Estimación:** 90 minutos
 
 ---
 
-## PARTE 2: ANÁLISIS EXTENDIDO DE RNG
+## FASE 2: EVENTOS EXISTENTES
 
-### 2.1 Tracking Completo de Elementos Aleatorios
+> **⚠️ Prerequisito:** FASE 0 debe estar completada
+
+**Estimación Total:** 3.5-4 horas
+
+**Orden de implementación:** Por dependencias técnicas (menor a mayor complejidad)
+
+---
+
+### 2.1 EVT-01: El Reflejo de Amarillo 🟢
+
+**Prioridad:** 1 (más simple, sin dependencias)
+
+**Regla física:** `-2 cordura`
+
+**Dependencias:** Ninguna
+
+**Implementación:**
+```python
+def _event_reflejo_amarillo(s: GameState, pid: PlayerId, cfg: Config) -> None:
+    """
+    El reflejo de Amarillo: -2 cordura.
+    Canon: Efecto directo sin tirada.
+    """
+    p = s.players[pid]
+    p.sanity -= 2
+```
+
+**Tests:**
+```python
+# tests/test_events.py (NUEVO)
+def test_event_reflejo_amarillo():
+    """Reflejo de Amarillo aplica -2 cordura"""
+    s = setup_state_with_event("REFLEJO_AMARILLO")
+    p1 = s.players[PlayerId("P1")]
+    initial_sanity = p1.sanity
+
+    trigger_event(s, "P1", "REFLEJO_AMARILLO")
+
+    assert p1.sanity == initial_sanity - 2
+```
+
+**Estimación:** 15 minutos
+
+---
+
+### 2.2 EVT-02: Espejo de Amarillo 🟢
+
+**Prioridad:** 2 (simple, sin dependencias)
+
+**Regla física:** `Invierte la cordura del jugador (× -1)`
+
+**Dependencias:** `invert_sanity()` de Fase 0.2
+
+**Implementación:**
+```python
+def _event_espejo_amarillo(s: GameState, pid: PlayerId, cfg: Config) -> None:
+    """
+    Espejo de Amarillo: invierte la cordura (cordura × -1).
+    Ejemplo: cordura 3 → -3, cordura -2 → 2
+    """
+    p = s.players[pid]
+    p.sanity = -p.sanity
+```
+
+**Tests:**
+```python
+def test_event_espejo_amarillo_positive():
+    """Espejo invierte cordura positiva a negativa"""
+    s = setup_state_with_sanity(3)
+    trigger_event(s, "P1", "ESPEJO_AMARILLO")
+    assert s.players[PlayerId("P1")].sanity == -3
+
+def test_event_espejo_amarillo_negative():
+    """Espejo invierte cordura negativa a positiva"""
+    s = setup_state_with_sanity(-2)
+    trigger_event(s, "P1", "ESPEJO_AMARILLO")
+    assert s.players[PlayerId("P1")].sanity == 2
+```
+
+**Estimación:** 15 minutos
+
+---
+
+### 2.3 EVT-03: Hay un Cadáver 🟡
+
+**Prioridad:** 3 (requiere Total + skip turn + obtener objeto)
+
+**Regla física:**
+- `Total 0-2`: Pierdes un turno
+- `Total 3-4`: -1 cordura
+- `Total 5+`: Obtienes 1 objeto contundente
+
+**Dependencias:**
+- Fase 0.1 Sistema de Total ✅
+- `skip_next_turn` flag (NUEVO)
+- Sistema de obtener objeto desde evento
+
+**Implementación:**
+```python
+def _event_hay_cadaver(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+    """
+    Hay un cadáver: según Total.
+    0-2: Pierdes turno siguiente
+    3-4: -1 cordura
+    5+: Obtienes objeto contundente
+    """
+    p = s.players[pid]
+
+    if total <= 2:
+        # Pierdes turno: flag para saltar próximo turno
+        s.flags[f"SKIP_TURN_{pid}"] = True
+    elif total <= 4:
+        p.sanity -= 1
+    else:  # total >= 5
+        # Obtener objeto contundente
+        p.objects.append("BLUNT")
+```
+
+**Código adicional en `transition.py`:**
+```python
+# En inicio de turno (_advance_turn_or_king)
+def _check_skip_turn(s: GameState, pid: PlayerId) -> bool:
+    """Verifica y consume flag de saltar turno."""
+    flag_key = f"SKIP_TURN_{pid}"
+    if s.flags.get(flag_key, False):
+        s.flags[flag_key] = False
+        return True
+    return False
+```
+
+**Tests:**
+```python
+def test_event_hay_cadaver_total_0_2():
+    """Total 0-2: pierde turno siguiente"""
+
+def test_event_hay_cadaver_total_3_4():
+    """Total 3-4: -1 cordura"""
+
+def test_event_hay_cadaver_total_5_plus():
+    """Total 5+: obtiene contundente"""
+```
+
+**Estimación:** 45 minutos
+
+---
+
+### 2.4 EVT-04: Un Diván de Amarillo 🟡
+
+**Prioridad:** 4 (requiere Total + remover estados + estado Sanidad)
+
+**Regla física:**
+- `Total 0-3`: Quita efectos activos
+- `Total 4-7`: Quita efectos y +1 cordura
+- `Total 8+`: Obtienes estado Sanidad
+
+**Dependencias:**
+- Fase 0.1 Sistema de Total ✅
+- `remove_all_statuses()` de Fase 0.2
+- Estado SANIDAD (Fase 3)
+
+**Implementación:**
+```python
+def _event_divan_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config) -> None:
+    """
+    Un diván de Amarillo: según Total.
+    0-3: Quita todos los estados
+    4-7: Quita estados + 1 cordura
+    8+: Obtiene estado Sanidad
+    """
+    from engine.effects.event_utils import add_status
+    p = s.players[pid]
+
+    if total <= 3:
+        p.statuses = []
+    elif total <= 7:
+        p.statuses = []
+        p.sanity = min(p.sanity + 1, p.sanity_max or p.sanity + 1)
+    else:  # total >= 8
+        add_status(p, "SANIDAD", duration=2)
+```
+
+**Tests:**
+```python
+def test_event_divan_total_0_3():
+    """Total 0-3: remueve todos los estados"""
+
+def test_event_divan_total_4_7():
+    """Total 4-7: remueve estados + 1 cordura"""
+
+def test_event_divan_total_8_plus():
+    """Total 8+: obtiene estado Sanidad"""
+```
+
+**Estimación:** 30 minutos
+
+---
+
+### 2.5 EVT-05: Cambia Caras 🟡
+
+**Prioridad:** 5 (requiere Total + swap posición + orden de turno)
+
+**Regla física:**
+- `Total 0-3`: Intercambias posición con el alma a tu derecha
+- `Total 4+`: Intercambias posición con el alma a tu izquierda
+
+**Dependencias:**
+- Fase 0.1 Sistema de Total ✅
+- `swap_positions()` de Fase 0.2
+- `get_player_by_turn_offset()` de Fase 0.2
+
+**Implementación:**
+```python
+def _event_cambia_caras(s: GameState, pid: PlayerId, total: int, cfg: Config) -> None:
+    """
+    Cambia caras: según Total.
+    0-3: Swap con jugador a la derecha (orden turno +1)
+    4+: Swap con jugador a la izquierda (orden turno -1)
+    """
+    from engine.effects.event_utils import swap_positions, get_player_by_turn_offset
+
+    if len(s.turn_order) < 2:
+        return  # No hay con quién intercambiar
+
+    offset = 1 if total <= 3 else -1
+    target_pid = get_player_by_turn_offset(s, pid, offset)
+    swap_positions(s, pid, target_pid)
+```
+
+**Tests:**
+```python
+def test_event_cambia_caras_total_low():
+    """Total 0-3: swap con derecha"""
+
+def test_event_cambia_caras_total_high():
+    """Total 4+: swap con izquierda"""
+
+def test_event_cambia_caras_single_player():
+    """Con 1 jugador, no hace nada"""
+```
+
+**Estimación:** 30 minutos
+
+---
+
+### 2.6 EVT-06: Una Comida Servida 🟡
+
+**Prioridad:** 6 (requiere Total + mover otro jugador)
+
+**Regla física:**
+- `Total 0`: -3 cordura
+- `Total 1-2`: Ganas estado Sangrado
+- `Total 3-6`: +2 cordura
+- `Total 7+`: Trae otra alma a tu habitación y ambos +2 cordura
+
+**Dependencias:**
+- Fase 0.1 Sistema de Total ✅
+- `move_player_to_room()` de Fase 0.2
+- Estado SANGRADO (Fase 3)
+
+**Implementación:**
+```python
+def _event_comida_servida(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+    """
+    Una comida servida: según Total.
+    0: -3 cordura
+    1-2: Estado Sangrado
+    3-6: +2 cordura
+    7+: Trae otro jugador a tu habitación, ambos +2 cordura
+    """
+    from engine.effects.event_utils import add_status
+    p = s.players[pid]
+
+    if total == 0:
+        p.sanity -= 3
+    elif total <= 2:
+        add_status(p, "SANGRADO", duration=2)
+    elif total <= 6:
+        p.sanity = min(p.sanity + 2, p.sanity_max or p.sanity + 2)
+    else:  # total >= 7
+        # Traer otro jugador (aleatorio)
+        other_pids = [pid2 for pid2 in s.players if pid2 != pid]
+        if other_pids:
+            target_pid = rng.choice(other_pids)
+            s.players[target_pid].room = p.room
+            # Ambos +2 cordura
+            p.sanity = min(p.sanity + 2, p.sanity_max or p.sanity + 2)
+            target = s.players[target_pid]
+            target.sanity = min(target.sanity + 2, target.sanity_max or target.sanity + 2)
+```
+
+**Tests:**
+```python
+def test_event_comida_total_0():
+    """Total 0: -3 cordura"""
+
+def test_event_comida_total_1_2():
+    """Total 1-2: estado Sangrado"""
+
+def test_event_comida_total_3_6():
+    """Total 3-6: +2 cordura"""
+
+def test_event_comida_total_7_plus():
+    """Total 7+: trae otro jugador, ambos +2"""
+```
+
+**Estimación:** 45 minutos
+
+---
+
+### 2.7 EVT-07: La Furia de Amarillo 🔴
+
+**Prioridad:** 7 (más complejo, requiere modificadores del Rey)
+
+**Regla física:**
+- `Total 0`: Dobla el efecto del Rey por 2 rondas
+- `Total 1-4`: El Rey se mueve al piso del alma activa
+- `Total 5+`: Aturde al Rey 1 ronda
+
+**Dependencias:**
+- Fase 0.1 Sistema de Total ✅
+- `king_damage_modifier` (NUEVO en GameState)
+- `king_vanish_ends` (ya existe)
+
+**SUPUESTO:** "Dobla permanentemente" se limita a 2 rondas para balance.
+
+**Implementación:**
+```python
+def _event_furia_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+    """
+    La furia de Amarillo: según Total.
+    0: Dobla efecto del Rey por 2 rondas (SUPUESTO: no permanente)
+    1-4: Rey se mueve al piso del jugador activo
+    5+: Aturde al Rey 1 ronda (no se manifiesta)
+    """
+    from engine.board import floor_of
+    p = s.players[pid]
+
+    if total == 0:
+        # SUPUESTO: Limitado a 2 rondas
+        s.flags["KING_DAMAGE_DOUBLE_UNTIL"] = s.round + 2
+    elif total <= 4:
+        s.king_floor = floor_of(p.room)
+    else:  # total >= 5
+        s.king_vanish_ends = s.round + 1
+```
+
+**Código adicional en `transition.py` (KING_ENDROUND):**
+```python
+# En cálculo de presencia del Rey
+def _presence_damage_for_round(round_num: int, s: GameState) -> int:
+    base = _base_presence_damage(round_num)
+    if s.flags.get("KING_DAMAGE_DOUBLE_UNTIL", 0) >= round_num:
+        return base * 2
+    return base
+```
+
+**Tests:**
+```python
+def test_event_furia_total_0():
+    """Total 0: dobla daño del Rey por 2 rondas"""
+
+def test_event_furia_total_1_4():
+    """Total 1-4: Rey se mueve al piso del jugador"""
+
+def test_event_furia_total_5_plus():
+    """Total 5+: Rey aturdido 1 ronda"""
+```
+
+**Estimación:** 1 hora
+
+---
+
+## FASE 3: ESTADOS CANÓNICOS
+
+**Estimación Total:** 3 horas
+
+---
+
+### 3.1 Estado: Sangrado 🟢
+
+**Duración:** 2 rondas
+
+**Efecto:** Al final de cada ronda, pierdes 1 cordura.
+
+**Implementación:**
+```python
+# En transition.py - KING_ENDROUND, después de tick de estados
+for pid, p in s.players.items():
+    if any(st.status_id == "SANGRADO" for st in p.statuses):
+        p.sanity -= 1
+```
+
+**Estimación:** 20 minutos
+
+---
+
+### 3.2 Estado: Maldito 🟡
+
+**Duración:** 2 rondas
+
+**Efecto:** Al final de ronda, todas las demás Pobres Almas en el piso pierden 1 cordura.
+
+**Implementación:**
+```python
+def _apply_maldito_effect(s: GameState) -> None:
+    from engine.board import floor_of
+    for pid, p in s.players.items():
+        if any(st.status_id == "MALDITO" for st in p.statuses):
+            player_floor = floor_of(p.room)
+            for other_pid, other in s.players.items():
+                if other_pid != pid and floor_of(other.room) == player_floor:
+                    other.sanity -= 1
+```
+
+**Estimación:** 30 minutos
+
+---
+
+### 3.3 Estado: Paranoia 🟡
+
+**Duración:** 2 rondas
+
+**Efecto:** No puede estar en misma habitación/pasillo que otra Pobre Alma.
+
+**Implementación:**
+```python
+# En legality.py - MOVE
+def _check_paranoia_move(s: GameState, pid: PlayerId, to_room: RoomId) -> bool:
+    """Retorna False si el movimiento viola Paranoia."""
+    p = s.players[pid]
+    if any(st.status_id == "PARANOIA" for st in p.statuses):
+        # No puede entrar a habitación con otros jugadores
+        for other_pid, other in s.players.items():
+            if other_pid != pid and other.room == to_room:
+                return False
+
+    # Otros no pueden entrar donde está alguien con Paranoia
+    for other_pid, other in s.players.items():
+        if other_pid != pid and other.room == to_room:
+            if any(st.status_id == "PARANOIA" for st in other.statuses):
+                return False
+
+    return True
+```
+
+**Estimación:** 45 minutos
+
+---
+
+### 3.4 Estado: Sanidad 🟢
+
+**Duración:** 2 rondas
+
+**Efecto:**
+- Recupera 1 cordura al final de cada turno
+- Puede destruirse para eliminar todos los demás estados
+
+**Implementación:**
+```python
+# En transition.py - fin de turno de jugador
+for pid, p in s.players.items():
+    if any(st.status_id == "SANIDAD" for st in p.statuses):
+        p.sanity = min(p.sanity + 1, p.sanity_max or p.sanity + 1)
+
+# Acción USE_SANIDAD (destruir para limpiar estados)
+def _use_sanidad_cleanse(s: GameState, pid: PlayerId) -> None:
+    p = s.players[pid]
+    # Remover SANIDAD
+    p.statuses = [st for st in p.statuses if st.status_id != "SANIDAD"]
+    # Remover todos los demás estados
+    p.statuses = []
+```
+
+**Estimación:** 30 minutos
+
+---
+
+### 3.5 Estado: Vanidad 🟢
+
+**Duración:** Permanente
+
+**Efecto:** Siempre que pierdas cordura, pierdes 1 adicional.
+
+**Implementación:**
+```python
+# En cualquier función que aplique pérdida de cordura
+def apply_sanity_loss(p: PlayerState, amount: int) -> None:
+    """Aplica pérdida de cordura considerando Vanidad."""
+    actual_loss = amount
+    if any(st.status_id == "VANIDAD" for st in p.statuses):
+        actual_loss += 1
+    p.sanity -= actual_loss
+```
+
+**Estimación:** 30 minutos
+
+---
+
+### 3.6 Estado: ILLUMINATED (Completar implementación) 🟡
+
+**Estado actual:** Tests existen pero NO otorga +1 acción.
+
+**Corrección necesaria:**
+
+```python
+# En transition.py - _start_new_round() o inicio de turno
+def _calculate_actions_for_turn(s: GameState, pid: PlayerId, cfg: Config) -> int:
+    """Calcula acciones disponibles para el turno."""
+    from engine.board import floor_of
+    p = s.players[pid]
+    base_actions = 2
+
+    # Reducción por -5
+    if p.at_minus5:
+        base_actions = 1
+
+    # Reducción por efecto d6=3 del Rey
+    if s.limited_action_floor_next == floor_of(p.room):
+        base_actions = 1
+
+    # BONUS por ILLUMINATED
+    if any(st.status_id == "ILLUMINATED" for st in p.statuses):
+        base_actions += 1
+
+    return base_actions
+```
+
+**Estimación:** 30 minutos
+
+---
+
+## FASE 4: OBJETOS Y TESOROS
+
+**Estimación Total:** 3 horas
+
+---
+
+### 4.1 Objetos Básicos
+
+**Ver Fase 0.3** para implementación de:
+- Vial (+2 cordura)
+- Brújula (mueve al pasillo)
+- Objeto Contundente (aturde monstruo)
+
+**Estimación:** Incluida en Fase 0 (2 horas)
+
+---
+
+### 4.2 Tesoro: Llavero 🟡
+
+**Efecto:** +1 capacidad llaves, +1 cordura máxima
+
+**Requiere:** Agregar `keys_capacity` a PlayerState
+
+**Implementación:**
+```python
+# engine/state.py - agregar a PlayerState
+keys_capacity: int = 1  # Default: 1 llave por jugador
+
+# engine/objects.py
+def _apply_llavero(s: GameState, pid: PlayerId) -> None:
+    """
+    Llavero (Tesoro): +1 capacidad de llaves, +1 cordura máxima.
+    No consumible (permanente mientras lo tengas).
+    """
+    p = s.players[pid]
+    p.keys_capacity += 1
+    p.sanity_max = (p.sanity_max or 5) + 1
+```
+
+**Estimación:** 30 minutos
+
+---
+
+### 4.3 Tesoro: Escaleras 🔴
+
+**Efecto:** 3 usos, coloca escalera temporal
+
+**Requiere:** Sistema de escaleras temporales
+
+**Implementación:**
+```python
+def _use_treasure_stairs(s: GameState, pid: PlayerId, cfg: Config) -> None:
+    """
+    Escaleras (Tesoro): 3 usos. Coloca escalera temporal en habitación actual.
+    Dura hasta fin de ronda.
+    """
+    p = s.players[pid]
+    # Registrar escalera temporal
+    s.flags[f"TEMP_STAIRS_{p.room}"] = s.round  # Válida solo esta ronda
+
+    # Decrementar usos
+    uses_key = f"TREASURE_STAIRS_USES_{pid}"
+    current_uses = s.flags.get(uses_key, 3)
+    s.flags[uses_key] = current_uses - 1
+    if s.flags[uses_key] <= 0:
+        p.objects.remove("TREASURE_STAIRS")
+```
+
+**Estimación:** 30 minutos
+
+---
+
+## FASE 5: HABITACIONES ESPECIALES PENDIENTES
+
+**Estimación Total:** 2 horas
+
+---
+
+### 5.1 Salón de Belleza 🟡
+
+**Prioridad:** MEDIA
+
+**Regla canon:**
+- Mientras estés ahí, pérdida de cordura = 0
+- 2 primeros usos: gratis (solo 1 acción)
+- 3er uso: Sella habitación + otorga estado Vanidad
+
+**Dependencias:**
+- Estado VANIDAD (Fase 3)
+- `room_sealed` flag
+
+**Implementación:**
+```python
+# En legality.py
+def is_room_sealed(s: GameState, room: RoomId) -> bool:
+    return s.flags.get(f"SEALED_{room}", False)
+
+# En transition.py - MOVE
+if is_room_sealed(s, to_room):
+    return s  # No se puede entrar/salir
+
+# Acción USE_SALON_BELLEZA
+def _use_salon_belleza(s: GameState, pid: PlayerId, cfg: Config) -> None:
+    from engine.effects.event_utils import add_status
+    p = s.players[pid]
+    uses_key = f"SALON_USES_{p.room}"
+    current_uses = s.flags.get(uses_key, 0) + 1
+    s.flags[uses_key] = current_uses
+
+    if current_uses >= 3:
+        # Sellar habitación
+        s.flags[f"SEALED_{p.room}"] = True
+        # Otorgar Vanidad
+        add_status(p, "VANIDAD", duration=999)  # Permanente
+```
+
+**Estimación:** 1 hora
+
+---
+
+### 5.2 Taberna 🟡
+
+**Prioridad:** MEDIA
+
+**Regla canon:**
+- Penaliza exploración múltiple
+- Si revelas primera carta de 2 habitaciones distintas en mismo turno: -1 cordura
+
+**Dependencias:**
+- Tracking de `first_reveal_this_turn` por jugador
+
+**Implementación:**
+```python
+# En transition.py - _reveal_one() o después
+def _track_first_reveal(s: GameState, pid: PlayerId, room: RoomId) -> None:
+    """Trackea habitaciones donde el jugador reveló primera carta este turno."""
+    key = f"FIRST_REVEALS_{pid}_ROUND_{s.round}"
+    if key not in s.flags:
+        s.flags[key] = []
+
+    if room not in s.flags[key]:
+        s.flags[key].append(room)
+
+        # Si es la 2ª habitación distinta y TABERNA está activa
+        if len(s.flags[key]) >= 2 and s.flags.get("TABERNA_ACTIVE", False):
+            s.players[pid].sanity -= 1
+```
+
+**Estimación:** 45 minutos
+
+---
+
+## FASE 6: ANÁLISIS Y TRACKING RNG
+
+**Estimación Total:** 2.5 horas
+
+---
+
+### 6.1 Tracking Completo de Elementos Aleatorios
 
 **Elementos a Trackear:**
 
@@ -419,12 +1383,17 @@ def test_ritual_only_once():
 3. **d4 Escaleras** (3 tiradas por fin de ronda) ⏳
 4. **Shuffles de Mazos** (efecto d6=1) ⏳
 5. **Orden de Setup Inicial** (distribución de cartas) ⏳
-6. **Elecciones de Policy** (si tienen componente aleatorio) ⏳
+6. **D6 de Eventos** (Sistema Total) ⏳
 
 **Archivo:** `engine/rng.py`
 
 **Implementación:**
 ```python
+from dataclasses import dataclass, field
+from typing import List, Tuple, Any
+import random
+
+
 @dataclass
 class RNG:
     seed: int
@@ -440,6 +1409,12 @@ class RNG:
     d4_history: List[int] = field(default_factory=list)
     shuffle_count: int = 0
     choice_history: List[Tuple[str, Any]] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self._r is None:
+            self._r = random.Random(self.seed)
+        if self.log is None:
+            self.log = []
 
     def randint(self, a: int, b: int) -> int:
         """Genera entero aleatorio con tracking"""
@@ -467,750 +1442,244 @@ class RNG:
         self.choice_history.append(("choice", result))
         self.log.append(("choice", result))
         return result
-```
 
-**Archivo:** `sim/metrics.py`
-
-**Agregar a `transition_record()`:**
-```python
-def transition_record(
-    state: GameState,
-    action: Dict[str, Any],
-    next_state: GameState,
-    cfg: Config,
-    step_idx: int,
-    rng: RNG,  # NUEVO parámetro
-) -> Dict[str, Any]:
-
-    # ... código existente ...
-
-    rec: Dict[str, Any] = {
-        # ... campos existentes ...
-
-        # NUEVO: RNG statistics
-        "rng_stats": {
-            "d6_count": len(rng.d6_history),
-            "d4_count": len(rng.d4_history),
-            "shuffle_count": rng.shuffle_count,
-            "d6_distribution": _compute_distribution(rng.d6_history),
-            "d4_distribution": _compute_distribution(rng.d4_history),
-        }
-    }
-    return rec
-
-def _compute_distribution(history: List[int]) -> Dict[int, int]:
-    """Calcula frecuencia de valores"""
-    from collections import Counter
-    return dict(Counter(history))
-```
-
-**Estimación:** 30 minutos código + 15 minutos tests
-
----
-
-### 2.2 Herramienta de Análisis RNG Completo
-
-**Archivo NUEVO:** `tools/analyze_rng_complete.py`
-
-```python
-"""
-Analiza TODOS los elementos aleatorios de una o más partidas:
-- d6 del Rey (distribución, chi-square test)
-- d4 Manifestación (distribución, uniformidad)
-- d4 Escaleras (distribución por piso)
-- Shuffles (frecuencia por ronda)
-- Choices de policies (si aplica)
-"""
-
-import json
-import sys
-from pathlib import Path
-from collections import Counter
-from scipy.stats import chisquare
-
-def analyze_rng_from_jsonl(jsonl_path: str):
-    """Analiza RNG completo de una partida"""
-
-    d6_history = []
-    d4_history = []
-    shuffle_counts = []
-
-    with open(jsonl_path, 'r') as f:
-        for line in f:
-            record = json.loads(line)
-
-            # d6 del Rey
-            if record['action_type'] == 'KING_ENDROUND':
-                d6 = record['action_data'].get('d6')
-                if d6:
-                    d6_history.append(d6)
-
-            # Extraer stats de RNG
-            rng_stats = record.get('rng_stats', {})
-            if rng_stats:
-                # Acumular datos
-                pass
-
-    # Análisis estadístico
-    print(f"\n=== ANÁLISIS RNG: {Path(jsonl_path).name} ===\n")
-
-    # d6 del Rey
-    print("d6 del Rey:")
-    d6_dist = Counter(d6_history)
-    expected = len(d6_history) / 6
-    print(f"  Total tiradas: {len(d6_history)}")
-    print(f"  Distribución: {dict(d6_dist)}")
-    print(f"  Esperado por valor: {expected:.1f}")
-
-    # Chi-square test
-    observed = [d6_dist.get(i, 0) for i in range(1, 7)]
-    expected_arr = [expected] * 6
-    chi2, p_value = chisquare(observed, expected_arr)
-    print(f"  χ² = {chi2:.4f}, p-value = {p_value:.4f}")
-
-    if p_value < 0.05:
-        print(f"  ⚠️ SESGO DETECTADO (p < 0.05)")
-    else:
-        print(f"  ✅ UNIFORME (p >= 0.05)")
-
-    # Similar para d4, shuffles, etc.
-    # ...
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Uso: python analyze_rng_complete.py <jsonl_path>")
-        sys.exit(1)
-
-    analyze_rng_from_jsonl(sys.argv[1])
+    def sample(self, population, k):
+        """Sample con tracking"""
+        result = self._r.sample(population, k)
+        self.log.append(("sample", (len(population), k, result)))
+        return result
 ```
 
 **Estimación:** 45 minutos
 
 ---
 
-## PARTE 3: SISTEMA DE GUARDADO VERSIONADO Y ORGANIZADO
+### 6.2 Herramienta de Análisis RNG
 
-### 3.1 Estructura de Carpetas Propuesta
+**Archivo NUEVO:** `tools/analyze_rng_complete.py`
 
-```
-runs/
-├── v{COMMIT_HASH}/                    # Por versión de código
-│   ├── 2026-01-19_14-30-00/          # Por sesión de simulación
-│   │   ├── metadata.json              # Info versión + timestamp
-│   │   ├── seed_001.jsonl             # Partida seed 1
-│   │   ├── seed_002.jsonl             # Partida seed 2
-│   │   ├── seed_003.jsonl
-│   │   ├── seed_004.jsonl
-│   │   └── seed_005.jsonl
-│   │
-│   ├── 2026-01-19_15-45-00/          # Otra sesión mismo día
-│   │   └── ...
-│   │
-│   └── analysis/                      # Análisis de esta versión
-│       ├── 2026-01-19_14-30-00_analysis.json
-│       └── 2026-01-19_15-45-00_analysis.json
-│
-├── v{OTRO_COMMIT}/
-│   └── ...
-│
-└── archive/                           # Backups antiguos
-    └── pre_2026-01-15/
-```
-
-**Ventajas:**
-- ✅ Aislamiento por versión de código (commit hash)
-- ✅ Aislamiento por fecha/hora de simulación
-- ✅ Análisis guardados junto a runs
-- ✅ Fácil comparación entre versiones
-- ✅ Fácil limpieza de datos antiguos
-
----
-
-### 3.2 Actualización de `tools/run_versioned.py`
-
-**Modificaciones:**
+**Funcionalidades:**
+- Distribución de d6 y d4
+- Chi-square test para verificar aleatoriedad
+- Análisis de patrones
+- Comparación con distribución teórica
 
 ```python
 """
-Genera runs versionados con estructura organizada.
+Análisis estadístico completo de RNG.
 
-Mejoras:
-- Guardar en runs/v{COMMIT}/{TIMESTAMP}/
-- Generar metadata.json con info de versión
-- Soportar múltiples seeds en una sesión
-- Crear carpeta analysis/ automáticamente
+Usa:
+    python tools/analyze_rng_complete.py runs/.../seed_001.jsonl
+
+Output:
+    - Distribución de d6 y d4
+    - Chi-square test
+    - Detección de patrones
+    - Comparación con teórico
+"""
+
+import json
+from pathlib import Path
+import sys
+from collections import Counter
+from scipy.stats import chisquare
+
+
+def analyze_rng(jsonl_path: str):
+    """Analiza el RNG completo de una partida"""
+
+    d6_rolls = []
+    d4_rolls = []
+    shuffle_count = 0
+
+    with open(jsonl_path, 'r') as f:
+        for line in f:
+            rec = json.loads(line)
+            if 'rng_stats' in rec:
+                stats = rec['rng_stats']
+                d6_rolls.extend(stats.get('d6_history', []))
+                d4_rolls.extend(stats.get('d4_history', []))
+                shuffle_count = max(shuffle_count, stats.get('shuffle_count', 0))
+
+    # Análisis d6
+    d6_dist = Counter(d6_rolls)
+    d6_expected = len(d6_rolls) / 6
+    d6_chi2, d6_p = chisquare([d6_dist.get(i, 0) for i in range(1, 7)],
+                              f_exp=[d6_expected] * 6)
+
+    # Análisis d4
+    d4_dist = Counter(d4_rolls)
+    d4_expected = len(d4_rolls) / 4
+    d4_chi2, d4_p = chisquare([d4_dist.get(i, 0) for i in range(1, 5)],
+                              f_exp=[d4_expected] * 4)
+
+    report = {
+        "file": jsonl_path,
+        "d6": {
+            "total_rolls": len(d6_rolls),
+            "distribution": dict(d6_dist),
+            "chi_square": d6_chi2,
+            "p_value": d6_p,
+            "is_random": d6_p > 0.05  # Si p > 0.05, no rechazamos H0 (es aleatorio)
+        },
+        "d4": {
+            "total_rolls": len(d4_rolls),
+            "distribution": dict(d4_dist),
+            "chi_square": d4_chi2,
+            "p_value": d4_p,
+            "is_random": d4_p > 0.05
+        },
+        "shuffles": shuffle_count
+    }
+
+    # Guardar reporte
+    output_path = Path(jsonl_path).with_suffix('.rng_analysis.json')
+    with open(output_path, 'w') as f:
+        json.dump(report, f, indent=2)
+
+    print(f"📊 Análisis RNG: {output_path}")
+    print(f"  d6: {len(d6_rolls)} rolls, p-value={d6_p:.3f}, aleatorio={report['d6']['is_random']}")
+    print(f"  d4: {len(d4_rolls)} rolls, p-value={d4_p:.3f}, aleatorio={report['d4']['is_random']}")
+    print(f"  Shuffles: {shuffle_count}")
+
+    return report
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Uso: python tools/analyze_rng_complete.py <jsonl_file>")
+        sys.exit(1)
+
+    analyze_rng(sys.argv[1])
+```
+
+**Estimación:** 1 hora
+
+---
+
+## FASE 7: SISTEMA DE GUARDADO VERSIONADO
+
+**Estimación Total:** 45 minutos
+
+**Archivo:** `tools/run_versioned.py`
+
+**Funcionalidad:**
+- Guardar runs en estructura versionada por commit
+- Generar metadata.json por sesión
+- Organizar por timestamp
+
+**Estructura de carpetas:**
+```
+runs/
+└── v{commit_hash}/
+    ├── analysis/
+    │   ├── {timestamp}_seed_001_analysis.json
+    │   ├── {timestamp}_seed_002_analysis.json
+    │   └── {timestamp}_session_aggregate.json
+    └── {timestamp}/
+        ├── metadata.json
+        ├── seed_001.jsonl
+        ├── seed_002.jsonl
+        └── seed_003.jsonl
+```
+
+**Implementación:**
+```python
+"""
+Runner con guardado versionado.
+
+Uso:
+    python tools/run_versioned.py --seeds 1 2 3 --max-steps 500
+
+Output:
+    runs/v{commit}/{timestamp}/seed_XXX.jsonl
+    runs/v{commit}/{timestamp}/metadata.json
 """
 
 import subprocess
 import json
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
+import sys
 
-def get_git_info():
-    """Obtiene commit hash, branch, y timestamp"""
-    commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode().strip()
-    branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).decode().strip()
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    return commit, branch, timestamp
 
-def create_run_directory():
-    """Crea estructura de carpetas para esta sesión"""
-    commit, branch, timestamp = get_git_info()
+def get_git_commit():
+    """Obtiene hash corto del commit actual"""
+    result = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'],
+                          capture_output=True, text=True)
+    return result.stdout.strip()
 
-    # runs/v{commit}/{timestamp}/
-    base_dir = Path(f"runs/v{commit}")
-    session_dir = base_dir / timestamp
-    analysis_dir = base_dir / "analysis"
 
-    session_dir.mkdir(parents=True, exist_ok=True)
+def run_versioned(seeds, max_steps=500):
+    """Ejecuta simulación con guardado versionado"""
+    commit = get_git_commit()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Crear estructura de carpetas
+    base_dir = Path("runs") / f"v{commit}" / timestamp
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    analysis_dir = Path("runs") / f"v{commit}" / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
 
-    # Crear metadata.json
+    # Metadata
     metadata = {
         "commit": commit,
-        "branch": branch,
         "timestamp": timestamp,
-        "iso_timestamp": datetime.now().isoformat(),
-        "seeds_generated": [],
+        "seeds": seeds,
+        "max_steps": max_steps,
+        "config": "default"
     }
 
-    metadata_path = session_dir / "metadata.json"
-    with open(metadata_path, 'w') as f:
+    with open(base_dir / "metadata.json", 'w') as f:
         json.dump(metadata, f, indent=2)
 
-    return session_dir, metadata_path
+    print(f"🎯 Sesión: v{commit}/{timestamp}")
+    print(f"🎲 Seeds: {seeds}")
+    print(f"📁 Output: {base_dir}\n")
 
-def run_versioned_session(seeds=[1, 2, 3, 4, 5], max_steps=400):
-    """
-    Ejecuta sesión de simulaciones con múltiples seeds.
-    """
-    from sim.runner import run_episode
+    # Ejecutar para cada seed
+    for seed in seeds:
+        output_file = base_dir / f"seed_{seed:03d}.jsonl"
+        print(f"🏃 Ejecutando seed {seed}...")
 
-    session_dir, metadata_path = create_run_directory()
+        # Aquí llamarías a tu simulador
+        # Por ahora, placeholder:
+        # run_simulation(seed, output_file, max_steps)
 
-    print(f"📁 Sesión: {session_dir}")
+    print(f"\n✅ Sesión completada: {base_dir}")
+    return base_dir
 
-    results = []
-    for i, seed in enumerate(seeds, 1):
-        seed_path = session_dir / f"seed_{i:03d}.jsonl"
-        print(f"🎲 Ejecutando seed {seed} → {seed_path.name}")
-
-        final_state = run_episode(
-            max_steps=max_steps,
-            seed=seed,
-            out_path=str(seed_path),
-        )
-
-        results.append({
-            "seed": seed,
-            "file": seed_path.name,
-            "outcome": final_state.outcome,
-            "rounds": final_state.round,
-        })
-
-    # Actualizar metadata con resultados
-    with open(metadata_path, 'r') as f:
-        metadata = json.load(f)
-
-    metadata["seeds_generated"] = results
-    metadata["total_seeds"] = len(results)
-
-    with open(metadata_path, 'w') as f:
-        json.dump(metadata, f, indent=2)
-
-    print(f"\n✅ Sesión completada: {len(results)} partidas")
-    print(f"📊 Metadata: {metadata_path}")
-
-    return session_dir
 
 if __name__ == "__main__":
     import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--seeds', nargs='+', type=int, required=True)
+    parser.add_argument('--max-steps', type=int, default=500)
 
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--seeds", type=int, nargs='+', default=[1, 2, 3, 4, 5])
-    ap.add_argument("--max-steps", type=int, default=400)
-    args = ap.parse_args()
-
-    run_versioned_session(seeds=args.seeds, max_steps=args.max_steps)
+    args = parser.parse_args()
+    run_versioned(args.seeds, args.max_steps)
 ```
 
 **Estimación:** 45 minutos
 
 ---
 
-## PARTE 4: HERRAMIENTA DE ANÁLISIS COMPREHENSIVO
+## FASE 8: OPTIMIZACIÓN PARA LLM
 
-### 4.1 Especificación de Métricas a Extraer
+**Estimación Total:** 1 hora
 
-**Métricas Solicitadas:**
+**Prerequisito:** Fase 6 (análisis comprehensivo)
 
-| Categoría | Métrica | Fuente |
-|-----------|---------|--------|
-| **General** | Número de jugadores | `len(state.players)` |
-| | Número de rondas | `max(record['round'])` |
-| | Outcome final | `record['outcome']` (última línea) |
-| | Duración (steps) | `max(record['step'])` |
-| **Llaves** | Llaves conseguidas (total) | `sum(keys_in_hand)` por jugador |
-| | Llaves máximas en mano | `max(summary_post['keys_in_hand'])` |
-| | Llaves destruidas | `summary_post['keys_destroyed']` (última línea) |
-| | Veces que se llegó a 4 llaves | Contar steps con `keys_in_hand >= 4` |
-| **Monstruos** | Cantidad revelados | Contar eventos `MONSTER` en `_resolve_card` |
-| | Cantidad stuneados | Contar aplicaciones de STUN |
-| | Monstruos activos al final | `len(state.monsters)` (última línea) |
-| **Objetos** | Objetos usados | Contar `USE_*` actions |
-| | Tesoros vendidos | Contar `USE_MOTEMEY_SELL` con `TREASURE_*` |
-| | Objetos en inventario final | `len(p.objects)` (última línea) |
-| **Habitaciones Especiales** | MOTEMEY (compras) | Contar `USE_MOTEMEY_BUY` |
-| | MOTEMEY (ventas) | Contar `USE_MOTEMEY_SELL` |
-| | PUERTAS (teleport) | Contar `USE_YELLOW_DOORS` |
-| | PEEK (mirar) | Contar `USE_PEEK_ROOMS` |
-| | ARMERÍA (drop/take) | Contar `USE_ARMORY_DROP/TAKE` |
-| **Cordura** | Veces en -5 | Contar `min_sanity <= -5` |
-| | Sacrificios realizados | Contar `SACRIFICE` actions |
-| | Cordura mínima alcanzada | `min(summary_post['min_sanity'])` |
-| | Cordura promedio | `mean(summary_post['mean_sanity'])` |
-| **Rey** | Pisos visitados | Contar cambios en `king_floor` |
-| | d6 efectos aplicados | Distribución de `action_data['d6']` |
-| | Expulsiones | Contar efecto d6=4 |
-| | Atracciones | Contar efecto d6=5 |
-| **Tensión** | Tensión máxima | `max(T_post)` |
-| | Tensión promedio | `mean(T_post)` |
-| | Tensión al ganar/perder | `T_post` (última línea) |
+**Archivo NUEVO:** `tools/export_for_llm.py`
 
----
+**Funcionalidad:**
+- Genera narrativa legible del juego
+- Identifica eventos clave automáticamente
+- Crea timeline comprimido
+- Insights automáticos
 
-### 4.2 Implementación: `tools/analyze_comprehensive.py`
-
-**Archivo NUEVO:** `tools/analyze_comprehensive.py`
-
-```python
-"""
-Análisis comprehensivo de una partida JSONL.
-
-Genera reporte detallado con TODAS las métricas solicitadas.
-
-Uso:
-    python tools/analyze_comprehensive.py runs/v{commit}/{timestamp}/seed_001.jsonl
-
-Output:
-    runs/v{commit}/analysis/{timestamp}_seed_001_analysis.json
-"""
-
-import json
-import sys
-from pathlib import Path
-from collections import Counter
-from typing import Dict, List, Any
-
-def analyze_game(jsonl_path: str) -> Dict[str, Any]:
-    """
-    Analiza partida completa y extrae todas las métricas.
-    """
-
-    records = []
-    with open(jsonl_path, 'r') as f:
-        for line in f:
-            if line.strip():
-                records.append(json.loads(line))
-
-    if not records:
-        return {"error": "No records found"}
-
-    first = records[0]
-    last = records[-1]
-
-    # ===== GENERAL =====
-    general = {
-        "num_players": len(first['summary_pre'].get('players', [])) if 'players' in first['summary_pre'] else 2,
-        "num_rounds": last['round'],
-        "num_steps": last['step'] + 1,
-        "outcome": last['outcome'],
-        "game_over": last['done'],
-    }
-
-    # ===== LLAVES =====
-    keys_in_hand_history = [r['summary_post']['keys_in_hand'] for r in records]
-    keys_destroyed_history = [r['summary_post']['keys_destroyed'] for r in records]
-
-    keys = {
-        "max_keys_in_hand": max(keys_in_hand_history),
-        "final_keys_in_hand": last['summary_post']['keys_in_hand'],
-        "keys_destroyed": last['summary_post']['keys_destroyed'],
-        "times_reached_4_keys": sum(1 for k in keys_in_hand_history if k >= 4),
-        "keys_in_hand_history": keys_in_hand_history,  # Para gráficos
-    }
-
-    # ===== MONSTRUOS =====
-    monsters_history = [r['summary_post']['monsters'] for r in records]
-
-    # Contar eventos de monstruos (aproximado: cuando monsters incrementa)
-    monster_reveals = 0
-    for i in range(1, len(records)):
-        if monsters_history[i] > monsters_history[i-1]:
-            monster_reveals += 1
-
-    # Contar STUNs (buscar en features o logs)
-    stun_count = 0
-    for r in records:
-        # Aproximado: buscar 'STUN' en action_data o features
-        if 'STUN' in str(r.get('action_data', {})):
-            stun_count += 1
-
-    monsters = {
-        "total_revealed": monster_reveals,
-        "final_monsters_active": last['summary_post']['monsters'],
-        "max_monsters": max(monsters_history),
-        "stuns_applied": stun_count,  # Aproximado
-    }
-
-    # ===== ACCIONES =====
-    action_counts = Counter(r['action_type'] for r in records)
-
-    actions = {
-        "total_actions": len(records),
-        "action_distribution": dict(action_counts),
-        "moves": action_counts.get('MOVE', 0),
-        "searches": action_counts.get('SEARCH', 0),
-        "meditates": action_counts.get('MEDITATE', 0),
-    }
-
-    # ===== HABITACIONES ESPECIALES =====
-    special_rooms = {
-        "motemey_buys": action_counts.get('USE_MOTEMEY_BUY', 0),
-        "motemey_sells": action_counts.get('USE_MOTEMEY_SELL', 0),
-        "yellow_doors_teleports": action_counts.get('USE_YELLOW_DOORS', 0),
-        "peek_uses": action_counts.get('USE_PEEK_ROOMS', 0),
-        "armory_drops": action_counts.get('USE_ARMORY_DROP', 0),
-        "armory_takes": action_counts.get('USE_ARMORY_TAKE', 0),
-    }
-
-    # ===== OBJETOS Y TESOROS =====
-    # Contar tesoros vendidos (revisar action_data de MOTEMEY_SELL)
-    treasure_sells = 0
-    object_sells = 0
-
-    for r in records:
-        if r['action_type'] == 'USE_MOTEMEY_SELL':
-            item = r['action_data'].get('item_name', '')
-            if 'TREASURE' in item:
-                treasure_sells += 1
-            else:
-                object_sells += 1
-
-    objects = {
-        "treasures_sold": treasure_sells,
-        "objects_sold": object_sells,
-        "total_sells": treasure_sells + object_sells,
-    }
-
-    # ===== CORDURA =====
-    sanity_history = [r['summary_post']['min_sanity'] for r in records]
-    sanity_mean_history = [r['summary_post']['mean_sanity'] for r in records]
-
-    times_at_minus5 = sum(1 for s in sanity_history if s <= -5)
-    sacrifices = action_counts.get('SACRIFICE', 0)
-
-    sanity = {
-        "min_sanity_reached": min(sanity_history),
-        "final_min_sanity": last['summary_post']['min_sanity'],
-        "mean_sanity_avg": sum(sanity_mean_history) / len(sanity_mean_history),
-        "times_at_minus5": times_at_minus5,
-        "sacrifices_performed": sacrifices,
-    }
-
-    # ===== REY =====
-    king_floors = [r['summary_post']['king_floor'] for r in records]
-    king_floor_changes = sum(1 for i in range(1, len(king_floors)) if king_floors[i] != king_floors[i-1])
-
-    # d6 del Rey
-    d6_values = []
-    for r in records:
-        if r['action_type'] == 'KING_ENDROUND':
-            d6 = r['action_data'].get('d6')
-            if d6:
-                d6_values.append(d6)
-
-    d6_dist = Counter(d6_values)
-
-    king = {
-        "floors_visited": len(set(king_floors)),
-        "floor_changes": king_floor_changes,
-        "d6_total_rolls": len(d6_values),
-        "d6_distribution": dict(d6_dist),
-        "d6_effect_1_shuffles": d6_dist.get(1, 0),
-        "d6_effect_2_sanity_loss": d6_dist.get(2, 0),
-        "d6_effect_3_limited_actions": d6_dist.get(3, 0),
-        "d6_effect_4_expulsions": d6_dist.get(4, 0),
-        "d6_effect_5_attractions": d6_dist.get(5, 0),
-        "d6_effect_6_discard_objects": d6_dist.get(6, 0),
-    }
-
-    # ===== TENSIÓN =====
-    tension_history = [r['T_post'] for r in records]
-
-    tension = {
-        "max_tension": max(tension_history),
-        "avg_tension": sum(tension_history) / len(tension_history),
-        "final_tension": last['T_post'],
-    }
-
-    # ===== COMPILAR REPORTE =====
-    analysis = {
-        "file": Path(jsonl_path).name,
-        "general": general,
-        "keys": keys,
-        "monsters": monsters,
-        "actions": actions,
-        "special_rooms": special_rooms,
-        "objects": objects,
-        "sanity": sanity,
-        "king": king,
-        "tension": tension,
-    }
-
-    return analysis
-
-
-def save_analysis(analysis: Dict[str, Any], jsonl_path: str):
-    """
-    Guarda análisis en runs/v{commit}/analysis/{timestamp}_seed_XXX_analysis.json
-    """
-    jsonl_path = Path(jsonl_path)
-
-    # Detectar estructura: runs/v{commit}/{timestamp}/seed_XXX.jsonl
-    # Guardar en: runs/v{commit}/analysis/{timestamp}_seed_XXX_analysis.json
-
-    parts = jsonl_path.parts
-    if 'runs' in parts:
-        runs_idx = parts.index('runs')
-        if len(parts) > runs_idx + 2:
-            version_dir = Path(*parts[:runs_idx+2])  # runs/v{commit}
-            timestamp_dir = parts[runs_idx+2]
-            seed_name = jsonl_path.stem  # seed_001
-
-            analysis_dir = version_dir / "analysis"
-            analysis_dir.mkdir(parents=True, exist_ok=True)
-
-            analysis_filename = f"{timestamp_dir}_{seed_name}_analysis.json"
-            analysis_path = analysis_dir / analysis_filename
-        else:
-            # Fallback: guardar al lado del JSONL
-            analysis_path = jsonl_path.with_suffix('.analysis.json')
-    else:
-        # Fallback
-        analysis_path = jsonl_path.with_suffix('.analysis.json')
-
-    with open(analysis_path, 'w') as f:
-        json.dump(analysis, f, indent=2, ensure_ascii=False)
-
-    print(f"💾 Análisis guardado: {analysis_path}")
-    return analysis_path
-
-
-def print_summary(analysis: Dict[str, Any]):
-    """Imprime resumen legible del análisis"""
-
-    print("\n" + "="*60)
-    print(f"📊 ANÁLISIS COMPREHENSIVO: {analysis['file']}")
-    print("="*60)
-
-    g = analysis['general']
-    print(f"\n🎮 GENERAL:")
-    print(f"  Jugadores: {g['num_players']}")
-    print(f"  Rondas: {g['num_rounds']}")
-    print(f"  Steps: {g['num_steps']}")
-    print(f"  Outcome: {g['outcome']}")
-
-    k = analysis['keys']
-    print(f"\n🔑 LLAVES:")
-    print(f"  Máximo en mano: {k['max_keys_in_hand']}")
-    print(f"  Final en mano: {k['final_keys_in_hand']}")
-    print(f"  Destruidas: {k['keys_destroyed']}")
-    print(f"  Veces con 4+ llaves: {k['times_reached_4_keys']}")
-
-    m = analysis['monsters']
-    print(f"\n👹 MONSTRUOS:")
-    print(f"  Revelados: {m['total_revealed']}")
-    print(f"  Activos al final: {m['final_monsters_active']}")
-    print(f"  STUNs aplicados: {m['stuns_applied']}")
-
-    a = analysis['actions']
-    print(f"\n⚙️ ACCIONES:")
-    print(f"  Total: {a['total_actions']}")
-    print(f"  MOVE: {a['moves']}")
-    print(f"  SEARCH: {a['searches']}")
-    print(f"  MEDITATE: {a['meditates']}")
-
-    sr = analysis['special_rooms']
-    print(f"\n🏠 HABITACIONES ESPECIALES:")
-    print(f"  MOTEMEY (compras): {sr['motemey_buys']}")
-    print(f"  MOTEMEY (ventas): {sr['motemey_sells']}")
-    print(f"  PUERTAS (teleport): {sr['yellow_doors_teleports']}")
-    print(f"  PEEK: {sr['peek_uses']}")
-    print(f"  ARMERÍA (drop/take): {sr['armory_drops']}/{sr['armory_takes']}")
-
-    s = analysis['sanity']
-    print(f"\n❤️ CORDURA:")
-    print(f"  Mínima alcanzada: {s['min_sanity_reached']}")
-    print(f"  Final: {s['final_min_sanity']}")
-    print(f"  Veces en -5: {s['times_at_minus5']}")
-    print(f"  Sacrificios: {s['sacrifices_performed']}")
-
-    ki = analysis['king']
-    print(f"\n👑 REY:")
-    print(f"  Pisos visitados: {ki['floors_visited']}")
-    print(f"  Cambios de piso: {ki['floor_changes']}")
-    print(f"  d6 tiradas: {ki['d6_total_rolls']}")
-    print(f"  d6 distribución: {ki['d6_distribution']}")
-
-    t = analysis['tension']
-    print(f"\n📈 TENSIÓN:")
-    print(f"  Máxima: {t['max_tension']:.3f}")
-    print(f"  Promedio: {t['avg_tension']:.3f}")
-    print(f"  Final: {t['final_tension']:.3f}")
-
-    print("\n" + "="*60 + "\n")
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Uso: python tools/analyze_comprehensive.py <jsonl_path>")
-        sys.exit(1)
-
-    jsonl_path = sys.argv[1]
-
-    print(f"🔍 Analizando: {jsonl_path}")
-    analysis = analyze_game(jsonl_path)
-
-    # Guardar análisis
-    analysis_path = save_analysis(analysis, jsonl_path)
-
-    # Imprimir resumen
-    print_summary(analysis)
-
-    print(f"✅ Análisis completo guardado en: {analysis_path}")
-```
-
-**Estimación:** 90 minutos
-
----
-
-### 4.3 Batch Analysis: Analizar Sesión Completa
-
-**Archivo NUEVO:** `tools/analyze_session_batch.py`
-
-```python
-"""
-Analiza TODOS los seeds de una sesión y genera reporte agregado.
-
-Uso:
-    python tools/analyze_session_batch.py runs/v{commit}/{timestamp}/
-
-Output:
-    runs/v{commit}/analysis/{timestamp}_session_aggregate.json
-"""
-
-import json
-from pathlib import Path
-import sys
-
-def analyze_session(session_dir: str):
-    """
-    Analiza todos los seed_*.jsonl de una sesión.
-    Genera análisis individual + reporte agregado.
-    """
-    from tools.analyze_comprehensive import analyze_game, save_analysis
-
-    session_path = Path(session_dir)
-    jsonl_files = sorted(session_path.glob("seed_*.jsonl"))
-
-    if not jsonl_files:
-        print(f"❌ No se encontraron archivos seed_*.jsonl en {session_dir}")
-        return
-
-    print(f"📁 Sesión: {session_path}")
-    print(f"🎲 Seeds encontrados: {len(jsonl_files)}\n")
-
-    all_analyses = []
-
-    for jsonl_file in jsonl_files:
-        print(f"🔍 Analizando: {jsonl_file.name}")
-        analysis = analyze_game(str(jsonl_file))
-        save_analysis(analysis, str(jsonl_file))
-        all_analyses.append(analysis)
-
-    # Crear reporte agregado
-    aggregate = {
-        "session": session_path.name,
-        "total_games": len(all_analyses),
-        "outcomes": {
-            "WIN": sum(1 for a in all_analyses if a['general']['outcome'] == 'WIN'),
-            "LOSE": sum(1 for a in all_analyses if a['general']['outcome'] == 'LOSE'),
-            "TIMEOUT": sum(1 for a in all_analyses if a['general']['outcome'] == 'TIMEOUT'),
-        },
-        "avg_rounds": sum(a['general']['num_rounds'] for a in all_analyses) / len(all_analyses),
-        "avg_steps": sum(a['general']['num_steps'] for a in all_analyses) / len(all_analyses),
-        "avg_keys_obtained": sum(a['keys']['max_keys_in_hand'] for a in all_analyses) / len(all_analyses),
-        "avg_monsters_revealed": sum(a['monsters']['total_revealed'] for a in all_analyses) / len(all_analyses),
-        "total_sacrifices": sum(a['sanity']['sacrifices_performed'] for a in all_analyses),
-
-        # d6 agregado de todos los juegos
-        "d6_aggregate": _aggregate_d6(all_analyses),
-
-        "individual_analyses": [a['file'] for a in all_analyses],
-    }
-
-    # Guardar reporte agregado
-    version_dir = session_path.parent
-    analysis_dir = version_dir / "analysis"
-    aggregate_path = analysis_dir / f"{session_path.name}_session_aggregate.json"
-
-    with open(aggregate_path, 'w') as f:
-        json.dump(aggregate, f, indent=2, ensure_ascii=False)
-
-    print(f"\n💾 Reporte agregado: {aggregate_path}")
-    print(f"\n📊 RESUMEN SESIÓN:")
-    print(f"  Total partidas: {aggregate['total_games']}")
-    print(f"  WIN: {aggregate['outcomes']['WIN']}")
-    print(f"  LOSE: {aggregate['outcomes']['LOSE']}")
-    print(f"  TIMEOUT: {aggregate['outcomes']['TIMEOUT']}")
-    print(f"  Promedio rondas: {aggregate['avg_rounds']:.1f}")
-    print(f"  Promedio llaves: {aggregate['avg_keys_obtained']:.1f}")
-
-    return aggregate_path
-
-def _aggregate_d6(analyses):
-    """Agrega d6 de todos los juegos"""
-    from collections import Counter
-    total_d6 = Counter()
-
-    for a in analyses:
-        d6_dist = a['king']['d6_distribution']
-        for value, count in d6_dist.items():
-            total_d6[int(value)] += count
-
-    return dict(total_d6)
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Uso: python tools/analyze_session_batch.py <session_dir>")
-        sys.exit(1)
-
-    analyze_session(sys.argv[1])
-```
-
-**Estimación:** 30 minutos
-
----
-
-## PARTE 5: OPTIMIZACIÓN PARA ANÁLISIS LLM
-
-### 5.1 Formato Optimizado para LLM
-
-**Objetivo:** Crear archivos JSON que un LLM pueda leer fácilmente para generar insights.
-
-**Estructura Propuesta:**
-
+**Formato de salida:**
 ```json
 {
   "meta": {
@@ -1240,25 +1709,6 @@ if __name__ == "__main__":
     "closing": "Victoria después de 37 rondas con tensión final de 0.988"
   },
 
-  "statistics": {
-    "keys": { /* ... */ },
-    "monsters": { /* ... */ },
-    "actions": { /* ... */ },
-    "sanity": { /* ... */ },
-    "king": { /* ... */ }
-  },
-
-  "timeline": [
-    {
-      "round": 1,
-      "events": ["P1 moved to F1_R1", "P1 found KEY"],
-      "sanity_min": 3,
-      "keys_total": 1,
-      "tension": 0.32
-    },
-    /* ... más rondas ... */
-  ],
-
   "insights": {
     "critical_moments": [
       "Ronda 20: Cordura crítica (-5), riesgo alto",
@@ -1276,410 +1726,122 @@ if __name__ == "__main__":
 }
 ```
 
-**Archivo NUEVO:** `tools/export_for_llm.py`
+**Implementación:** (Ver CONSOLIDATED líneas 1281-1466 para código completo)
 
-```python
-"""
-Exporta análisis en formato optimizado para LLM.
-
-- Narrativa legible
-- Eventos clave
-- Insights automáticos
-- Timeline comprimido
-
-Output: runs/v{commit}/analysis/{timestamp}_seed_XXX_llm_ready.json
-"""
-
-import json
-from pathlib import Path
-import sys
-
-def generate_narrative(analysis):
-    """Genera narrativa legible del juego"""
-    g = analysis['general']
-    k = analysis['keys']
-
-    opening = f"Partida de {g['num_players']} jugadores que duró {g['num_rounds']} rondas "
-    opening += f"y terminó en {g['outcome']}."
-
-    key_events = []
-
-    # Llaves
-    if k['max_keys_in_hand'] >= 4:
-        key_events.append(f"Se alcanzaron {k['max_keys_in_hand']} llaves en mano")
-
-    if k['keys_destroyed'] > 0:
-        key_events.append(f"{k['keys_destroyed']} llaves fueron destruidas")
-
-    # Cordura
-    s = analysis['sanity']
-    if s['times_at_minus5'] > 0:
-        key_events.append(f"Llegó a cordura -5 en {s['times_at_minus5']} ocasiones")
-
-    if s['sacrifices_performed'] > 0:
-        key_events.append(f"{s['sacrifices_performed']} sacrificios realizados")
-
-    # Monstruos
-    m = analysis['monsters']
-    if m['total_revealed'] > 5:
-        key_events.append(f"{m['total_revealed']} monstruos revelados")
-
-    closing = f"{g['outcome']} después de {g['num_rounds']} rondas con tensión final de {analysis['tension']['final_tension']:.3f}"
-
-    return {
-        "opening": opening,
-        "key_events": key_events,
-        "closing": closing
-    }
-
-def generate_insights(analysis):
-    """Genera insights automáticos"""
-    insights = {
-        "critical_moments": [],
-        "player_performance": {},
-        "king_pressure": {},
-    }
-
-    # Detectar momentos críticos
-    s = analysis['sanity']
-    if s['min_sanity_reached'] <= -4:
-        insights['critical_moments'].append(
-            f"Cordura crítica alcanzada: {s['min_sanity_reached']}"
-        )
-
-    k = analysis['keys']
-    if k['times_reached_4_keys'] > 0:
-        insights['critical_moments'].append(
-            f"4 llaves alcanzadas (condición de victoria) en {k['times_reached_4_keys']} ocasiones"
-        )
-
-    # Performance de jugadores
-    efficiency = k['max_keys_in_hand'] / max(analysis['general']['num_rounds'], 1)
-    insights['player_performance']['key_efficiency'] = f"{efficiency:.2f} llaves/ronda"
-
-    risk = "Alta" if s['sacrifices_performed'] > 0 else "Moderada" if s['times_at_minus5'] > 0 else "Baja"
-    insights['player_performance']['risk_taking'] = risk
-
-    # Presión del Rey
-    ki = analysis['king']
-    d6_dist = ki['d6_distribution']
-    if d6_dist:
-        most_common = max(d6_dist, key=d6_dist.get)
-        percentage = (d6_dist[most_common] / sum(d6_dist.values())) * 100
-        insights['king_pressure']['d6_most_common'] = f"Efecto {most_common} ({percentage:.0f}%)"
-
-    insights['king_pressure']['floor_changes'] = ki['floor_changes']
-
-    return insights
-
-def export_for_llm(analysis_path: str):
-    """
-    Lee análisis comprehensivo y exporta versión optimizada para LLM.
-    """
-    with open(analysis_path, 'r') as f:
-        analysis = json.load(f)
-
-    # Generar versión LLM-optimizada
-    llm_data = {
-        "meta": {
-            "game_id": Path(analysis_path).stem,
-            "source_file": analysis['file'],
-        },
-        "summary": {
-            "players": analysis['general']['num_players'],
-            "rounds": analysis['general']['num_rounds'],
-            "steps": analysis['general']['num_steps'],
-            "outcome": analysis['general']['outcome'],
-        },
-        "narrative": generate_narrative(analysis),
-        "statistics": analysis,  # Todo el análisis comprehensivo
-        "insights": generate_insights(analysis),
-    }
-
-    # Guardar
-    llm_path = Path(analysis_path).with_name(Path(analysis_path).stem + "_llm_ready.json")
-
-    with open(llm_path, 'w') as f:
-        json.dump(llm_data, f, indent=2, ensure_ascii=False)
-
-    print(f"🤖 Exportado para LLM: {llm_path}")
-    return llm_path
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Uso: python tools/export_for_llm.py <analysis_path>")
-        sys.exit(1)
-
-    export_for_llm(sys.argv[1])
-```
-
-**Estimación:** 45 minutos
+**Estimación:** 1 hora
 
 ---
 
 ## RESUMEN DE ESTIMACIONES
 
-| Tarea | Tiempo Estimado |
-|-------|-----------------|
-| **PARTE 1: Hooks Pendientes** | |
-| 1.1 Destrucción Armería | 25 min |
-| 1.2 Reset Peek | 10 min |
-| 1.3 Habitaciones Especiales + Cámara Letal | 90 min |
-| **PARTE 2: Análisis RNG** | |
-| 2.1 Tracking Completo | 45 min |
-| 2.2 Herramienta Análisis | 45 min |
-| **PARTE 3: Guardado Versionado** | |
-| 3.1-3.2 Sistema Versionado | 45 min |
-| **PARTE 4: Análisis Comprehensivo** | |
-| 4.2 Analyze Comprehensive | 90 min |
-| 4.3 Batch Analysis | 30 min |
-| **PARTE 5: Optimización LLM** | |
-| 5.1 Export for LLM | 45 min |
-| **TESTING Y VALIDACIÓN** | 60 min |
-| **TOTAL** | **~485 min (~8 horas)** |
+| Fase | Descripción | Tiempo Estimado | Estado |
+|------|-------------|-----------------|--------|
+| **FASE 0** | Sistema Base Requerido (CRÍTICO) | 5-6 horas | ❌ Pendiente |
+| 0.1 | Sistema Resolución Eventos | 2-3 horas | ❌ |
+| 0.2 | Funciones Utilidad | 1 hora | ❌ |
+| 0.3 | Sistema Objetos | 2 horas | ❌ |
+| **FASE 1** | Hooks Básicos | 45 min | ✅ **COMPLETADO** |
+| 1.1 | Destrucción Armería | 25 min | ✅ |
+| 1.2 | Reset Peek | 10 min | ✅ |
+| **FASE 1.5** | Habitaciones Especiales | 2 horas | ❌ Pendiente |
+| 1.5.1 | Sorteo + Cámara Letal | 90 min | ❌ |
+| **FASE 2** | Eventos Existentes (7 eventos) | 3.5-4 horas | ❌ Pendiente |
+| 2.1 | Reflejo de Amarillo | 15 min | ❌ |
+| 2.2 | Espejo de Amarillo | 15 min | ❌ |
+| 2.3 | Hay un Cadáver | 45 min | ❌ |
+| 2.4 | Un Diván de Amarillo | 30 min | ❌ |
+| 2.5 | Cambia Caras | 30 min | ❌ |
+| 2.6 | Una Comida Servida | 45 min | ❌ |
+| 2.7 | La Furia de Amarillo | 1 hora | ❌ |
+| **FASE 3** | Estados Canónicos | 3 horas | ❌ Pendiente |
+| 3.1 | Sangrado | 20 min | ❌ |
+| 3.2 | Maldito | 30 min | ❌ |
+| 3.3 | Paranoia | 45 min | ❌ |
+| 3.4 | Sanidad | 30 min | ❌ |
+| 3.5 | Vanidad | 30 min | ❌ |
+| 3.6 | ILLUMINATED (completar) | 30 min | ❌ |
+| **FASE 4** | Objetos y Tesoros | 1 hora | ❌ Pendiente |
+| 4.2 | Llavero | 30 min | ❌ |
+| 4.3 | Escaleras (tesoro) | 30 min | ❌ |
+| **FASE 5** | Habitaciones Pendientes | 2 horas | ❌ Pendiente |
+| 5.1 | Salón de Belleza | 1 hora | ❌ |
+| 5.2 | Taberna | 45 min | ❌ |
+| **FASE 6** | Análisis y Tracking RNG | 2.5 horas | ❌ Pendiente |
+| 6.1 | Tracking RNG Completo | 45 min | ❌ |
+| 6.2 | Herramienta Análisis RNG | 1 hora | ❌ |
+| **FASE 7** | Guardado Versionado | 45 min | ❌ Pendiente |
+| **FASE 8** | Optimización LLM | 1 hora | ❌ Pendiente |
+| **TOTAL** | | **~21-23 horas** | |
 
 ---
 
-## ORDEN DE IMPLEMENTACIÓN RECOMENDADO
+## ORDEN DE IMPLEMENTACIÓN
 
-### Fase 1: Hooks Básicos (45 min)
-1. ✅ Destrucción Armería (25 min)
-2. ✅ Reset Peek (10 min)
+### 🔴 PRIORIDAD CRÍTICA (BLOQUEAN OTRAS FASES)
 
-### Fase 1.5: Sistema de Habitaciones Especiales (1.5 horas)
-3. ✅ Sorteo de 3 habitaciones especiales en setup (30 min)
-4. ✅ Implementación de Cámara Letal (60 min)
-   - Acción de ritual
-   - Lógica de 7ª llave
-   - Tests (requiere clarificación sobre detalles del ritual)
+```
+FASE 0: Sistema Base Requerido
+├── 0.1: Sistema de Resolución de Eventos (2-3h)
+├── 0.2: Funciones de Utilidad (1h)
+└── 0.3: Sistema de Objetos (2h)
+```
 
-### Fase 2: Sistema de Guardado (45 min)
-5. ✅ Actualizar `run_versioned.py`
-6. ✅ Crear estructura de carpetas
-
-### Fase 3: Análisis Comprehensivo (2 horas)
-7. ✅ `analyze_comprehensive.py`
-8. ✅ `analyze_session_batch.py`
-
-### Fase 4: RNG Extendido (1.5 horas)
-9. ✅ Tracking RNG completo
-10. ✅ `analyze_rng_complete.py`
-
-### Fase 5: Optimización LLM (1 hora)
-11. ✅ `export_for_llm.py`
-
-### Fase 6: Testing (1 hora)
-12. ✅ Tests para hooks
-13. ✅ Tests para habitaciones especiales
-14. ✅ Validación de herramientas
+**⚠️ IMPORTANTE:** La Fase 0 es prerequisito para Fase 2 (Eventos Existentes).
 
 ---
 
-## PREGUNTAS PARA CLARIFICACIÓN
+### 🟢 ORDEN RECOMENDADO COMPLETO
 
-1. **✅ RESPONDIDO - Pool de Llaves (B3):**
-   - ✅ La 7ª llave se obtiene mediante ritual en Cámara Letal (NO en setup inicial)
-   - ✅ Cámara Letal es una habitación especial (sorteada, sin eventos asociados)
-   - ✅ Motemey es habitación especial + tiene eventos (mazo siempre se arma)
+```
+✅ FASE 1: Hooks Básicos [COMPLETADO]
+├── 1.1: Destrucción Armería ✅
+└── 1.2: Reset Peek ✅
 
-2. **✅ RESPONDIDO - Detalles de Cámara Letal:**
-   - ✅ Ritual requiere 2 jugadores en la habitación
-   - ✅ NO consume acciones (acción gratuita)
-   - ✅ Costo determinado por D6: [1-2: 7 a uno], [3-4: 3 y 4], [5-6: reparto libre de 7]
-   - ✅ Revelación automática al entrar (primera vez, sin costo de acción)
-   - ✅ Asignación: D4 por piso (1→R1, 2→R2, 3→R3, 4→R4) para cada habitación especial
+🔴 FASE 0: Sistema Base Requerido [5-6h]
+├── 0.1: Sistema Resolución Eventos
+├── 0.2: Funciones Utilidad
+└── 0.3: Sistema Objetos
 
-3. **⚠️ PENDIENTE - Detalles de Asignación:**
-   - ¿Las habitaciones especiales van en AMBOS pisos o solo en uno?
-   - Si van en ambos: ¿Qué pasa si dos especiales caen en misma ubicación? (re-tirar, colisión, etc.)
-   - ¿Es posible que una habitación especial salga dos veces en el mismo piso?
+🟡 FASE 1.5: Habitaciones Especiales [2h]
+└── Sorteo + Cámara Letal
 
-4. **⚠️ PENDIENTE - Eventos:**
-   - ¿Cuáles eventos son críticos para implementar ahora?
-   - ¿O podemos dejarlo para después de la base completa?
+🟡 FASE 2: Eventos Existentes [3.5-4h]
+├── EVT-01: Reflejo de Amarillo
+├── EVT-02: Espejo de Amarillo
+├── EVT-03: Hay un Cadáver
+├── EVT-04: Un Diván de Amarillo
+├── EVT-05: Cambia Caras
+├── EVT-06: Una Comida Servida
+└── EVT-07: La Furia de Amarillo
 
-5. **⚠️ PENDIENTE - Análisis:**
-   - ¿Hay alguna métrica adicional que quieras trackear?
-   - ¿Formato de salida para LLM es adecuado?
+🟡 FASE 3: Estados Canónicos [3h]
+├── Sangrado
+├── Maldito
+├── Paranoia
+├── Sanidad
+├── Vanidad
+└── ILLUMINATED (completar)
 
----
+🟢 FASE 4: Objetos y Tesoros [1h]
+├── Llavero
+└── Escaleras
 
-## GUÍA DE IMPLEMENTACIÓN POR FASES (MODULAR)
+🟢 FASE 5: Habitaciones Pendientes [2h]
+├── Salón de Belleza
+└── Taberna
 
-**Nota:** Este plan está diseñado para ser implementado en sesiones independientes. Cada fase puede completarse en una sesión separada sin dependencia de las otras (excepto Fase 1 que es prerrequisito).
+🟢 FASE 6: Análisis y Tracking RNG [2.5h]
+├── Tracking RNG Completo
+└── Herramienta Análisis
 
-### 🎯 FASE 0: PREPARACIÓN (5 min)
-**Objetivo:** Verificar estado del código antes de comenzar
+🟢 FASE 7: Guardado Versionado [45min]
 
-**Checklist:**
-- [ ] Leer `docs/IMPLEMENTATION_PLAN_2026_01_19.md` (este archivo)
-- [ ] Ejecutar `pytest` para verificar que tests actuales pasan
-- [ ] Revisar `git status` para ver cambios pendientes
-- [ ] Decidir qué fase implementar
-
-**Archivos clave a tener en mente:**
-- `sim/runner.py` - Setup del juego
-- `engine/actions.py` - Tipos de acciones
-- `engine/legality.py` - Acciones legales
-- `engine/transition.py` - Efectos de acciones
-- `engine/state.py` - Estructura de estado
-
----
-
-### 📦 FASE 1: HOOKS BÁSICOS (45 min)
-**Prerequisitos:** Ninguno
-**Puede implementarse independiente de otras fases:** ✅ SÍ
-
-**Tareas:**
-1. **Destrucción de Armería (25 min)**
-   - Archivo: `engine/transition.py:200-250` (_resolve_card_minimal)
-   - Agregar: Hook cuando MONSTER entra a ARMERÍA
-   - Tests: `tests/test_armory.py`
-   - Ver: Sección 1.1 del plan (líneas 36-74)
-
-2. **Reset Peek al Final de Turno (10 min)**
-   - Archivo: `engine/transition.py:373-400` (_start_new_round)
-   - Agregar: Reset de `peek_used_this_turn`
-   - Tests: `tests/test_peek_rooms.py`
-   - Ver: Sección 1.2 del plan (líneas 76-107)
-
-3. **Verificación (10 min)**
-   - Ejecutar: `pytest tests/test_armory.py tests/test_peek_rooms.py`
-   - Commit: "Implementar hooks B5 y B6: reset peek + destrucción armería"
-
-**Criterio de éxito:** Tests pasan, no hay regresiones
+🟢 FASE 8: Optimización LLM [1h]
+```
 
 ---
 
-### 🏛️ FASE 1.5: SISTEMA DE HABITACIONES ESPECIALES (1.5 horas)
-**Prerequisitos:** Ninguno (independiente de Fase 1)
-**Puede implementarse independiente de otras fases:** ✅ SÍ
-
-**⚠️ IMPORTANTE:** Esta fase requiere clarificación de preguntas pendientes (ver sección PREGUNTAS líneas 1478-1503)
-
-**Sub-fase A: Sorteo de Habitaciones Especiales (30 min)**
-- Archivo: `sim/runner.py:18-77` (make_smoke_state)
-- Agregar: Sorteo de 3 de 5 habitaciones especiales
-- Agregar: Sistema D4 para asignación de ubicaciones
-- Tests: `tests/test_special_rooms_setup.py` (nuevo)
-- Ver: Paso 1 y 3 de sección 1.3 (líneas 143-356)
-
-**Sub-fase B: Implementación Cámara Letal (60 min)**
-- Archivos:
-  - `engine/actions.py` - Agregar USE_CAMARA_LETAL_RITUAL
-  - `engine/legality.py:119+` - Verificar 2 jugadores
-  - `engine/transition.py:563+` - Lógica D6 y distribución cordura
-- Tests: `tests/test_camara_letal.py` (nuevo)
-- Ver: Paso 2 de sección 1.3 (líneas 197-289)
-
-**Verificación:**
-- [ ] `pytest tests/test_special_rooms_setup.py`
-- [ ] `pytest tests/test_camara_letal.py`
-- [ ] Commit: "Implementar B3: sistema de habitaciones especiales + Cámara Letal"
-
-**Criterio de éxito:**
-- Sorteo de 3 habitaciones funciona
-- Ritual de Cámara Letal implementado con D6
-- 7ª llave se agrega correctamente
-
----
-
-### 💾 FASE 2: SISTEMA DE GUARDADO VERSIONADO (45 min)
-**Prerequisitos:** Ninguno
-**Puede implementarse independiente de otras fases:** ✅ SÍ
-
-**Tareas:**
-1. Actualizar `tools/run_versioned.py` (o crear nuevo)
-2. Implementar estructura de carpetas versionada
-3. Generar metadata.json por sesión
-4. Ver: Sección 3.1-3.2 del plan (líneas 460-602)
-
-**Verificación:**
-- [ ] Ejecutar: `python tools/run_versioned.py --seeds 1 2 3`
-- [ ] Verificar estructura: `runs/v{commit}/{timestamp}/`
-- [ ] Verificar metadata.json generado
-- [ ] Commit: "Implementar sistema de guardado versionado"
-
----
-
-### 📊 FASE 3: ANÁLISIS COMPREHENSIVO (2 horas)
-**Prerequisitos:** Fase 2 (para estructura de carpetas)
-**Puede implementarse independiente de otras fases:** Requiere Fase 2
-
-**Tareas:**
-1. Crear `tools/analyze_comprehensive.py` (90 min)
-   - Extraer todas las métricas (keys, monsters, sanity, king, tension)
-   - Ver: Sección 4.2 (líneas 650-960)
-
-2. Crear `tools/analyze_session_batch.py` (30 min)
-   - Analizar sesión completa
-   - Generar reporte agregado
-   - Ver: Sección 4.3 (líneas 962-1068)
-
-**Verificación:**
-- [ ] `python tools/analyze_comprehensive.py runs/.../seed_001.jsonl`
-- [ ] `python tools/analyze_session_batch.py runs/.../timestamp/`
-- [ ] Commit: "Implementar análisis comprehensivo de partidas"
-
----
-
-### 🎲 FASE 4: TRACKING RNG EXTENDIDO (1.5 horas)
-**Prerequisitos:** Ninguno
-**Puede implementarse independiente de otras fases:** ✅ SÍ
-
-**Tareas:**
-1. Actualizar `engine/rng.py` con tracking completo (45 min)
-   - d6, d4, shuffles, choices
-   - Ver: Sección 2.1 (líneas 278-372)
-
-2. Crear `tools/analyze_rng_complete.py` (45 min)
-   - Análisis estadístico de RNG
-   - Chi-square tests
-   - Ver: Sección 2.2 (líneas 374-452)
-
-**Verificación:**
-- [ ] Ejecutar partida y verificar tracking en RNG
-- [ ] `python tools/analyze_rng_complete.py runs/.../seed_001.jsonl`
-- [ ] Commit: "Implementar tracking y análisis extendido de RNG"
-
----
-
-### 🤖 FASE 5: OPTIMIZACIÓN PARA LLM (1 hora)
-**Prerequisitos:** Fase 3 (análisis comprehensivo)
-**Puede implementarse independiente de otras fases:** Requiere Fase 3
-
-**Tareas:**
-1. Crear `tools/export_for_llm.py`
-   - Generar narrativa legible
-   - Insights automáticos
-   - Timeline comprimido
-   - Ver: Sección 5.1 (líneas 1070-1281)
-
-**Verificación:**
-- [ ] `python tools/export_for_llm.py runs/.../analysis/..._analysis.json`
-- [ ] Verificar formato JSON optimizado
-- [ ] Commit: "Implementar exportación optimizada para análisis LLM"
-
----
-
-### ✅ FASE 6: TESTING Y VALIDACIÓN (1 hora)
-**Prerequisitos:** Todas las fases anteriores implementadas
-**Puede implementarse independiente de otras fases:** ❌ NO (es fase final)
-
-**Tareas:**
-1. Ejecutar suite completa de tests
-2. Validar que todas las herramientas funcionan
-3. Generar run completo end-to-end
-4. Documentar cualquier issue encontrado
-
-**Verificación:**
-- [ ] `pytest` - todos los tests pasan
-- [ ] Generar sesión completa: setup → run → análisis → export
-- [ ] Commit: "Testing completo y validación de todas las fases"
-
----
-
-## 🔄 CÓMO REANUDAR EL TRABAJO
+## CÓMO REANUDAR EL TRABAJO
 
 **Si la sesión se interrumpe:**
 
@@ -1687,11 +1849,74 @@ if __name__ == "__main__":
 2. **Verificar qué fase estabas implementando:**
    - Revisar últimos commits: `git log --oneline -5`
    - Ver archivos modificados: `git status`
-3. **Consultar la sección de la fase correspondiente** (líneas indicadas arriba)
+   - Consultar tabla de Estado en sección [Resumen de Estimaciones](#resumen-de-estimaciones)
+3. **Consultar la sección de la fase correspondiente**
 4. **Continuar desde el último checkpoint**
 
-**Cada fase es autocontenida y puede implementarse independientemente** (excepto dependencias explícitas).
+**Cada fase es autocontenida** (excepto dependencias explícitas como Fase 0 → Fase 2).
 
 ---
 
-**Próximo Paso:** Responder preguntas pendientes y comenzar Fase 1 (Hooks Básicos).
+## PROPUESTAS NO APROBADAS
+
+> **⚠️ IMPORTANTE:** El documento CONSOLIDATED_IMPLEMENTATION_PRIORITY.md Parte 6 contiene propuestas NO aprobadas.
+
+**NO implementar hasta que sean playtested y aprobadas:**
+- Eventos propuestos (EVT-01 a EVT-10 propuestos)
+- Objetos propuestos (OBJ-01 a OBJ-10 propuestos)
+- Habitaciones propuestas (ROOM-01 a ROOM-10)
+- Roles propuestos (ROL-01 a ROL-10)
+- Tesoros propuestos (TRE-01 a TRE-10)
+
+**Ver:** CONSOLIDATED_IMPLEMENTATION_PRIORITY.md líneas 1046-1209 para lista completa.
+
+---
+
+## REFERENCIAS
+
+### Documentos Base
+
+- **Este documento**: Plan maestro unificado de implementación
+- **CONSOLIDATED_IMPLEMENTATION_PRIORITY.md**: Referencia técnica detallada con código de implementación completo
+
+### Referencias Cruzadas
+
+| Este Documento | CONSOLIDATED | Descripción |
+|----------------|--------------|-------------|
+| Fase 0 | Parte 1 | Sistema Base Requerido |
+| Fase 2 | Parte 2 | Eventos Existentes (EVT-01 a EVT-07) |
+| Fase 3 | Parte 5 | Estados Canónicos |
+| Fase 4 | Parte 3 | Objetos y Tesoros |
+| Fase 1.5, 5 | Parte 4 | Habitaciones Especiales |
+| Propuestas | Parte 6 | ⚠️ NO aprobadas (ignorar hasta aprobación) |
+
+### Convenciones
+
+| Símbolo | Significado |
+|---------|-------------|
+| ✅ | Implementado |
+| ❌ | No implementado |
+| ⚠️ | Parcialmente implementado |
+| 🔴 | Prioridad crítica / Tarea compleja |
+| 🟡 | Prioridad media / Tarea moderada |
+| 🟢 | Prioridad baja / Tarea simple |
+
+### Palabras Clave del Sistema
+
+| Término | Definición |
+|---------|------------|
+| **Total** | `d6 + cordura_actual`, mínimo 0 |
+| **Remover estado** | Eliminar completamente un StatusInstance |
+| **Aturdir N rondas** | Monstruo no actúa por N rondas |
+| **Sellar habitación** | Nadie entra ni sale |
+| **Acción gratuita** | No consume acciones del turno |
+| **Consumible** | Se destruye al usar |
+| **Permanente** | Dura hasta fin de partida |
+| **SOULbound** | No se puede intercambiar/vender/destruir |
+
+---
+
+**FIN DEL DOCUMENTO**
+
+*Última actualización: 19 Enero 2026*
+*Versión Unificada - Integra eventos, objetos, estados y herramientas*
