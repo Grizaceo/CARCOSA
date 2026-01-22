@@ -3,7 +3,7 @@ Tests para FASE 3: Estados Canónicos
 - MALDITO
 - SANIDAD
 - PARANOIA
-- VANIDAD
+- VANIDAD (bloquea Salón de Belleza, NO meditate)
 """
 import pytest
 from engine.state import GameState, PlayerState, RoomState, DeckState, StatusInstance
@@ -308,9 +308,10 @@ def test_paranoia_allows_moving_to_empty_rooms():
 
 
 # ===== VANIDAD Tests =====
+# CANON CORREGIDO: VANIDAD bloquea el Salón de Belleza, NO meditate
 
-def test_vanidad_blocks_meditate():
-    """VANIDAD: Bloquea la acción MEDITATE"""
+def test_vanidad_allows_meditate():
+    """VANIDAD: NO bloquea la acción MEDITATE (según canon corregido)"""
     from engine.legality import get_legal_actions
 
     s = setup_basic_state()
@@ -327,8 +328,8 @@ def test_vanidad_blocks_meditate():
     legal_actions = get_legal_actions(s, "P1")
     meditate_actions = [a for a in legal_actions if a.type.name == "MEDITATE"]
 
-    # P1 NO debe poder meditar con VANIDAD
-    assert len(meditate_actions) == 0, "MEDITATE debe estar bloqueado con VANIDAD"
+    # P1 DEBE poder meditar con VANIDAD (canon corregido)
+    assert len(meditate_actions) > 0, "VANIDAD no bloquea MEDITATE según canon"
 
 
 def test_vanidad_allows_other_actions():
@@ -382,25 +383,46 @@ def test_vanidad_only_affects_owner():
     assert len(meditate_actions) > 0, "P2 debe poder meditar sin VANIDAD"
 
 
-def test_meditate_blocked_in_king_corridor_with_vanidad():
-    """VANIDAD: MEDITATE bloqueado por VANIDAD incluso fuera del pasillo del Rey"""
-    from engine.legality import get_legal_actions
+def test_vanidad_blocks_salon_belleza():
+    """VANIDAD: Bloquea uso del Salón de Belleza (según canon)"""
+    from engine.effects.states_canonical import can_use_special_room
+    from engine.state import PlayerState
+    from engine.types import PlayerId, RoomId
 
-    s = setup_basic_state()
-
-    # P1 tiene VANIDAD y está en F1_R1 (NO es pasillo del Rey)
-    s.players[PlayerId("P1")].room = RoomId("F1_R1")
-    s.players[PlayerId("P1")].statuses.append(
-        StatusInstance(status_id="VANIDAD", remaining_rounds=2)
+    player = PlayerState(
+        player_id=PlayerId("P1"),
+        sanity=5,
+        room=RoomId("F1_R1"),
+        sanity_max=10,
+        keys=0,
+        objects=[]
     )
-    s.king_floor = 3  # Rey en piso 3, P1 en piso 1
+    
+    # Sin VANIDAD: puede usar Salón de Belleza
+    assert can_use_special_room(player, "SALON_BELLEZA") == True
+    
+    # Con VANIDAD: NO puede usar Salón de Belleza
+    player.statuses.append(StatusInstance(status_id="VANIDAD", remaining_rounds=2))
+    assert can_use_special_room(player, "SALON_BELLEZA") == False
 
-    # Cambiar fase a PLAYER para P1
-    s.phase = "PLAYER"
-    s.remaining_actions = {PlayerId("P1"): 2}
 
-    legal_actions = get_legal_actions(s, "P1")
-    meditate_actions = [a for a in legal_actions if a.type.name == "MEDITATE"]
+def test_vanidad_allows_other_special_rooms():
+    """VANIDAD: NO bloquea otras habitaciones especiales"""
+    from engine.effects.states_canonical import can_use_special_room
+    from engine.state import PlayerState, StatusInstance
+    from engine.types import PlayerId, RoomId
 
-    # P1 NO debe poder meditar con VANIDAD
-    assert len(meditate_actions) == 0, "VANIDAD debe bloquear MEDITATE en cualquier lugar"
+    player = PlayerState(
+        player_id=PlayerId("P1"),
+        sanity=5,
+        room=RoomId("F1_R1"),
+        sanity_max=10,
+        keys=0,
+        objects=[]
+    )
+    player.statuses.append(StatusInstance(status_id="VANIDAD", remaining_rounds=2))
+    
+    # Con VANIDAD: PUEDE usar otras habitaciones especiales
+    assert can_use_special_room(player, "TABERNA") == True
+    assert can_use_special_room(player, "ARMERIA") == True
+    assert can_use_special_room(player, "MOTEMEY") == True

@@ -178,8 +178,9 @@ def test_treasure_stairs_temp_stairs_valid_only_current_round():
 # ===== Tests de Otros Tesoros (Pendientes de Implementación Detallada) =====
 
 def test_treasure_crown_exists():
-    """Corona: Existe en el catálogo"""
-    assert "TREASURE_CROWN" in OBJECT_CATALOG
+    """Corona: Existe en el catálogo (unificado como CROWN, soulbound)"""
+    assert "CROWN" in OBJECT_CATALOG
+    assert OBJECT_CATALOG["CROWN"].is_soulbound is True
 
 
 def test_treasure_scroll_exists():

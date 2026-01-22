@@ -28,8 +28,8 @@ class ActionType(str, Enum):
     # B4: Yellow Doors
     USE_YELLOW_DOORS = "USE_YELLOW_DOORS"
     
-    # B5: Peek
-    USE_PEEK_ROOMS = "USE_PEEK_ROOMS"
+    # B5: Taberna
+    USE_TABERNA_ROOMS = "USE_TABERNA_ROOMS"
     
     # B6: Armory
     USE_ARMORY_DROP = "USE_ARMORY_DROP"

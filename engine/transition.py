@@ -32,10 +32,11 @@ def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[i
     free_action_types = {
         ActionType.USE_MOTEMEY_BUY,
         ActionType.USE_MOTEMEY_SELL,
-        ActionType.USE_PEEK_ROOMS,
+        ActionType.USE_TABERNA_ROOMS,
         ActionType.USE_ARMORY_DROP,
         ActionType.USE_ARMORY_TAKE,
         ActionType.USE_CAMARA_LETAL_RITUAL,
+        ActionType.USE_YELLOW_DOORS,
     }
     
     if action_type in free_action_types:
@@ -48,7 +49,6 @@ def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[i
         ActionType.MEDITATE,
         ActionType.SACRIFICE,
         ActionType.ESCAPE_TRAPPED,
-        ActionType.USE_YELLOW_DOORS,
     }
     
     if action_type in paid_action_types:
@@ -436,29 +436,38 @@ def _apply_status_effects_end_of_round(s: GameState) -> None:
     FASE 3: Aplica efectos de estados al final de ronda, ANTES del tick de duración.
 
     Estados implementados:
-    - SANGRADO: El jugador pierde 1 cordura
+    - ENVENENADO/SANGRADO: Reduce sanity_max en 1 (efecto PERMANENTE)
     - MALDITO: Todas las Pobres Almas en el mismo piso pierden 1 cordura
-    - SANIDAD: El jugador recupera 1 cordura
+    - SANIDAD: El jugador recupera 1 cordura (también en end_of_turn)
     """
     from engine.board import floor_of
+    from engine.effects.states_canonical import has_status
 
-    # SANGRADO: Pierde 1 cordura
+    # ENVENENADO (alias SANGRADO): Reduce sanity_max en 1 (permanente)
+    # Canon: La reducción de max es permanente incluso después de que expire el estado
     for p in s.players.values():
-        if any(st.status_id == "SANGRADO" for st in p.statuses):
-            p.sanity -= 1
+        if has_status(p, "ENVENENADO"):
+            if p.sanity_max is not None and p.sanity_max > -5:
+                p.sanity_max -= 1
+                # Ajustar cordura actual si excede el nuevo máximo
+                if p.sanity > p.sanity_max:
+                    p.sanity = p.sanity_max
 
     # MALDITO: Afecta a otros jugadores en el mismo piso
     for pid, p in s.players.items():
-        if any(st.status_id == "MALDITO" for st in p.statuses):
+        if has_status(p, "MALDITO"):
             player_floor = floor_of(p.room)
             for other_pid, other in s.players.items():
                 if other_pid != pid and floor_of(other.room) == player_floor:
                     other.sanity -= 1
 
-    # SANIDAD: Recupera 1 cordura
+    # SANIDAD: Recupera 1 cordura (también aplica en end_of_turn, aquí por compatibilidad)
     for p in s.players.values():
-        if any(st.status_id == "SANIDAD" for st in p.statuses):
-            p.sanity += 1
+        if has_status(p, "SANIDAD"):
+            if p.sanity_max is not None:
+                p.sanity = min(p.sanity + 1, p.sanity_max)
+            else:
+                p.sanity += 1
 
     # CORRECCIÓN B: Decrementar STUN de monstruos
     for monster in s.monsters:
@@ -720,9 +729,10 @@ def _start_new_round(s, cfg):
         if s.players[pid].sanity <= cfg.S_LOSS:
             actions = min(actions, 1)
 
-        # B1: ILUMINADO otorga +1 acción
+        # B1: ILUMINADO otorga +1 acción (usar ID canónico "ILUMINADO" o alias "ILLUMINATED")
+        from engine.effects.states_canonical import has_status
         p = s.players[pid]
-        if any(st.status_id == "ILLUMINATED" for st in p.statuses):
+        if has_status(p, "ILUMINADO"):
             actions += 1
 
         s.remaining_actions[pid] = actions
@@ -897,8 +907,8 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                 if card is not None:
                     _resolve_card_minimal(s, pid, card, cfg, rng)
 
-        # ===== B5: PEEK (mirar 2 habitaciones) =====
-        elif action.type == ActionType.USE_PEEK_ROOMS:
+        # ===== B5: TABERNA (mirar 2 habitaciones) =====
+        elif action.type == ActionType.USE_TABERNA_ROOMS:
             # Pagar 1 cordura, mirar 2 habitaciones sin extraer, no consume acción
             # Flag once-per-turn
             p.sanity -= 1

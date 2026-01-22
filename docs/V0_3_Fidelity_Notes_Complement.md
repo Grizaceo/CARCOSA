@@ -94,25 +94,33 @@ Esto reemplaza cualquier simplificación previa del tipo “STUN=1 para todo”.
 - `test_blunt_stuns_monster_2_turns`
 - `test_yellow_king_not_stunnable`
 
-**Pregunta abierta necesaria (B):**
-- Si el jugador falla el intento de escape, ¿pierde igualmente sus 2 acciones ese turno, o puede actuar tras fallar?
+### ✅ Decisión Canónica Cerrada (B):
+**Si el jugador falla el intento de escape, NO puede actuar ese turno** (remaining_actions = 0).
 
 ---
 
-## C) Habitaciones especiales no consumen acción
+## C) Habitaciones especiales — Costos de acción (ACTUALIZADO 2026-01-21)
 
-### Regla física (confirmada)
-- Activar el efecto de una habitación especial **no consume** una de las 2 acciones del jugador.
+### ✅ Regla canónica definitiva
+**NO todas las habitaciones especiales son free.** Se dividen en:
+
+| Habitación | Gasta Acción | Notas |
+|------------|--------------|-------|
+| **Taberna** | ❌ No | Recuperación de cordura |
+| **Motemey** | ❌ No | Compra: -2 cordura, ofrece 2 cartas |
+| **Armería** | ❌ No | Adquisición de equipo |
+| **Puertas de Amarillo** | ✅ Sí | Transporte entre pisos |
+| **Cámara Letal** | ✅ Sí | 1 acción por jugador participante |
+| **Salón de Belleza** | ✅ Sí | Aplica estado Vanidad |
+| **Monasterio a la Locura** | ✅ Sí | Mecánica especial |
 
 ### Corrección
-- Centralizar un set/lista de **acciones free** (coste 0).
-- Incluir:
-  - `USE_YELLOW_DOORS` (Puertas de Amarillo)
-  - acciones de Motemey / Peek / Armería / Cámara Letal
-  - cualquier `ACTIVATE_SPECIAL_ROOM`
+- Centralizar dos sets: `FREE_SPECIAL_ROOMS` y `PAID_SPECIAL_ROOMS`.
+- `FREE_SPECIAL_ROOMS = {"TABERNA", "MOTEMEY", "ARMERIA"}`
+- `PAID_SPECIAL_ROOMS = {"PUERTAS_AMARILLO", "CAMARA_LETAL", "SALON_BELLEZA", "MONASTERIO_LOCURA"}`
 
 ### Tests mínimos
-- Un test por especial: tras activación, `actions_left` no cambia.
+- Un test por especial: FREE no consume acción; PAID sí consume.
 
 ---
 
@@ -152,8 +160,8 @@ Esto reemplaza cualquier simplificación previa del tipo “STUN=1 para todo”.
 - `test_motemey_rejected_goes_to_bottom_no_growth`
 - `test_motemey_buy_blocked_if_pending_choice`
 
-**Pregunta abierta necesaria (D):**
-- La carta no elegida: ¿vuelve al fondo del mazo (recomendado) o se descarta?
+### ✅ Decisión Canónica Cerrada (D):
+**La carta no elegida vuelve al fondo del mazo** con `put_bottom(rejected_card_id)`.
 
 ---
 
@@ -218,20 +226,24 @@ Existen tests “verdes” que no ejercitan el motor (`step()`), por lo que no d
 
 ---
 
-## ¿Se necesitan más aclaraciones?
-Sí, para implementar con rigor sin asumir:
-1) (B) Si el jugador falla el escape del TRAPPED, ¿puede actuar ese turno o no?
-2) (D) Carta no elegida en Motemey: ¿fondo del mazo o descarte?
-3) (A) Lista canónica del pool de habitaciones especiales del físico y cuáles tienen efecto de “segunda activación” (p. ej. Salón de Belleza/Vanidad).
+## ✅ Aclaraciones Canónicas Cerradas (2026-01-21)
+Decisiones definitivas:
+1) **(B)** TRAPPED: **NO puede actuar si falla** (remaining_actions = 0)
+2) **(D)** Motemey: **Carta rechazada vuelve al fondo** con `put_bottom()`
+3) **(A/C)** Pool: **FREE** (Taberna, Motemey, Armería) / **PAID** (Puertas, Cámara, Salón, Monasterio)
+4) **(E)** Llaves: **Entidad separada**, slot independiente por rol
+5) **Reina Helada**: STUN ronda revelación + 1 acción persistente; stuneable
+6) **Soulbound**: Corona y Anillo son tesoros soulbound
 
 ---
 
 ## Checklist Done v0.3 (A–F)
 - [ ] Setup especiales: 3 totales; 1/piso; d4→R1..R4; boca abajo; reveal al entrar.
-- [ ] Especiales free actions (incluye Puertas).
-- [ ] TRAPPED Araña (3 turnos + escape roll >=3) + stun fuente 1 turno.
+- [ ] Especiales: Taberna/Motemey/Armería = FREE; Puertas/Cámara/Salón/Monasterio = PAID.
+- [ ] TRAPPED Araña (3 turnos + escape >=3) + **si falla no actúa** + stun fuente 1 turno.
 - [ ] Contundente: stun monstruo 2 turnos; Rey no stuneable.
-- [ ] Motemey: oferta persistente + elección real + sin duplicación + replay determinista.
+- [ ] Motemey: oferta 2 cartas + elección real + **rechazada al fondo**.
 - [ ] Corona unificada: tesoro + soulbound; un solo ID.
+- [ ] Anillo: tesoro + soulbound.
 - [ ] Fórmula Falso Rey documentada y testeada.
-- [ ] Tests: integración con `step()` + smoke multi-seed + serialización/replay donde aplique.
+- [ ] Tests: integración con `step()` + smoke multi-seed + serialización/replay.

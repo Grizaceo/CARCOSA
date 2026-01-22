@@ -68,15 +68,47 @@ def validate_special_rooms_invariants(state: GameState) -> None:
                 )
 
 
-# Pool canónico de habitaciones especiales (juego físico)
-# Confirmado: "PEEK" se llama "TABERNA" en el juego físico
+# Pool canónico de habitaciones especiales (juego físico) - 7 tipos
+# Actualizado 2026-01-21 conforme a Carcosa_Libro_Tecnico_CANON.md
 SPECIAL_ROOMS_POOL = [
-    "MOTEMEY",        # B2
-    "CAMARA_LETAL",   # B3
-    "PUERTAS",        # B4 (Puertas Amarillas)
-    "TABERNA",        # B5 (era "PEEK" en código anterior)
-    "ARMERY"          # B6 (Armería)
+    "TABERNA",           # FREE - Recuperación de cordura
+    "MOTEMEY",           # FREE - Compra: -2 cordura, ofrece 2 cartas
+    "ARMERIA",           # FREE - Adquisición de equipo
+    "PUERTAS_AMARILLO",  # PAID - Transporte entre pisos
+    "CAMARA_LETAL",      # PAID - 1 acción por jugador participante
+    "SALON_BELLEZA",     # PAID - Aplica estado Vanidad
+    "MONASTERIO_LOCURA", # PAID - Mecánica especial
 ]
+
+# Costos de acción canónicos (2026-01-21)
+# FREE = No consume acción del jugador
+# PAID = Consume 1 acción del jugador
+FREE_SPECIAL_ROOMS = {"TABERNA", "MOTEMEY", "ARMERIA"}
+PAID_SPECIAL_ROOMS = {"PUERTAS_AMARILLO", "CAMARA_LETAL", "SALON_BELLEZA", "MONASTERIO_LOCURA"}
+
+# Aliases para compatibilidad hacia atrás (nombres legacy → canónicos)
+ROOM_TYPE_ALIASES = {
+    "PUERTAS": "PUERTAS_AMARILLO",
+    "ARMERY": "ARMERIA",
+    "PEEK": "TABERNA",  # PEEK era nombre de código para TABERNA
+}
+
+
+def normalize_room_type(room_type: str) -> str:
+    """Normaliza un tipo de habitación a su nombre canónico."""
+    return ROOM_TYPE_ALIASES.get(room_type, room_type)
+
+
+def is_free_special_room(room_type: str) -> bool:
+    """Retorna True si la habitación especial NO consume acción."""
+    normalized = normalize_room_type(room_type)
+    return normalized in FREE_SPECIAL_ROOMS
+
+
+def is_paid_special_room(room_type: str) -> bool:
+    """Retorna True si la habitación especial SÍ consume acción."""
+    normalized = normalize_room_type(room_type)
+    return normalized in PAID_SPECIAL_ROOMS
 
 
 def setup_special_rooms(state: GameState, rng: RNG) -> None:
