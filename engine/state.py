@@ -94,7 +94,7 @@ class RoomState:
     revealed: int = 0
 
     # P1: Sistema de habitaciones especiales
-    special_card_id: Optional[str] = None  # ID de la habitación especial ("CAMARA_LETAL", "PEEK", etc.)
+    special_card_id: Optional[str] = None  # ID de la habitación especial ("CAMARA_LETAL", "TABERNA", etc.)
     special_revealed: bool = False          # Si la carta especial ha sido revelada
     special_destroyed: bool = False         # Si fue destruida por monstruo
     special_activation_count: int = 0       # Contador de activaciones (para Salón de Belleza, etc.)
@@ -160,8 +160,15 @@ class GameState:
     # None cuando no hay elección pendiente
     pending_motemey_choice: Optional[Dict[str, List[CardId]]] = None
     
-    # B5: Peek flag (una vez por turno)
+    # B5: Taberna flag (una vez por turno)
+    taberna_used_this_turn: Dict[PlayerId, bool] = field(default_factory=dict)
+    
+    # B5: PEEK flag (una vez por turno)
     peek_used_this_turn: Dict[PlayerId, bool] = field(default_factory=dict)
+    
+    # Reina Helada: jugadores con movimiento bloqueado (turno de entrada)
+    # Se limpia al inicio del siguiente turno
+    movement_blocked_players: List[PlayerId] = field(default_factory=list)
     
     # B6: Armory storage (por room_id, lista de items, capacidad 2)
     armory_storage: Dict[RoomId, List[str]] = field(default_factory=dict)
@@ -290,8 +297,13 @@ class GameState:
                 for pid, cards in pending_motemey_choice_data.items()
             }
 
-        # B5: Peek used this turn
-        peek_used_this_turn = {PlayerId(k): bool(v) for k, v in d.get("peek_used_this_turn", {}).items()}
+        # B5: Taberna used this turn
+        taberna_used_this_turn_data = d.get("taberna_used_this_turn", {})
+        taberna_used_this_turn = {PlayerId(k): bool(v) for k, v in taberna_used_this_turn_data.items()}
+
+        # B5: PEEK used this turn
+        peek_used_this_turn_data = d.get("peek_used_this_turn", {})
+        peek_used_this_turn = {PlayerId(k): bool(v) for k, v in peek_used_this_turn_data.items()}
 
         # B6: Armory storage
         armory_storage = {RoomId(k): list(v) for k, v in d.get("armory_storage", {}).items()}
@@ -325,8 +337,12 @@ class GameState:
             motemey_deck=motemey_deck,
             motemey_event_active=bool(d.get("motemey_event_active", False)),
             pending_motemey_choice=pending_motemey_choice,
+            # B5: TABERNA
+            taberna_used_this_turn=taberna_used_this_turn,
             # B5: PEEK
             peek_used_this_turn=peek_used_this_turn,
             # B6: ARMORY
             armory_storage=armory_storage,
+            # Reina Helada: movimiento bloqueado
+            movement_blocked_players=[PlayerId(x) for x in d.get("movement_blocked_players", [])],
         )

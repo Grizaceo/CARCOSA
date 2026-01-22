@@ -2,6 +2,29 @@
 Sistema de objetos con efectos.
 
 Define el catálogo de objetos y sus efectos cuando se usan.
+
+SISTEMA CANÓNICO DE OBJETOS (2026-01-21):
+=========================================
+
+CATEGORÍAS:
+-----------
+1. OBJETO NORMAL: Consumible o permanente, NO soulbound
+   - Ejemplos: Brújula, Vial, Contundente, Cuerda
+
+2. TESORO: Objetos especiales del mazo de Motemey
+   - Ejemplos: Llavero, Escaleras, Pergamino, Colgante
+
+3. TESORO SOULBOUND: Ligados permanentemente al jugador
+   - Corona: Activa Falso Rey, no ocupa slot
+   - Anillo: Tesoro especial, no puede descartarse
+
+REGLAS SOULBOUND:
+-----------------
+- NO se puede intercambiar, dropear ni transferir
+- Efectos de descarte (d6=6 del Rey) NO eliminan objetos Soulbound
+- No ocupan slots de objetos normales
+
+NOTA: Las LLAVES son entidad separada (slot propio por rol de personaje)
 """
 
 from dataclasses import dataclass
@@ -14,24 +37,45 @@ from engine.types import PlayerId
 class ObjectDefinition:
     object_id: str
     name: str
-    uses: Optional[int]  # None = infinito, 1 = consumible
-    is_blunt: bool = False  # Objeto contundente
-    is_treasure: bool = False
+    uses: Optional[int]  # None = permanente, N = consumible N usos
+    is_blunt: bool = False  # Objeto contundente (stun monstruos)
+    is_treasure: bool = False  # Es tesoro (viene de Motemey)
+    is_soulbound: bool = False  # Es soulbound (no puede descartarse)
 
 
-# Catálogo de objetos existentes
+# ==============================================================================
+# CATÁLOGO DE OBJETOS CANÓNICO
+# ==============================================================================
+
 OBJECT_CATALOG = {
+    # --- OBJETOS NORMALES ---
     "COMPASS": ObjectDefinition("COMPASS", "Brújula", uses=1, is_blunt=False),
     "VIAL": ObjectDefinition("VIAL", "Vial", uses=1, is_blunt=False),
     "BLUNT": ObjectDefinition("BLUNT", "Objeto Contundente", uses=1, is_blunt=True),
     "ROPE": ObjectDefinition("ROPE", "Cuerda", uses=1, is_blunt=False),
-    # Tesoros
+    
+    # --- TESOROS (de Motemey) ---
     "TREASURE_RING": ObjectDefinition("TREASURE_RING", "Llavero", uses=None, is_blunt=False, is_treasure=True),
     "TREASURE_STAIRS": ObjectDefinition("TREASURE_STAIRS", "Escaleras", uses=3, is_blunt=False, is_treasure=True),
-    "TREASURE_CROWN": ObjectDefinition("TREASURE_CROWN", "Corona", uses=None, is_blunt=False, is_treasure=True),
     "TREASURE_SCROLL": ObjectDefinition("TREASURE_SCROLL", "Pergamino", uses=None, is_blunt=False, is_treasure=True),
     "TREASURE_PENDANT": ObjectDefinition("TREASURE_PENDANT", "Colgante", uses=None, is_blunt=False, is_treasure=True),
+    
+    # --- TESOROS SOULBOUND ---
+    "CROWN": ObjectDefinition("CROWN", "Corona", uses=None, is_blunt=False, is_treasure=True, is_soulbound=True),
+    "RING": ObjectDefinition("RING", "Anillo", uses=None, is_blunt=False, is_treasure=True, is_soulbound=True),
 }
+
+
+def is_soulbound(object_id: str) -> bool:
+    """Retorna True si el objeto es soulbound (no puede descartarse)."""
+    obj_def = OBJECT_CATALOG.get(object_id)
+    return obj_def.is_soulbound if obj_def else False
+
+
+def can_discard(object_id: str) -> bool:
+    """Retorna True si el objeto PUEDE ser descartado (no es soulbound)."""
+    return not is_soulbound(object_id)
+
 
 
 def use_object(s: GameState, pid: PlayerId, object_id: str, cfg, rng) -> bool:

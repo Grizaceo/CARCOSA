@@ -66,10 +66,11 @@ def setup_state_test():
     return s
 
 
-def test_sangrado_applies_damage_at_end_of_round():
-    """SANGRADO aplica -1 cordura al final de ronda"""
+def test_envenenado_reduces_max_sanity_at_end_of_round():
+    """ENVENENADO/SANGRADO reduce sanity_max en 1 al final de ronda (efecto permanente)"""
     s = setup_state_test()
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="SANGRADO", remaining_rounds=2))
+    initial_max = s.players[PlayerId("P1")].sanity_max
     initial_sanity = s.players[PlayerId("P1")].sanity
     cfg = Config()
     rng = RNG(1)
@@ -78,13 +79,11 @@ def test_sangrado_applies_damage_at_end_of_round():
     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
     s = step(s, action, rng, cfg)
 
-    # Verificar que perdió 1 cordura por SANGRADO
-    # (además de la pérdida por casa y posibles efectos del Rey)
-    # La pérdida de casa es 1 por defecto, así que total debería ser -2
+    # Verificar que sanity_max se redujo en 1
     p1_after = s.players[PlayerId("P1")]
-    # Calcular pérdida esperada: casa (-1) + sangrado (-1) = -2
-    expected_sanity = initial_sanity - cfg.HOUSE_LOSS_PER_ROUND - 1
-    assert p1_after.sanity == expected_sanity
+    assert p1_after.sanity_max == initial_max - 1, "sanity_max debe reducirse en 1"
+    # La cordura normal solo se ve afectada por la casa
+    assert p1_after.sanity == initial_sanity - cfg.HOUSE_LOSS_PER_ROUND
 
 
 def test_sangrado_duration_decrements():
@@ -103,14 +102,14 @@ def test_sangrado_duration_decrements():
     assert len(s.players[PlayerId("P1")].statuses) == 0
 
 
-def test_sangrado_multiple_players():
-    """Múltiples jugadores con SANGRADO cada uno pierde cordura"""
+def test_envenenado_multiple_players_reduce_max():
+    """Múltiples jugadores con ENVENENADO cada uno reduce su sanity_max"""
     s = setup_state_test()
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="SANGRADO", remaining_rounds=2))
     s.players[PlayerId("P2")].statuses.append(StatusInstance(status_id="SANGRADO", remaining_rounds=2))
 
-    initial_p1_sanity = s.players[PlayerId("P1")].sanity
-    initial_p2_sanity = s.players[PlayerId("P2")].sanity
+    initial_p1_max = s.players[PlayerId("P1")].sanity_max
+    initial_p2_max = s.players[PlayerId("P2")].sanity_max
     cfg = Config()
     rng = RNG(1)
 
@@ -118,20 +117,18 @@ def test_sangrado_multiple_players():
     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
     s = step(s, action, rng, cfg)
 
-    # Ambos deberían haber perdido cordura
-    expected_p1 = initial_p1_sanity - cfg.HOUSE_LOSS_PER_ROUND - 1
-    expected_p2 = initial_p2_sanity - cfg.HOUSE_LOSS_PER_ROUND - 1
-    assert s.players[PlayerId("P1")].sanity == expected_p1
-    assert s.players[PlayerId("P2")].sanity == expected_p2
+    # Ambos deberían haber reducido su sanity_max
+    assert s.players[PlayerId("P1")].sanity_max == initial_p1_max - 1
+    assert s.players[PlayerId("P2")].sanity_max == initial_p2_max - 1
 
 
-def test_sangrado_with_other_states():
-    """SANGRADO funciona correctamente con otros estados simultáneos"""
+def test_envenenado_with_other_states():
+    """ENVENENADO funciona correctamente con otros estados simultáneos"""
     s = setup_state_test()
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="SANGRADO", remaining_rounds=2))
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="TRAPPED", remaining_rounds=1))
 
-    initial_sanity = s.players[PlayerId("P1")].sanity
+    initial_max = s.players[PlayerId("P1")].sanity_max
     initial_status_count = len(s.players[PlayerId("P1")].statuses)
     assert initial_status_count == 2
     cfg = Config()
@@ -141,10 +138,9 @@ def test_sangrado_with_other_states():
     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
     s = step(s, action, rng, cfg)
 
-    # SANGRADO aplicó efecto
-    expected_sanity = initial_sanity - cfg.HOUSE_LOSS_PER_ROUND - 1
+    # ENVENENADO aplicó efecto sobre sanity_max
     p1_after = s.players[PlayerId("P1")]
-    assert p1_after.sanity == expected_sanity
+    assert p1_after.sanity_max == initial_max - 1
 
     # TRAPPED desapareció, SANGRADO quedó con 1 ronda
     assert len(p1_after.statuses) == 1
@@ -152,11 +148,11 @@ def test_sangrado_with_other_states():
     assert p1_after.statuses[0].remaining_rounds == 1
 
 
-def test_sangrado_duration_persists_across_round():
-    """SANGRADO con duración 3 persiste después de una ronda"""
+def test_envenenado_duration_persists_across_round():
+    """ENVENENADO con duración 3 persiste después de una ronda"""
     s = setup_state_test()
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="SANGRADO", remaining_rounds=3))
-    initial_sanity = s.players[PlayerId("P1")].sanity
+    initial_max = s.players[PlayerId("P1")].sanity_max
     cfg = Config()
     rng = RNG(1)
 
@@ -164,11 +160,11 @@ def test_sangrado_duration_persists_across_round():
     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
     s = step(s, action, rng, cfg)
 
-    # Verificar que aplicó daño y duración decrementó
-    sanity_after = s.players[PlayerId("P1")].sanity
-    assert sanity_after == initial_sanity - cfg.HOUSE_LOSS_PER_ROUND - 1
-    assert len(s.players[PlayerId("P1")].statuses) == 1
-    assert s.players[PlayerId("P1")].statuses[0].remaining_rounds == 2
+    # Verificar que aplicó efecto sobre sanity_max y duración decrementó
+    p1_after = s.players[PlayerId("P1")]
+    assert p1_after.sanity_max == initial_max - 1
+    assert len(p1_after.statuses) == 1
+    assert p1_after.statuses[0].remaining_rounds == 2
 
 
 # ==================== MALDITO Tests ====================
@@ -316,13 +312,14 @@ def test_sanidad_multiple_players():
     assert s.players[PlayerId("P2")].sanity == expected_p2
 
 
-def test_sanidad_with_sangrado_interaction():
-    """SANIDAD y SANGRADO se cancelan (+1 -1 = 0 neto, además de casa)"""
+def test_sanidad_with_envenenado_interaction():
+    """SANIDAD (+1 cordura) y ENVENENADO (-1 max) tienen efectos separados"""
     s = setup_state_test()
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="SANIDAD", remaining_rounds=2))
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="SANGRADO", remaining_rounds=2))
 
     initial_sanity = s.players[PlayerId("P1")].sanity
+    initial_max = s.players[PlayerId("P1")].sanity_max
     cfg = Config()
     rng = RNG(1)
 
@@ -330,9 +327,11 @@ def test_sanidad_with_sangrado_interaction():
     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
     s = step(s, action, rng, cfg)
 
-    # SANIDAD (+1) + SANGRADO (-1) + CASA (-1) = -1 neto
-    expected_sanity = initial_sanity - cfg.HOUSE_LOSS_PER_ROUND
-    assert s.players[PlayerId("P1")].sanity == expected_sanity
+    p1 = s.players[PlayerId("P1")]
+    # SANIDAD (+1) + CASA (-1) = 0 neto en cordura
+    assert p1.sanity == initial_sanity - cfg.HOUSE_LOSS_PER_ROUND + 1
+    # ENVENENADO reduce sanity_max en 1
+    assert p1.sanity_max == initial_max - 1
 
 
 # ==================== PARANOIA Tests ====================
@@ -419,8 +418,8 @@ def test_paranoia_duration_decrements():
 
 # ==================== VANIDAD Tests ====================
 
-def test_vanidad_blocks_meditate():
-    """VANIDAD bloquea la acción MEDITATE"""
+def test_vanidad_allows_meditate():
+    """VANIDAD NO bloquea la acción MEDITATE (según canon corregido)"""
     from engine.legality import get_legal_actions
     s = setup_state_test()
     s.phase = "PLAYER"
@@ -430,10 +429,10 @@ def test_vanidad_blocks_meditate():
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="VANIDAD", remaining_rounds=-1))
     cfg = Config()
 
-    # Verificar que MEDITATE no está disponible
+    # Verificar que MEDITATE SÍ está disponible (canon corregido: VANIDAD bloquea Salón de Belleza, no meditate)
     legal = get_legal_actions(s, str(PlayerId("P1")))
     meditate_actions = [a for a in legal if a.type == ActionType.MEDITATE]
-    assert len(meditate_actions) == 0
+    assert len(meditate_actions) == 1
 
 
 def test_vanidad_is_permanent():

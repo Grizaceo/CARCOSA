@@ -6,6 +6,7 @@ from engine.board import neighbors, floor_of, is_corridor, corridor_id
 from engine.boxes import active_deck_for_room
 from engine.state import GameState, RoomState
 from engine.types import PlayerId, RoomId
+from engine.effects.states_canonical import has_status
 
 
 def _get_special_room_type(state: GameState, room_id: RoomId) -> Optional[str]:
@@ -33,9 +34,19 @@ def _current_player_id(state: GameState) -> PlayerId:
     return state.turn_order[state.turn_pos]
 
 
+def _is_movement_blocked(state: GameState, pid: PlayerId) -> bool:
+    """
+    Verifica si el jugador tiene movimiento bloqueado.
+    
+    MOVIMIENTO_BLOQUEADO: Aplicado por Reina Helada en turno de entrada.
+    Solo afecta a jugadores que estaban presentes cuando entró.
+    """
+    return pid in state.movement_blocked_players
+
+
 def _is_paranoia_move_legal(state: GameState, pid: PlayerId, to_room: RoomId) -> bool:
     """
-    FASE 3: Verifica si un movimiento es legal considerando el estado PARANOIA.
+    Verifica si un movimiento es legal considerando el estado PARANOIA.
 
     PARANOIA: No puede estar en misma habitación/pasillo que otra Pobre Alma.
     - Si el jugador tiene PARANOIA, no puede entrar donde hay otros
@@ -43,8 +54,8 @@ def _is_paranoia_move_legal(state: GameState, pid: PlayerId, to_room: RoomId) ->
     """
     p = state.players[pid]
 
-    # Si el jugador tiene PARANOIA, no puede entrar donde hay otros
-    if any(st.status_id == "PARANOIA" for st in p.statuses):
+    # Si el jugador tiene PARANOIA, no puede entrar donde hay otros (habitaciones Y pasillo)
+    if has_status(p, "PARANOIA"):
         for other_pid, other in state.players.items():
             if other_pid != pid and other.room == to_room:
                 return False
@@ -52,7 +63,7 @@ def _is_paranoia_move_legal(state: GameState, pid: PlayerId, to_room: RoomId) ->
     # Si hay alguien con PARANOIA en la habitación destino, nadie puede entrar
     for other_pid, other in state.players.items():
         if other_pid != pid and other.room == to_room:
-            if any(st.status_id == "PARANOIA" for st in other.statuses):
+            if has_status(other, "PARANOIA"):
                 return False
 
     return True
@@ -72,11 +83,14 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         p = state.players[pid]
         acts: List[Action] = []
+        
+        # MOVIMIENTO_BLOQUEADO: Reina Helada bloquea movimiento
+        movement_allowed = not _is_movement_blocked(state, pid)
 
         # MOVE a vecinos del nodo actual (misma planta: pasillo <-> habitaciones)
         for nb in neighbors(p.room):
-            # FASE 3: Filtrar por PARANOIA
-            if _is_paranoia_move_legal(state, pid, RoomId(nb)):
+            # MOVIMIENTO_BLOQUEADO y PARANOIA bloquean movimiento
+            if movement_allowed and _is_paranoia_move_legal(state, pid, RoomId(nb)):
                 acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(nb)}))
 
         # MOVE especial: si estás en la habitación que tiene escaleras en tu piso,
@@ -86,14 +100,14 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             if f > 1:
                 dest_stair = state.stairs.get(f - 1)
                 if dest_stair:
-                    # FASE 3: Filtrar por PARANOIA
-                    if _is_paranoia_move_legal(state, pid, dest_stair):
+                    # MOVIMIENTO_BLOQUEADO y PARANOIA bloquean movimiento
+                    if movement_allowed and _is_paranoia_move_legal(state, pid, dest_stair):
                         acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
             if f < 3:
                 dest_stair = state.stairs.get(f + 1)
                 if dest_stair:
-                    # FASE 3: Filtrar por PARANOIA
-                    if _is_paranoia_move_legal(state, pid, dest_stair):
+                    # MOVIMIENTO_BLOQUEADO y PARANOIA bloquean movimiento
+                    if movement_allowed and _is_paranoia_move_legal(state, pid, dest_stair):
                         acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
 
         # SEARCH solo en habitación con mazo activo
@@ -102,9 +116,8 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             acts.append(Action(actor=str(pid), type=ActionType.SEARCH, data={}))
 
         # MEDITATE no se puede en pasillo del piso del Rey.
-        # FASE 3: VANIDAD bloquea MEDITATE
-        has_vanidad = any(st.status_id == "VANIDAD" for st in p.statuses)
-        if not (is_corridor(p.room) and floor_of(p.room) == state.king_floor) and not has_vanidad:
+        # Nota: VANIDAD no bloquea MEDITATE, solo el Salón de Belleza
+        if not (is_corridor(p.room) and floor_of(p.room) == state.king_floor):
             acts.append(Action(actor=str(pid), type=ActionType.MEDITATE, data={}))
 
         # SACRIFICE: solo si status "SCARED" o sanity <= S_LOSS (si la regla lo permite)
@@ -146,18 +159,18 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             for target_pid in other_players:
                 acts.append(Action(actor=str(pid), type=ActionType.USE_YELLOW_DOORS, data={"target_player": str(target_pid)}))
 
-        # ===== B5: PEEK =====
-        # Disponible si actor está en habitación PEEK, no ha usado esta ronda, y existen al menos 2 rooms distintos
-        is_in_peek = _get_special_room_type(state, p.room) == "PEEK"
-        peek_used = state.peek_used_this_turn.get(pid, False)
+        # ===== B5: TABERNA =====
+        # Disponible si actor está en habitación TABERNA, no ha usado esta ronda, y existen al menos 2 rooms distintos
+        is_in_taberna = _get_special_room_type(state, p.room) == "TABERNA"
+        taberna_used = state.taberna_used_this_turn.get(pid, False)
 
-        if is_in_peek and not peek_used and len(state.rooms) >= 2:
+        if is_in_taberna and not taberna_used and len(state.rooms) >= 2:
             # Offrezamos 2 cuartos cualquiera distintos
             room_ids = list(state.rooms.keys())
             for i, room_a in enumerate(room_ids):
                 for room_b in room_ids[i+1:]:
                     if room_a != room_b:
-                        acts.append(Action(actor=str(pid), type=ActionType.USE_PEEK_ROOMS, data={"room_a": str(room_a), "room_b": str(room_b)}))
+                        acts.append(Action(actor=str(pid), type=ActionType.USE_TABERNA_ROOMS, data={"room_a": str(room_a), "room_b": str(room_b)}))
 
         # ===== B6: ARMERÍA =====
         # Disponible si actor está en habitación ARMERÍA y armería no está destruida
