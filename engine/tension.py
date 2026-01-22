@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict
+from typing import Dict, Optional
 import math
 
 from engine.config import Config
@@ -100,8 +100,8 @@ def compute_features(state: GameState, cfg: Config) -> Dict[str, float]:
     }
 
 
-def tension_T(state: GameState, cfg: Config) -> float:
-    f = compute_features(state, cfg)
+def tension_T(state: GameState, cfg: Config, features: Optional[Dict[str, float]] = None) -> float:
+    f = features if features is not None else compute_features(state, cfg)
     z = (
         cfg.BIAS
         + cfg.W_SANITY * f["P_sanity"]
@@ -127,7 +127,7 @@ def band_loss(T: float, cfg: Config) -> float:
     return 0.0
 
 
-def king_utility(state: GameState, cfg: Config) -> float:
+def king_utility(state: GameState, cfg: Config, features: Optional[Dict[str, float]] = None) -> float:
     """
     Utilidad (a maximizar) para el Rey:
     - Mantener T en la banda.
@@ -139,7 +139,7 @@ def king_utility(state: GameState, cfg: Config) -> float:
     if state.outcome == "WIN":
         return -cfg.PENALTY_WIN
 
-    T = tension_T(state, cfg)
+    T = tension_T(state, cfg, features=features)
 
     # Queremos maximizar utilidad => minimizar loss
     loss = band_loss(T, cfg)
