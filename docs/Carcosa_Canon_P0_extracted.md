@@ -95,6 +95,12 @@ Barajar
 Baraja todos los mazos de
 habitación (cada mazo
 individual).
+
+> [!NOTE] **VARIANTE ENGINE (2026-01-23):**
+> En este engine se implementa como **rotación intra-floor** (R1→R4→R3→R2→R1 por piso) en lugar de shuffle.
+> **Razón:** En el juego físico, barajar todos los mazos manualmente es tedioso y propenso a errores.
+> Este proyecto busca ser una representación estricta del juego físico para simulaciones, por lo que se optó
+> por una mecánica que logra el mismo efecto de "reorganizar cartas" sin la fricción del shuffle físico.
 2
 −1 cordura global
 Todos los jugadores pierden

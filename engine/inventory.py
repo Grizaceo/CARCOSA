@@ -117,6 +117,11 @@ def add_object(state: GameState, player_id: PlayerId, object_id: str,
     if can_add_object(player, object_id):
         objects.append(object_id)
         player.objects = objects
+        
+        # CHAMBERS_BOOK: registrar holder (aunque no sea soulbound)
+        if object_id == "CHAMBERS_BOOK":
+            state.chambers_book_holder = player_id
+        
         return True
     
     # Inventario lleno - necesita descarte

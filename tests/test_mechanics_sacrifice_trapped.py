@@ -145,28 +145,12 @@ def test_trapped_resolution_success():
     assert not any(st.status_id == "TRAPPED" for st in p1_new.statuses), "Trapped status should be removed on success"
     
     # Check Action Cost
-    # Initial was 2. Cost 1.
-    assert s_new.remaining_actions[PlayerId("P1")] == 1, "Should consume 1 action"
+    # Initial was 2. Éxito: queda con 1 acción restante (gastó 1)
+    assert s_new.remaining_actions[PlayerId("P1")] == 1, "Should have 1 action remaining after success"
     
-    # Check Monster Stun
-    # "no se puede mover al final de la ronda" -> usually implemented as 'STUN' status on monster or flag?
-    monster = s_new.monsters[0] # assuming M1
-    # MonsterState usually doesn have statuses list? 
-    # Let's check state.py ... MonsterState: monster_id, room. NO STATUSES.
-    # Comment said: "generates STUN for monster".
-    # Implementation detail: Does MonsterState support statuses?
-    # If not, we might need a `monster_statuses` dict in GameState or modify MonsterState.
-    # Since I am writing the TEST, and I saw `MonsterState` has no status field in `state.py`,
-    # I should declare expectation: The test expects SOMETHING changed.
-    # Maybe `s.flags['MONSTER_STUNNED_M1'] = True`?
-    # OR maybe I should modify MonsterState in the PR?
-    # "No rompas tests previos". modifying data classes breaks serialization potentially if not careful.
-    # I will assume `flags` usage for now to be safe, OR that MonsterState gets a new field.
-    # Given "Produce PR solo de tests" and "Tests de regresión y harness"
-    # I'll assert that we can FIND the stun somewhere.
-    # Let's assume we look in `s.flags` for now as it's the safest extension point without schema change.
-    
-    assert s_new.flags.get(f"STUN_M1_ROUND_{s.round}"), "Monster M1 should be stunned (flagged)"
+    # Check Monster Stun - CANON: Monster queda stunned 1 turno
+    monster = s_new.monsters[0]
+    assert monster.stunned_remaining_rounds == 1, "Monster should be stunned for 1 round"
 
 
 def test_trapped_resolution_failure():
@@ -188,5 +172,5 @@ def test_trapped_resolution_failure():
     # Status Persists
     assert any(st.status_id == "TRAPPED" for st in p1_new.statuses), "Trapped status should persist on failure"
     
-    # Cost Consumed
-    assert s_new.remaining_actions[PlayerId("P1")] == 1, "Should consume 1 action even on failure"
+    # CANON: Fallo termina turno inmediatamente (0 acciones)
+    assert s_new.remaining_actions[PlayerId("P1")] == 0, "Failure should end turn immediately (0 actions)"

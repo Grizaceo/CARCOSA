@@ -197,6 +197,7 @@ class GameState:
     
     # Estado de Habitaciones Especiales
     salon_belleza_uses: int = 0  # Contador de activaciones del Salón (3er uso -> Vanidad)
+    tue_tue_revelations: int = 0  # Contador de revelaciones de Tue-Tue
     
     # Anillo activado (para efecto de -2 cordura/turno)
     ring_activated_by: Optional[PlayerId] = None
@@ -372,6 +373,7 @@ class GameState:
             
             # FASE 3: Habitaciones Especiales
             salon_belleza_uses=int(d.get("salon_belleza_uses", 0)),
+            tue_tue_revelations=int(d.get("tue_tue_revelations", 0)),
             
             # FASE 4: Libro Chambers y Vanish
             chambers_book_holder=PlayerId(d["chambers_book_holder"]) if d.get("chambers_book_holder") else None,
