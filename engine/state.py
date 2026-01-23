@@ -369,4 +369,15 @@ class GameState:
             armory_storage=armory_storage,
             # Reina Helada: movimiento bloqueado
             movement_blocked_players=[PlayerId(x) for x in d.get("movement_blocked_players", [])],
+            
+            # FASE 3: Habitaciones Especiales
+            salon_belleza_uses=int(d.get("salon_belleza_uses", 0)),
+            
+            # FASE 4: Libro Chambers y Vanish
+            chambers_book_holder=PlayerId(d["chambers_book_holder"]) if d.get("chambers_book_holder") else None,
+            chambers_tales_attached=int(d.get("chambers_tales_attached", 0)),
+            king_vanished_turns=int(d.get("king_vanished_turns", 0)),
+            
+            # Anillo
+            ring_activated_by=PlayerId(d["ring_activated_by"]) if d.get("ring_activated_by") else None,
         )

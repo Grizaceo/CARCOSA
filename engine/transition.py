@@ -1183,6 +1183,30 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                         # Marcar ritual como completado
                         s.flags["CAMARA_LETAL_D6"] = d6  # Para tracking
 
+
+
+        # ===== FASE 4: Libro Chambers + Cuentos =====
+        elif action.type == ActionType.USE_ATTACH_TALE:
+             # Unir cuento al libro
+             # Requisitos: Tener libro y tener el cuento
+             # Asumimos que la acción es válida (legality checkeado o invocado por UI que sabe)
+             # Pero verificaremos posesión del cuento.
+             # Libro puede estar en otro, pero simplificamos a que el actor lo tiene o está en la misma room.
+             # Para simplificar: el actor tiene el cuento.
+             tale_id = action.data.get("tale_id")
+             if tale_id in p.objects:
+                 # Consumir cuento
+                 p.objects.remove(tale_id)
+                 
+                 # Incrementar contador
+                 s.chambers_tales_attached += 1
+                 s.flags[f"TALE_ATTACHED_{tale_id}"] = True
+                 
+                 # Check Vanish (4to cuento)
+                 if s.chambers_tales_attached >= 4:
+                     s.king_vanished_turns = 4
+                     s.action_log.append({"event": "KING_VANISHED", "turns": 4})
+
         # ===== FASE 1: ACCIONES DE ROLES =====
         elif action.type == ActionType.USE_HEALER_HEAL:
             # Healer: -1 propia -> +2 otros + Estado
@@ -1239,9 +1263,14 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         for p in s.players.values():
             p.sanity -= cfg.HOUSE_LOSS_PER_ROUND
 
-        if s.king_vanish_ends > 0:
-            s.king_vanish_ends -= 1
-        else:
+        # Verificar Vanish
+        king_active = True
+        if s.king_vanished_turns > 0:
+            s.king_vanished_turns -= 1
+            king_active = False
+            # Log de vanish skip?
+        
+        if king_active:
             # PASO 2: Ruleta d4 para determinar nuevo piso (canon P0)
             d4 = rng.randint(1, 4)
             rng.last_king_d4 = d4  # Track for logging
