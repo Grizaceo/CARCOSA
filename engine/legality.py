@@ -273,6 +273,14 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                     data={}  # La elección de estado se hace en el handler
                 ))
 
+        # ===== FASE 4: USE_ATTACH_TALE (Unir cuento al libro) =====
+        # Requiere: Tener el Libro (BOOK_CHAMBERS) y al menos un Cuento (TALE_*)
+        if "BOOK_CHAMBERS" in p.objects:
+            for obj in p.objects:
+                if obj.startswith("TALE_"):
+                    # Es un cuento, podemos unirlo
+                    acts.append(Action(actor=str(pid), type=ActionType.USE_ATTACH_TALE, data={"tale_id": obj}))
+
         acts.append(Action(actor=str(pid), type=ActionType.END_TURN, data={}))
         return acts
 
