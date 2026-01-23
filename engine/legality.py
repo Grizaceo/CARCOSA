@@ -175,19 +175,19 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                 acts.append(Action(actor=str(pid), type=ActionType.USE_YELLOW_DOORS, data={"target_player": str(target_pid)}))
 
         # ===== B5: TABERNA =====
-        # ===== B5: TABERNA =====
-        # Disponible si actor está en habitación TABERNA, no ha usado esta ronda, y existen al menos 2 rooms distintos
+        # CANON: Solo habitaciones (NO pasillos), 2 distintas, 1x turno
         room_type = _get_special_room_type(state, p.room)
         is_in_taberna = room_type in ("TABERNA", "PEEK")
         taberna_used = state.taberna_used_this_turn.get(pid, False)
 
-        if is_in_taberna and not taberna_used and len(state.rooms) >= 2:
-            # Offrezamos 2 cuartos cualquiera distintos
-            room_ids = list(state.rooms.keys())
-            for i, room_a in enumerate(room_ids):
-                for room_b in room_ids[i+1:]:
-                    if room_a != room_b:
-                        acts.append(Action(actor=str(pid), type=ActionType.USE_TABERNA_ROOMS, data={"room_a": str(room_a), "room_b": str(room_b)}))
+        if is_in_taberna and not taberna_used:
+            # CANON: Solo habitaciones, NO pasillos
+            valid_rooms = [rid for rid in state.rooms.keys() if not is_corridor(rid)]
+            if len(valid_rooms) >= 2:
+                for i, room_a in enumerate(valid_rooms):
+                    for room_b in valid_rooms[i+1:]:
+                        if room_a != room_b:
+                            acts.append(Action(actor=str(pid), type=ActionType.USE_TABERNA_ROOMS, data={"room_a": str(room_a), "room_b": str(room_b)}))
 
         # ===== B6: ARMERÍA =====
         # Disponible si actor está en habitación ARMERÍA y armería no está destruida
@@ -200,11 +200,17 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         armory_destroyed = state.flags.get(f"ARMORY_DESTROYED_{p.room}", False)
 
         if is_in_armory and not armory_destroyed:
-            # DROP: si tiene objetos y hay espacio (< 2)
+            # CANON: Storage permite objetos, tesoros Y llaves (hasta 2 items total)
             current_storage_count = len(state.armory_storage.get(p.room, []))
+            
+            # DROP OBJECTS: si tiene objetos y hay espacio (< 2)
             if p.objects and current_storage_count < 2:
                 for obj in p.objects:
-                    acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": obj}))
+                    acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": obj, "item_type": "object"}))
+            
+            # DROP KEYS: si tiene llaves y hay espacio (< 2)
+            if p.keys > 0 and current_storage_count < 2:
+                acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": "KEY", "item_type": "key"}))
 
             # TAKE: si hay ítems en almacenamiento
             if current_storage_count > 0:

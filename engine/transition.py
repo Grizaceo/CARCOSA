@@ -16,6 +16,35 @@ from engine.effects.states_canonical import has_status
 from engine.effects.event_utils import add_status
 
 
+def apply_sanity_loss(s, player, amount: int, source: str = "GENERIC"):
+    """
+    Centralized sanity loss.
+    - Applies 'VANIDAD' effect: +1 loss if player has VANIDAD.
+    """
+    if amount <= 0:
+        return
+
+    # Check for VANIDAD (+1 damage)
+    if has_status(player, "VANIDAD"):
+        amount += 1
+
+    player.sanity -= amount
+
+
+def _get_effective_keys_total(s, cfg) -> int:
+    """
+    Retorna el total de llaves en juego (pool).
+    Base: 6.
+    Si Cámara Letal está revelada: 7.
+    """
+    base = int(getattr(cfg, "KEYS_TOTAL", 6))
+    # Buscar si existe cámara letal revelada
+    for room in s.rooms.values():
+        if room.special_card_id == "CAMARA_LETAL" and room.special_revealed:
+            return base + 1
+    return base
+
+
 def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[int] = None) -> int:
     """
     Determina el costo de acción de un ActionType.
@@ -42,9 +71,6 @@ def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[i
         ActionType.USE_TABERNA_ROOMS,
         ActionType.USE_ARMORY_DROP,
         ActionType.USE_ARMORY_TAKE,
-        ActionType.USE_CAMARA_LETAL_RITUAL,
-        ActionType.USE_CAPILLA,
-        ActionType.USE_SALON_BELLEZA,
     }
     
     if action_type in free_action_types:
@@ -61,6 +87,9 @@ def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[i
         ActionType.USE_HEALER_HEAL,
         ActionType.USE_BLUNT,
         ActionType.USE_PORTABLE_STAIRS,
+        ActionType.USE_CAMARA_LETAL_RITUAL,
+        ActionType.USE_CAPILLA,
+        ActionType.USE_SALON_BELLEZA,
     }
     
     if action_type in paid_action_types:
@@ -145,7 +174,7 @@ def _check_defeat(s, cfg) -> bool:
     # Condición 2: <= KEYS_LOSE_THRESHOLD llaves en juego
     # Solo aplica si se han destruido llaves (keys_destroyed > 0)
     if s.keys_destroyed > 0:
-        keys_total = getattr(cfg, "KEYS_TOTAL", 6)
+        keys_total = _get_effective_keys_total(s, cfg)
         keys_threshold = getattr(cfg, "KEYS_LOSE_THRESHOLD", 3)
         keys_available = keys_total - s.keys_destroyed
         
@@ -220,13 +249,39 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
     if s_str == "KEY":
         # Ganador de llave: cap por KEYS_TOTAL - keys_destroyed
         keys_in_hand = sum(pl.keys for pl in s.players.values())
-        keys_in_game = max(0, cfg.KEYS_TOTAL - s.keys_destroyed)
+        keys_in_game = max(0, _get_effective_keys_total(s, cfg) - s.keys_destroyed)
         if keys_in_hand < keys_in_game:
             p.keys += 1
         return
     
     if s_str.startswith("MONSTER:"):
         mid = s_str.split(":", 1)[1]
+
+        # CANON Fix #9: Tue-Tue Logic
+        # - Nunca spawna como monstruo
+        # - Efecto acumulativo:
+        #   1ª Revelación: -1 cordura (aplica Vanidad)
+        #   2ª Revelación: -2 cordura (aplica Vanidad)
+        #   3ª+ Revelación: FIJAR cordura en -5 (ignora Vanidad/protección, es set estricto)
+        if mid == "TUE_TUE":
+            s.tue_tue_revelations += 1
+            rev = s.tue_tue_revelations
+            
+            if rev == 1:
+                apply_sanity_loss(s, p, 1, source="TUE_TUE_1")
+            elif rev == 2:
+                apply_sanity_loss(s, p, 2, source="TUE_TUE_2")
+            else:
+                # Rev >= 3: Fix to -5
+                # Asumimos -5 es cfg.S_LOSS, hardcoded per canon request "directamente en -5"
+                p.sanity = -5
+                # Note: No trigger _apply_minus5_transitions here explicitly? 
+                # It will trigger at end of turn/step via check, OR we should rely on usual checks.
+                # Usually manual set requires manual check? 
+                # _apply_minus5_transitions checks condition p.sanity <= S_LOSS. So it will trigger there.
+            
+            return
+
         # Solo agregar si no hemos alcanzado el cap
         cap = int(getattr(cfg, "MAX_MONSTERS_ON_BOARD", 0) or 0)
         if cap <= 0 or len(s.monsters) < cap:
@@ -395,7 +450,7 @@ def _resolve_event(s: GameState, pid: PlayerId, event_id: str, cfg: Config, rng:
 def _event_reflejo_amarillo(s: GameState, pid: PlayerId, cfg: Config) -> None:
     """El reflejo de Amarillo: -2 cordura."""
     p = s.players[pid]
-    p.sanity -= 2
+    apply_sanity_loss(s, p, 2, source="REFLEJO_AMARILLO")
 
 
 def _event_espejo_amarillo(s: GameState, pid: PlayerId, cfg: Config) -> None:
@@ -417,7 +472,7 @@ def _event_hay_cadaver(s: GameState, pid: PlayerId, total: int, cfg: Config, rng
         # Pierdes turno: flag para saltar próximo turno
         s.flags[f"SKIP_TURN_{pid}"] = True
     elif total <= 4:
-        p.sanity -= 1
+        apply_sanity_loss(s, p, 1, source="HAY_CADAVER")
     else:  # total >= 5
         # Obtener objeto contundente
         p.objects.append("BLUNT")
@@ -435,7 +490,7 @@ def _event_comida_servida(s: GameState, pid: PlayerId, total: int, cfg: Config, 
     p = s.players[pid]
 
     if total == 0:
-        p.sanity -= 3
+        apply_sanity_loss(s, p, 3, source="COMIDA_SERVIDA")
     elif total <= 2:
         add_status(p, "SANGRADO", duration=2)
     elif total <= 6:
@@ -529,18 +584,14 @@ def _apply_minus5_transitions(s, cfg):
                 # Other players lose 1 sanity
                 for other_pid, other in s.players.items():
                     if other_pid != pid:
-                        other.sanity -= 1
+                        apply_sanity_loss(s, other, 1, source="MINUS_5_TRANSITION")
                 
                 # Mark as in -5 state
                 p.at_minus5 = True
-            
-            # Maintain 1 action per turn while at -5
-            s.remaining_actions[pid] = min(1, s.remaining_actions.get(pid, 2))
+            # CANON: NO reducir acciones por estar en -5 (eliminado)
         else:  # Above -5
             if p.at_minus5:  # Just left -5
-                # Restore to 2 actions
                 p.at_minus5 = False
-                s.remaining_actions[pid] = 2
 
 
 def _apply_status_effects_end_of_round(s: GameState) -> None:
@@ -709,6 +760,43 @@ def _attract_players_to_floor(s, floor: int):
         p.room = target
 
 
+def _expel_players_from_floor_except_fk(s, floor: int, fk_floor: Optional[int]):
+    """
+    CANON: Expel players but skip those on False King floor.
+    """
+    if floor == 1:
+        dest_floor = 2
+    elif floor == 2:
+        dest_floor = 1
+    elif floor == 3:
+        dest_floor = 2
+    else:
+        return
+    
+    stair_room = s.stairs.get(dest_floor)
+    if stair_room is None:
+        return
+    
+    for p in s.players.values():
+        if floor_of(p.room) == floor:
+            # CANON: Skip if on FK floor
+            if fk_floor is not None and floor_of(p.room) == fk_floor:
+                continue
+            p.room = stair_room
+
+
+def _attract_players_to_floor_except_fk(s, floor: int, fk_floor: Optional[int]):
+    """
+    CANON: Attract players but skip those on False King floor.
+    """
+    target = corridor_id(floor)
+    for p in s.players.values():
+        # CANON: Skip if on FK floor
+        if fk_floor is not None and floor_of(p.room) == fk_floor:
+            continue
+        p.room = target
+
+
 def _roll_stairs(s, rng: RNG):
     """Reroll stairs (1d4 per floor) at end of round."""
     from engine.board import room_from_d4, FLOORS
@@ -748,7 +836,7 @@ def _false_king_check(s, rng: RNG, cfg):
         pres = _presence_damage_for_round(s.round)
         for p in s.players.values():
             if floor_of(p.room) == fk_floor:
-                p.sanity -= pres
+                apply_sanity_loss(s, p, pres, source="FALSE_KING_PRESENCE")
 
 
 def _end_of_round_checks(s, cfg):
@@ -760,7 +848,7 @@ def _end_of_round_checks(s, cfg):
         s.outcome = "LOSE"
         return
 
-    keys_in_game = int(cfg.KEYS_TOTAL) - int(getattr(s, "keys_destroyed", 0))
+    keys_in_game = _get_effective_keys_total(s, cfg) - int(getattr(s, "keys_destroyed", 0))
     if keys_in_game <= int(cfg.KEYS_LOSE_THRESHOLD):
         s.game_over = True
         s.outcome = "LOSE"
@@ -904,24 +992,11 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         {"round": s.round, "phase": s.phase, "actor": action.actor, "type": action.type.value, "data": action.data}
     )
 
-    # -------------------------
-    # FASE JUGADOR
-    # -------------------------
     if s.phase == "PLAYER":
         pid = PlayerId(action.actor)
         p = s.players[pid]
 
-        # CORRECCIÓN B: Intento automático de escape al inicio del turno del jugador
-        # Se ejecuta solo una vez por turno (flag para evitar repeticiones)
-        escape_attempt_flag = f"ESCAPE_ATTEMPT_{pid}_ROUND_{s.round}"
-        if not s.flags.get(escape_attempt_flag, False):
-            s.flags[escape_attempt_flag] = True  # Marcar que ya se intentó en este turno
-
-            if _handle_trapped_escape_attempts(s, pid, rng):
-                # Jugador falló el escape: pierde las 2 acciones
-                s.remaining_actions[pid] = 0
-                # No procesar la acción actual, solo return
-                return _finalize_and_return(s, cfg)
+        # CANON: No hay auto-escape. Escape es manual via ESCAPE_TRAPPED action.
 
         if action.type == ActionType.MOVE:
             to = RoomId(action.data["to"])
@@ -953,7 +1028,10 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                 _resolve_card_minimal(s, pid, card, cfg, rng)
 
         elif action.type == ActionType.MEDITATE:
-            p.sanity = min(p.sanity + 1, p.sanity_max or p.sanity)
+            # CANON: +1 base, +2 si es pasillo (total +2)
+            from engine.board import is_corridor
+            heal = 2 if is_corridor(p.room) else 1
+            p.sanity = min(p.sanity + heal, p.sanity_max or p.sanity)
 
         elif action.type == ActionType.SACRIFICE:
             # A4: Sacrificio al caer a -5
@@ -964,17 +1042,22 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
         elif action.type == ActionType.ESCAPE_TRAPPED:
             # A5: Intento de liberarse del estado TRAPPED
-            # Requiere d6 >= 3 para éxito. Cuesta 1 acción en ambos casos.
+            # CANON: d6 >= 3 para éxito. Cuesta 1 acción (manejado por bloque general).
+            # Fallo: termina turno inmediatamente (remaining_actions = 0)
             d6 = rng.randint(1, 6)
             if d6 >= 3:
                 # Éxito: remover TRAPPED
                 p.statuses = [st for st in p.statuses if st.status_id != "TRAPPED"]
-                # Aplicar STUN al monstruo en la sala (si existe)
+                # Aplicar STUN al monstruo en la sala 1 turno
                 for monster in s.monsters:
                     if monster.room == p.room:
-                        # Flag para marcar que el monstruo está stunned esta ronda
-                        s.flags[f"STUN_{monster.monster_id}_ROUND_{s.round}"] = True
-            # else: Fracaso -> mantiene TRAPPED, se remueve solo por tick de ronda
+                        monster.stunned_remaining_rounds = 1
+                # Éxito: el costo de acción se descuenta en bloque general (paid_action_types)
+            else:
+                # Fracaso: termina turno inmediatamente (override del costo normal)
+                s.remaining_actions[pid] = 0
+                # Saltar bloque de descuento de acción general ya que forzamos 0
+                return _finalize_and_return(s, cfg)
 
         elif action.type == ActionType.END_TURN:
             s.remaining_actions[pid] = 0
@@ -985,7 +1068,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             # Compra: -2 sanidad, ofrece 2 cartas, elige 1
             # Supuesto: no consume acción (es acción de habitación)
             if p.sanity >= 2:
-                p.sanity -= 2
+                apply_sanity_loss(s, p, 2, source="MOTEMEY_BUY")
                 deck = s.motemey_deck
                 # Ofertar 2 cartas
                 if deck.remaining() >= 2:
@@ -1012,7 +1095,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         # CORRECCIÓN D: Motemey - Sistema de elección de 2 pasos
         elif action.type == ActionType.USE_MOTEMEY_BUY_START:
             # Paso 1: Cobra -2 cordura, extrae 2 cartas, guarda en pending_choice
-            p.sanity -= 2
+            apply_sanity_loss(s, p, 2, source="MOTEMEY_BUY")
             deck = s.motemey_deck
 
             if deck.remaining() >= 2:
@@ -1068,7 +1151,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                 # Actor teleportado a habitación del target
                 p.room = target.room
                 # Target pierde -1 sanidad
-                target.sanity -= 1
+                apply_sanity_loss(s, target, 1, source="YELLOW_DOORS")
                 # Reveal card en la habitación destino (on_enter)
                 card = _reveal_one(s, p.room)
                 if card is not None:
@@ -1076,33 +1159,61 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
         # ===== B5: TABERNA (mirar 2 habitaciones) =====
         elif action.type == ActionType.USE_TABERNA_ROOMS:
-            # Pagar 1 cordura, mirar 2 habitaciones sin extraer, no consume acción
-            # Flag once-per-turn
-            p.sanity -= 1
-            s.peek_used_this_turn[pid] = True
-            # No extrae, solo visualiza (no cambia el estado del juego aparte de sanidad)
+            # CANON: Pagar 1 cordura, mirar 2 habitaciones, registrar peek
+            apply_sanity_loss(s, p, 1, source="TABERNA")
+            s.taberna_used_this_turn[pid] = True
+            
+            # CANON Fix #7: Registrar peek para determinismo/replay
+            room_a = RoomId(action.data.get("room_a", ""))
+            room_b = RoomId(action.data.get("room_b", ""))
+            
+            # Obtener carta top de cada habitación (sin extraer)
+            from engine.boxes import active_deck_for_room
+            deck_a = active_deck_for_room(s, room_a)
+            deck_b = active_deck_for_room(s, room_b)
+            
+            card_a = deck_a.cards[deck_a.top] if deck_a and deck_a.remaining() > 0 else None
+            card_b = deck_b.cards[deck_b.top] if deck_b and deck_b.remaining() > 0 else None
+            
+            # Registrar en state para replay
+            s.last_peek = [(str(room_a), str(card_a)), (str(room_b), str(card_b))]
 
         # ===== B6: ARMERÍA (drop/take) =====
         elif action.type == ActionType.USE_ARMORY_DROP:
-            # Dejar objeto en armería (max 2)
+            # CANON: Dejar objeto O llave en armería (max 2 total)
             item_name = action.data.get("item_name", "")
-            if item_name in p.objects:
-                p.objects.remove(item_name)
-                armory_room = p.room
-                if armory_room not in s.armory_storage:
-                    s.armory_storage[armory_room] = []
-                if len(s.armory_storage[armory_room]) < 2:
-                    s.armory_storage[armory_room].append(item_name)
+            item_type = action.data.get("item_type", "object")
+            armory_room = p.room
+            
+            if armory_room not in s.armory_storage:
+                s.armory_storage[armory_room] = []
+            
+            if len(s.armory_storage[armory_room]) < 2:
+                if item_type == "key" and p.keys > 0:
+                    # DROP llave
+                    p.keys -= 1
+                    s.armory_storage[armory_room].append({"type": "key", "value": 1})
+                elif item_type == "object" and item_name in p.objects:
+                    # DROP objeto
+                    p.objects.remove(item_name)
+                    s.armory_storage[armory_room].append({"type": "object", "value": item_name})
 
         elif action.type == ActionType.USE_ARMORY_TAKE:
-            # Tomar objeto de armería
+            # CANON: Tomar item de armería (objeto o llave)
             armory_room = p.room
             if armory_room in s.armory_storage and len(s.armory_storage[armory_room]) > 0:
                 item = s.armory_storage[armory_room].pop()
-                # Intentar agregar
-                if not add_object(s, pid, item, discard_choice=action.data.get("discard_choice")):
-                    # Si falla, devolver a armería
-                    s.armory_storage[armory_room].append(item)
+                if isinstance(item, dict):
+                    if item.get("type") == "key":
+                        p.keys += item.get("value", 1)
+                    else:
+                        item_name = item.get("value", "")
+                        if not add_object(s, pid, item_name, discard_choice=action.data.get("discard_choice")):
+                            s.armory_storage[armory_room].append(item)
+                else:
+                    # Compatibilidad: item es string (objeto)
+                    if not add_object(s, pid, item, discard_choice=action.data.get("discard_choice")):
+                        s.armory_storage[armory_room].append(item)
 
         # ===== B1: CAPILLA (Sanación con riesgo) =====
         elif action.type == ActionType.USE_CAPILLA:
@@ -1167,9 +1278,9 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                             dmg = costs[i]
                             tp = s.players[target_pid]
                             if tp.sanity_max is not None:
-                                tp.sanity -= dmg
+                                apply_sanity_loss(s, tp, dmg, source="CAMARA_LETAL")
                             else:
-                                 tp.sanity -= dmg
+                                 apply_sanity_loss(s, tp, dmg, source="CAMARA_LETAL")
 
                         # Éxito del ritual
                         s.flags["CAMARA_LETAL_RITUAL_COMPLETED"] = True
@@ -1177,7 +1288,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                         # Otorgar llave
                         recipient = s.players[key_recipient]
                         keys_in_hand = sum(pl.keys for pl in s.players.values())
-                        if keys_in_hand < cfg.KEYS_TOTAL - s.keys_destroyed:
+                        if keys_in_hand < _get_effective_keys_total(s, cfg) - s.keys_destroyed:
                              recipient.keys += 1
                         
                         # Marcar ritual como completado
@@ -1210,7 +1321,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         # ===== FASE 1: ACCIONES DE ROLES =====
         elif action.type == ActionType.USE_HEALER_HEAL:
             # Healer: -1 propia -> +2 otros + Estado
-            p.sanity -= 1
+            apply_sanity_loss(s, p, 1, source="HEALER_ABILITY")
             status_choice = action.data.get("status_choice", "SANIDAD")
             
             others = [op for opid, op in s.players.items() if opid != pid]
@@ -1261,7 +1372,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
     if s.phase == "KING" and action.type == ActionType.KING_ENDROUND:
         # PASO 1: Casa (configurable) a todos
         for p in s.players.values():
-            p.sanity -= cfg.HOUSE_LOSS_PER_ROUND
+            apply_sanity_loss(s, p, cfg.HOUSE_LOSS_PER_ROUND, source="HOUSE_LOSS")
 
         # Verificar Vanish
         king_active = True
@@ -1291,27 +1402,36 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                 pres = _presence_damage_for_round(s.round)
                 for p in s.players.values():
                     if floor_of(p.room) == s.king_floor:
-                        p.sanity -= pres
+                        apply_sanity_loss(s, p, pres, source="KING_PRESENCE")
 
             # PASO 4: Efecto d6 aleatorio
+            # CANON: Falso Rey y jugadores en su piso son INMUNES a TODO d6
             d6 = rng.randint(1, 6)
             rng.last_king_d6 = d6  # Track for logging
+            fk_floor = _current_false_king_floor(s)
+            
             if d6 == 1:
-                # _shuffle_all_room_decks(s, rng) -> REPLACED by intra-floor rotation flag
+                # Rotación intra-floor (variante engine)
                 s.flags["king_d6_intra_rotation"] = True
             elif d6 == 2:
+                # -1 cordura (excepto piso FK)
                 for p in s.players.values():
-                    p.sanity -= 1
+                    if fk_floor is None or floor_of(p.room) != fk_floor:
+                        apply_sanity_loss(s, p, 1, source="KING_D6_2")
             elif d6 == 3:
                 s.limited_action_floor_next = s.king_floor
             elif d6 == 4:
-                _expel_players_from_floor(s, s.king_floor)
+                # Expulsar (excepto piso FK)
+                _expel_players_from_floor_except_fk(s, s.king_floor, fk_floor)
             elif d6 == 5:
-                _attract_players_to_floor(s, s.king_floor)
+                # Atraer (excepto piso FK)
+                _attract_players_to_floor_except_fk(s, s.king_floor, fk_floor)
             elif d6 == 6:
+                # Descartar objeto (excepto piso FK)
                 for p in s.players.values():
-                    if p.objects:
-                        p.objects.pop()
+                    if fk_floor is None or floor_of(p.room) != fk_floor:
+                        if p.objects:
+                            p.objects.pop()
 
         # PASO 4.5: Aplicar efectos de estados al final de ronda (ANTES de tick)
         _apply_status_effects_end_of_round(s)

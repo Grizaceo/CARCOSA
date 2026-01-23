@@ -20,7 +20,7 @@ Setup: Se eligen 3 habitaciones del pool, 1 por piso, ubicación por d4→R1..R4
 | **Motemey** | ❌ No | Compra: -2 cordura, ofrece 2 cartas, elige 1 |
 | **Armería** | ❌ No | Adquisición de equipo |
 | **Puertas de Amarillo** | ✅ Sí | Transporte entre pisos |
-| **Cámara Letal** | ✅ Sí | 1 acción por jugador participante |
+| **Cámara Letal** | ✅ Sí | 1 acción por jugador. Éxito: otorga 7ª Llave al pool. |
 | **Salón de Belleza** | ✅ Sí | Aplica estado Vanidad |
 | **Monasterio a la Locura** | ✅ Sí | Mecánica especial |
 
@@ -70,7 +70,7 @@ Setup: Se eligen 3 habitaciones del pool, 1 por piso, ubicación por d4→R1..R4
 ### Estados por Efectos (no tienen carta propia)
 | Estado | Origen |
 |--------|--------|
-| **Vanidad** | Salón de Belleza |
+| **Vanidad** | Salón de Belleza (+1 daño sufrido por cordura) |
 | **Iluminado** | Capilla |
 | **Stun** | Contundente, liberación de trap, Reina Helada |
 | **Trapped** | Araña, Viejo del Saco |
@@ -98,6 +98,13 @@ Setup: Se eligen 3 habitaciones del pool, 1 por piso, ubicación por d4→R1..R4
 - **Revelación**: Está barajada al azar en los mazos de habitación.
 - Al ser revelada, se coloca en el **pasillo del piso** donde fue revelada.
 - **Efecto inmediato (solo ronda de revelación)**:
+
+### Tue-Tue (El Pájaro de la Locura)
+- **Nunca spawna como monstruo** en el tablero. Siempre es un evento volátil.
+- **Mecánica Acumulativa**:
+  1. **1ª Revelación**: -1 cordura (-2 con Vanidad).
+  2. **2ª Revelación**: -2 cordura (-3 con Vanidad).
+  3. **3ª+ Revelación**: **Fija** la cordura en -5 (ignora Vanidad/protección).
   - Jugadores en ese piso quedan **STUN hasta fin de ronda**.
 - **Efecto persistente (rondas siguientes)**:
   - Jugadores en el piso de la Reina Helada solo pueden realizar **1 acción**.
