@@ -35,8 +35,19 @@ class ActionType(str, Enum):
     USE_ARMORY_DROP = "USE_ARMORY_DROP"
     USE_ARMORY_TAKE = "USE_ARMORY_TAKE"
 
+    # B7: Salón de Belleza
+    USE_SALON_BELLEZA = "USE_SALON_BELLEZA"
+
+    # B1: Capilla (Monasterio)
+    USE_CAPILLA = "USE_CAPILLA"
+
     # B3: Cámara Letal
     USE_CAMARA_LETAL_RITUAL = "USE_CAMARA_LETAL_RITUAL"
+    
+    # FASE 1: Acciones de roles
+    USE_HEALER_HEAL = "USE_HEALER_HEAL"  # Healer: -1 propia → +2 otros + estado
+    USE_BLUNT = "USE_BLUNT"  # Usar contundente (Brawler gratis)
+    USE_PORTABLE_STAIRS = "USE_PORTABLE_STAIRS"  # Escalera portátil: ±1 piso
 
 
 
