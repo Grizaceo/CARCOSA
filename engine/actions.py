@@ -44,6 +44,11 @@ class ActionType(str, Enum):
     # B3: Cámara Letal
     USE_CAMARA_LETAL_RITUAL = "USE_CAMARA_LETAL_RITUAL"
     
+
+    # FASE 4: Libro Chambers + Cuentos
+    USE_ATTACH_TALE = "USE_ATTACH_TALE"
+    USE_READ_YELLOW_SIGN = "USE_READ_YELLOW_SIGN" # Posible uso futuro
+
     # FASE 1: Acciones de roles
     USE_HEALER_HEAL = "USE_HEALER_HEAL"  # Healer: -1 propia → +2 otros + estado
     USE_BLUNT = "USE_BLUNT"  # Usar contundente (Brawler gratis)
