@@ -33,6 +33,11 @@ class PlayerState:
 
     # CORRECCIÓN: este flag ahora significa "actualmente está en -5 y ya se aplicaron efectos de entrar a -5"
     at_minus5: bool = False
+    
+    # FASE 1: Sistema de roles
+    role_id: str = "DEFAULT"  # Rol del personaje (HEALER, TANK, etc.)
+    double_roll_used_this_turn: bool = False  # Para High Roller
+    free_move_used_this_turn: bool = False  # Para Scout
 
     def __post_init__(self) -> None:
         if self.sanity_max is None:
@@ -181,6 +186,20 @@ class GameState:
 
     # CORRECCIÓN: llaves destruidas (para "llaves en juego" = KEYS_TOTAL - keys_destroyed)
     keys_destroyed: int = 0
+    
+    # FASE 2: Pozo de descarte común (objetos, estados expirados, etc.)
+    discard_pile: List[str] = field(default_factory=list)
+    
+    # FASE 4: Libro de Chambers y Vanish del Rey
+    chambers_book_holder: Optional[PlayerId] = None  # Quién tiene el Libro
+    chambers_tales_attached: int = 0  # Cuentos unidos (0-4)
+    king_vanished_turns: int = 0  # Turnos restantes de vanish del Rey
+    
+    # Estado de Habitaciones Especiales
+    salon_belleza_uses: int = 0  # Contador de activaciones del Salón (3er uso -> Vanidad)
+    
+    # Anillo activado (para efecto de -2 cordura/turno)
+    ring_activated_by: Optional[PlayerId] = None
 
     def __post_init__(self) -> None:
         ensure_canonical_rooms(self)
@@ -196,7 +215,12 @@ class GameState:
 
         if not self.remaining_actions:
             for pid in self.turn_order:
-                self.remaining_actions[pid] = 2
+                base_actions = 2
+                # Scout tiene +1 acción adicional
+                player = self.players.get(pid)
+                if player and getattr(player, "role_id", "") == "SCOUT":
+                    base_actions = 3
+                self.remaining_actions[pid] = base_actions
 
         if not self.stairs:
             for f in (1, 2, 3):

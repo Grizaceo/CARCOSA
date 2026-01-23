@@ -247,3 +247,4 @@ Decisiones definitivas:
 - [ ] Anillo: tesoro + soulbound.
 - [ ] Fórmula Falso Rey documentada y testeada.
 - [ ] Tests: integración con `step()` + smoke multi-seed + serialización/replay.
+ 

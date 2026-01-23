@@ -225,10 +225,30 @@ STATE_ALIASES = {
     "REDUCED_ACTION": "ACCION_REDUCIDA",
 }
 
+# Mapa inverso: dado un ID canónico, lista todos los aliases que apuntan a él
+REVERSE_ALIASES = {}
+for alias, canonical in STATE_ALIASES.items():
+    if canonical not in REVERSE_ALIASES:
+        REVERSE_ALIASES[canonical] = set()
+    REVERSE_ALIASES[canonical].add(alias)
+
 
 def normalize_state_id(state_id: str) -> str:
     """Normaliza un ID de estado a su forma canónica."""
     return STATE_ALIASES.get(state_id, state_id)
+
+
+def get_all_ids_for_state(state_id: str) -> set:
+    """
+    Obtiene todos los IDs posibles para un estado (canónico + aliases).
+    Útil para buscar un estado independiente de cómo fue almacenado.
+    """
+    normalized = normalize_state_id(state_id)
+    ids = {normalized, state_id}
+    # Agregar todos los aliases que apuntan a este ID canónico
+    if normalized in REVERSE_ALIASES:
+        ids.update(REVERSE_ALIASES[normalized])
+    return ids
 
 
 # ==============================================================================
@@ -238,10 +258,10 @@ def normalize_state_id(state_id: str) -> str:
 def has_status(player, state_id: str) -> bool:
     """
     Verifica si un jugador tiene un estado específico.
-    Acepta IDs canónicos o aliases.
+    Acepta IDs canónicos o aliases. Busca por todas las formas posibles.
     """
-    normalized = normalize_state_id(state_id)
-    return any(st.status_id == normalized or st.status_id == state_id for st in player.statuses)
+    valid_ids = get_all_ids_for_state(state_id)
+    return any(st.status_id in valid_ids for st in player.statuses)
 
 
 def get_status(player, state_id: str):
@@ -249,9 +269,9 @@ def get_status(player, state_id: str):
     Obtiene la instancia de estado de un jugador.
     Retorna None si no tiene el estado.
     """
-    normalized = normalize_state_id(state_id)
+    valid_ids = get_all_ids_for_state(state_id)
     for st in player.statuses:
-        if st.status_id == normalized or st.status_id == state_id:
+        if st.status_id in valid_ids:
             return st
     return None
 

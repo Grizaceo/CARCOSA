@@ -117,7 +117,19 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         # MEDITATE no se puede en pasillo del piso del Rey.
         # Nota: VANIDAD no bloquea MEDITATE, solo el Salón de Belleza
-        if not (is_corridor(p.room) and floor_of(p.room) == state.king_floor):
+        # TANK: Otros no pueden meditar en la habitación del Tank
+        can_meditate = True
+        if is_corridor(p.room) and floor_of(p.room) == state.king_floor:
+            can_meditate = False
+        else:
+            # Verificar si hay un Tank en la habitación
+            for other_pid, other in state.players.items():
+                if other_pid != pid and other.room == p.room:
+                    if getattr(other, "role_id", "") == "TANK":
+                        can_meditate = False  # Tank bloquea meditación de otros
+                        break
+        
+        if can_meditate:
             acts.append(Action(actor=str(pid), type=ActionType.MEDITATE, data={}))
 
         # SACRIFICE: solo si status "SCARED" o sanity <= S_LOSS (si la regla lo permite)
@@ -151,8 +163,11 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                     acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_SELL, data={"item_name": item}))
 
         # ===== B4: PUERTAS AMARILLO =====
+        # ===== B4: PUERTAS AMARILLO =====
         # Disponible si actor está en habitación PUERTAS y existe al menos otro jugador
-        is_in_puertas = _get_special_room_type(state, p.room) == "PUERTAS"
+        # Usar normalización o ID canónico
+        room_type = _get_special_room_type(state, p.room)
+        is_in_puertas = room_type in ("PUERTAS", "PUERTAS_AMARILLO")
         other_players = [p2_id for p2_id in state.players if p2_id != pid]
 
         if is_in_puertas and other_players:
@@ -160,8 +175,10 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                 acts.append(Action(actor=str(pid), type=ActionType.USE_YELLOW_DOORS, data={"target_player": str(target_pid)}))
 
         # ===== B5: TABERNA =====
+        # ===== B5: TABERNA =====
         # Disponible si actor está en habitación TABERNA, no ha usado esta ronda, y existen al menos 2 rooms distintos
-        is_in_taberna = _get_special_room_type(state, p.room) == "TABERNA"
+        room_type = _get_special_room_type(state, p.room)
+        is_in_taberna = room_type in ("TABERNA", "PEEK")
         taberna_used = state.taberna_used_this_turn.get(pid, False)
 
         if is_in_taberna and not taberna_used and len(state.rooms) >= 2:
@@ -174,7 +191,10 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         # ===== B6: ARMERÍA =====
         # Disponible si actor está en habitación ARMERÍA y armería no está destruida
-        is_in_armory = _get_special_room_type(state, p.room) == "ARMERY"
+        # ===== B6: ARMERÍA =====
+        # Disponible si actor está en habitación ARMERÍA y armería no está destruida
+        room_type = _get_special_room_type(state, p.room)
+        is_in_armory = room_type in ("ARMERY", "ARMERIA")
         # La destrucción ya está manejada por special_destroyed en _get_special_room_type
         # pero mantenemos compatibilidad con flag por si acaso
         armory_destroyed = state.flags.get(f"ARMORY_DESTROYED_{p.room}", False)
@@ -219,6 +239,39 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                         type=ActionType.USE_CAMARA_LETAL_RITUAL,
                         data={}
                     ))
+
+        # ===== B1: MONASTERIO DE LOCURA (Capilla) =====
+        if p.room in state.rooms:
+            room_state = state.rooms[p.room]
+            is_monasterio = (room_state.special_card_id == "MONASTERIO_LOCURA")
+            room_destroyed = room_state.special_destroyed
+            if is_monasterio and not room_destroyed:
+                acts.append(Action(actor=str(pid), type=ActionType.USE_CAPILLA, data={}))
+
+        # ===== B7: SALÓN DE BELLEZA =====
+        if p.room in state.rooms:
+            room_state = state.rooms[p.room]
+            is_salon = (room_state.special_card_id == "SALON_BELLEZA")
+            room_destroyed = room_state.special_destroyed
+            if is_salon and not room_destroyed:
+                # Si tiene VANIDAD ya no puede usarlo (canon check)
+                from engine.effects.states_canonical import has_status
+                if not has_status(p, "VANIDAD"):
+                    acts.append(Action(actor=str(pid), type=ActionType.USE_SALON_BELLEZA, data={}))
+
+        # ===== FASE 1: Habilidad del Healer =====
+        # Healer puede sacrificar 1 cordura propia para:
+        # - Dar +2 cordura a OTROS
+        # - Obtener ILUMINADO o SANIDAD (a elección)
+        # Requiere: cordura >= 1, al menos otro jugador
+        if getattr(p, "role_id", "") == "HEALER" and p.sanity >= 1:
+            other_players = [pid2 for pid2 in state.players if pid2 != pid]
+            if len(other_players) > 0:
+                acts.append(Action(
+                    actor=str(pid),
+                    type=ActionType.USE_HEALER_HEAL,
+                    data={}  # La elección de estado se hace en el handler
+                ))
 
         acts.append(Action(actor=str(pid), type=ActionType.END_TURN, data={}))
         return acts
