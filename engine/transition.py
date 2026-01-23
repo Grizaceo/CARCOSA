@@ -741,7 +741,7 @@ def _false_king_check(s, rng: RNG, cfg):
 
     rounds_since = max(0, s.round - s.false_king_round_appeared)
     sanity_max = holder.sanity_max if holder.sanity_max is not None else holder.sanity
-    threshold = int(sanity_max) + 2 + int(rounds_since)
+    threshold = int(sanity_max) + 1 + int(rounds_since)
     total = rng.randint(1, 6) + max(0, int(holder.sanity))
 
     if total <= threshold:
