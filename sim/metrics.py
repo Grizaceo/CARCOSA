@@ -42,8 +42,8 @@ def transition_record(
 ) -> Dict[str, Any]:
     f0 = compute_features(state, cfg)
     f1 = compute_features(next_state, cfg)
-    T0 = tension_T(state, cfg)
-    T1 = tension_T(next_state, cfg)
+    T0 = tension_T(state, cfg, features=f0)
+    T1 = tension_T(next_state, cfg, features=f1)
 
     # Prepare action_data, including d6 if present
     action_data = action.get("data", {}).copy()
@@ -66,9 +66,9 @@ def transition_record(
         "summary_pre": _summary(state, cfg),
         "summary_post": _summary(next_state, cfg),
 
-        "king_utility_pre": king_utility(state, cfg),
-        "king_utility_post": king_utility(next_state, cfg),
-        "king_reward": king_utility(next_state, cfg) - king_utility(state, cfg),
+        "king_utility_pre": king_utility(state, cfg, features=f0),
+        "king_utility_post": king_utility(next_state, cfg, features=f1),
+        "king_reward": king_utility(next_state, cfg, features=f1) - king_utility(state, cfg, features=f0),
 
         "done": bool(next_state.game_over),
         "outcome": next_state.outcome,
