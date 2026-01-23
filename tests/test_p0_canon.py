@@ -416,59 +416,6 @@ class TestP04MinusFiveEvent:
         _apply_minus5_transitions(s, cfg)
         assert s.players[PlayerId("p2")].sanity == p2_sanity_after_first
     
-    def test_one_action_while_at_minus5(self):
-        """Player at -5 has only 1 action per turn."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId
-        from engine.config import Config
-        from engine.transition import _apply_minus5_transitions
-        from engine.board import room_id
-        
-        cfg = Config()
-        s = GameState(
-            round=1,
-            players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=-5,
-                    room=room_id(1, 1),
-                    at_minus5=False
-                )
-            },
-            remaining_actions={PlayerId("p1"): 2}
-        )
-        
-        # Apply transition
-        _apply_minus5_transitions(s, cfg)
-        
-        # Should be capped to 1 action
-        assert s.remaining_actions[PlayerId("p1")] == 1
-    
-    def test_restore_to_two_actions_when_leaving_minus5(self):
-        """Player leaving -5 (to -4) restores to 2 actions."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId
-        from engine.config import Config
-        from engine.transition import _apply_minus5_transitions
-        from engine.board import room_id
-        
-        cfg = Config()
-        s = GameState(
-            round=1,
-            players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=-4,  # Above -5
-                    room=room_id(1, 1),
-                    at_minus5=True  # Was at -5, now leaving
-                )
-            },
-            remaining_actions={PlayerId("p1"): 1}
-        )
-        
-        # Apply transition
-        _apply_minus5_transitions(s, cfg)
-        
-        # Should restore to 2 actions and clear flag
-        assert s.remaining_actions[PlayerId("p1")] == 2
-        assert s.players[PlayerId("p1")].at_minus5 == False
+    # CANON UPDATE: No reduction of actions at -5
+    # Tests test_one_action_while_at_minus5 and test_restore_to_two_actions_when_leaving_minus5
+    # have been removed as they test deprecated behavior.

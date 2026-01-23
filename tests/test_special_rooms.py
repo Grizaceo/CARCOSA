@@ -138,8 +138,8 @@ def test_taberna_peek():
     action = Action(actor="P1", type=ActionType.USE_TABERNA_ROOMS, data={"room_a": "F1_R2", "room_b": "F1_R3"})
     s = step(s, action, RNG(0), Config())
     
-    assert s.peek_used_this_turn["P1"]
-    assert s.players["P1"].sanity == 2  # Costo 1 check (3 -> 2)
+    assert s.taberna_used_this_turn[PlayerId("P1")]
+    assert s.players[PlayerId("P1")].sanity == 2  # Costo 1 check (3 -> 2)
 
 def test_puertas_amarillas_teleport():
     """B4: Puertas Amarillas - Teleport a target, target -1 sanity."""

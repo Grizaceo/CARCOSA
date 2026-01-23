@@ -246,10 +246,10 @@ def test_ritual_only_once_per_game():
     assert len(ritual_actions) == 0, "Ritual no debe estar disponible después de completarse"
 
 
-def test_ritual_is_free_action():
-    """Ritual NO consume acción (free action)"""
+def test_ritual_is_paid_action():
+    """Ritual CONSUME acción (paid action) - CANON"""
     from engine.transition import _consume_action_if_needed
 
-    # Verificar que USE_CAMARA_LETAL_RITUAL es una free action
+    # Verificar que USE_CAMARA_LETAL_RITUAL es una paid action
     cost = _consume_action_if_needed(ActionType.USE_CAMARA_LETAL_RITUAL)
-    assert cost == 0, "Ritual debe ser una free action (costo 0)"
+    assert cost == 1, "Ritual debe ser una paid action (costo 1) según canon"
