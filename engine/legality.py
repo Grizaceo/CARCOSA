@@ -302,6 +302,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         acts.append(Action(actor=str(pid), type=ActionType.END_TURN, data={}))
         return acts
+        return acts
 
     if state.phase == "KING":
         if actor != "KING":
