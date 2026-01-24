@@ -16,6 +16,8 @@ class ActionType(str, Enum):
 
     # Mechanic specific actions
     SACRIFICE = "SACRIFICE"
+    # Action to accept consequences of -5 (continue without sacrificing)
+    ACCEPT_SACRIFICE = "ACCEPT_SACRIFICE"
     ESCAPE_TRAPPED = "ESCAPE_TRAPPED"
     
     # B2: Motemey
