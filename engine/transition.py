@@ -251,10 +251,28 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
     
     if s_str == "KEY":
         # Ganador de llave: cap por KEYS_TOTAL - keys_destroyed
+        # Y cap por capacidad de rol (Canon)
         keys_in_hand = sum(pl.keys for pl in s.players.values())
         keys_in_game = max(0, _get_effective_keys_total(s, cfg) - s.keys_destroyed)
-        if keys_in_hand < keys_in_game:
+        
+        # Check global limit
+        if keys_in_hand >= keys_in_game:
+            return  # No more keys available in pool (weird edge case for card)
+
+        # Check Role Capacity
+        from engine.roles import get_key_slots
+        role_capacity = get_key_slots(getattr(p, "role_id", ""))
+        
+        if p.keys < role_capacity:
             p.keys += 1
+        else:
+            # Capacity full: Return valid Key card to bottom of the deck
+            # Find deck for current room
+            from engine.boxes import active_deck_for_room
+            deck = active_deck_for_room(s, p.room)
+            if deck is not None:
+                # Put EXACTLY "KEY" back
+                deck.put_bottom(card)  # card is "KEY" or CardId("KEY")
         return
     
     if s_str.startswith("MONSTER:"):
@@ -1191,10 +1209,28 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                     rejected = cards[1 - chosen_idx]
 
                     # Elegida al inventario
-                    # Usar add_object para respetar límites
-                    if not add_object(s, pid, str(chosen), discard_choice=action.data.get("discard_choice")):
-                        # Fallo al agregar. Deberíamos revertir o manejar error.
-                        pass
+                    chosen_str = str(chosen)
+                    
+                    if chosen_str == "KEY":
+                        # Logic for Key Logic in Motemey Buy
+                        from engine.roles import get_key_slots
+                        role_limit = get_key_slots(getattr(p, "role_id", ""))
+                        
+                        # Can we take it?
+                        # User Rule: if full, must discard old. For keys, swapping key for key = no net change.
+                        # But we paid sanity.
+                        if p.keys < role_limit:
+                            p.keys += 1
+                        else:
+                            # Full of keys. Discard one to take one?
+                            # Effectively p.keys remains same.
+                            pass
+                    else:
+                        # Logic for Objects
+                        # Usar add_object para respetar límites
+                        if not add_object(s, pid, chosen_str, discard_choice=action.data.get("discard_choice")):
+                            # Fallo al agregar. Deberíamos revertir o manejar error.
+                            pass
 
                     # Rechazada vuelve al fondo del mazo de Motemey
                     s.motemey_deck.put_bottom(rejected)
@@ -1511,6 +1547,10 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
                         if p.objects:
                             p.objects.pop()
 
+
+        # PASO 4.4: FASE DE MONSTRUOS (Ataque/Stun)
+        _monster_phase(s, cfg)
+
         # PASO 4.5: Aplicar efectos de estados al final de ronda (ANTES de tick)
         _apply_status_effects_end_of_round(s)
 
@@ -1546,4 +1586,23 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
         return _finalize_and_return(s, cfg)
 
-    raise ValueError(f"Invalid phase/action combination: phase={s.phase}, action={action}")
+
+def _monster_phase(s: GameState, cfg: Config) -> None:
+    """
+    Fase de Monstruos (Fin de Ronda):
+    - Monstruos STUNNED: Disminuyen contador de stun (no atacan).
+    - Monstruos ACTIVOS: Atacan (1 daño cordura) a todos los jugadores en su habitación.
+    """
+    for m in s.monsters:
+        if m.stunned_remaining_rounds > 0:
+            m.stunned_remaining_rounds -= 1
+        else:
+            # Attack Logic: 1 Sanity Damage to all players in same room
+            room_players = [p for p in s.players.values() if p.room == m.room]
+            for p in room_players:
+                 # Check for immunities or modifiers here if needed
+                 apply_sanity_loss(s, p, 1, source=f"MONSTER_ATTACK_{m.monster_id}")
+
+    # Notar: El decremento de stun se hizo aquí. 
+    # Si statuses de jugadores decrementan después, está bien.
+
