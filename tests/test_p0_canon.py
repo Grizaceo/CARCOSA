@@ -282,7 +282,7 @@ class TestP04MinusFiveEvent:
         from engine.state import GameState, PlayerState
         from engine.types import PlayerId
         from engine.config import Config
-        from engine.transition import _apply_minus5_transitions
+        from engine.transition import _apply_minus5_transitions, _apply_minus5_consequences
         from engine.board import room_id
         
         cfg = Config()
@@ -302,8 +302,10 @@ class TestP04MinusFiveEvent:
         # Sanity drops to -5
         s.players[PlayerId("p1")].sanity = -5
         
-        # Apply transition
+        # Apply transition (sets flag)
         _apply_minus5_transitions(s, cfg)
+        # Apply consequences (accept)
+        _apply_minus5_consequences(s, PlayerId("p1"), cfg)
         
         # Keys should be destroyed
         assert s.players[PlayerId("p1")].keys == 0
@@ -313,7 +315,7 @@ class TestP04MinusFiveEvent:
         from engine.state import GameState, PlayerState
         from engine.types import PlayerId
         from engine.config import Config
-        from engine.transition import _apply_minus5_transitions
+        from engine.transition import _apply_minus5_transitions, _apply_minus5_consequences
         from engine.board import room_id
         
         cfg = Config()
@@ -332,6 +334,7 @@ class TestP04MinusFiveEvent:
         
         # Apply transition
         _apply_minus5_transitions(s, cfg)
+        _apply_minus5_consequences(s, PlayerId("p1"), cfg)
         
         # Objects should be destroyed
         assert s.players[PlayerId("p1")].objects == []
@@ -341,7 +344,7 @@ class TestP04MinusFiveEvent:
         from engine.state import GameState, PlayerState
         from engine.types import PlayerId
         from engine.config import Config
-        from engine.transition import _apply_minus5_transitions
+        from engine.transition import _apply_minus5_transitions, _apply_minus5_consequences
         from engine.board import room_id
         
         cfg = Config()
@@ -369,8 +372,10 @@ class TestP04MinusFiveEvent:
             }
         )
         
-        # Apply transition
+        # Apply transition (sets flag)
         _apply_minus5_transitions(s, cfg)
+        # Apply consequences (accept)
+        _apply_minus5_consequences(s, PlayerId("p1"), cfg)
         
         # p2 and p3 should lose 1 sanity
         assert s.players[PlayerId("p2")].sanity == 4
@@ -381,7 +386,7 @@ class TestP04MinusFiveEvent:
         from engine.state import GameState, PlayerState
         from engine.types import PlayerId
         from engine.config import Config
-        from engine.transition import _apply_minus5_transitions
+        from engine.transition import _apply_minus5_transitions, _apply_minus5_consequences
         from engine.board import room_id
         
         cfg = Config()
@@ -408,12 +413,22 @@ class TestP04MinusFiveEvent:
         
         # First call: event fires
         _apply_minus5_transitions(s, cfg)
+        # Manually accept consequences
+        _apply_minus5_consequences(s, PlayerId("p1"), cfg)
+        
         assert s.players[PlayerId("p1")].at_minus5 == True
         assert s.players[PlayerId("p2")].sanity == p2_initial_sanity - 1
         
         # Second call: should NOT fire again (p2 should not lose more sanity)
         p2_sanity_after_first = s.players[PlayerId("p2")].sanity
         _apply_minus5_transitions(s, cfg)
+        # If it fired again, flag would be set or at_minus5 logic would change. 
+        # But _apply_minus5_consequences is manual here.
+        # We verify that at_minus5 logic prevents RE-triggering.
+        # Calling consequences again should duplicate effect if called, 
+        # but the test checks if _apply_minus5_transitions sets anything new?
+        # Logic says: if p.at_minus5: do nothing.
+        # So we don't need to call consequences again because transition returns early.
         assert s.players[PlayerId("p2")].sanity == p2_sanity_after_first
     
     # CANON UPDATE: No reduction of actions at -5

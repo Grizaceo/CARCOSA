@@ -15,6 +15,9 @@ from engine.inventory import consume_object, add_object
 from engine.effects.states_canonical import has_status
 from engine.effects.event_utils import add_status
 
+# Flag constant for sacrifice interrupt
+PENDING_SACRIFICE_FLAG = "PENDING_SACRIFICE_CHECK"
+
 
 def apply_sanity_loss(s, player, amount: int, source: str = "GENERIC"):
     """
@@ -294,7 +297,14 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
             
             # REINA HELADA: Al ser revelada, bloquea movimiento de jugadores en el piso
             # Solo afecta a jugadores presentes en ese momento (no a los que entren después)
-            if mid in ("REINA_HELADA", "ICE_QUEEN", "FROZEN_QUEEN"):
+            if mid == "REINA_HELADA" or mid == "ICE_QUEEN" or mid == "FROZEN_QUEEN":
+                # REINA HELADA: Aparece en el pasillo del piso (Canon P0)
+                # Correction: Force room to corridor
+                from engine.board import corridor_id
+                monster_room = corridor_id(floor_of(p.room))
+                # Update the MonsterState we just appended (it was appended with p.room)
+                s.monsters[-1].room = monster_room
+                
                 monster_floor = floor_of(monster_room)
                 # Agregar a movement_blocked_players todos los jugadores en este piso
                 for other_pid, other in s.players.items():
@@ -305,7 +315,14 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
     
     if s_str.startswith("STATE:"):
         sid = s_str.split(":", 1)[1]
-        p.statuses.append(StatusInstance(status_id=sid, remaining_rounds=2))
+        
+        # CANON Fix #B: Duración de TRAPPED = 3 turnos
+        if sid in ("TRAPPED", "TRAPPED_SPIDER"):
+            duration = 3
+        else:
+            duration = 2
+            
+        p.statuses.append(StatusInstance(status_id=sid, remaining_rounds=duration))
         return
     
     if s_str == "CROWN":
@@ -388,12 +405,13 @@ def _on_monster_enters_room(s: GameState, room: RoomId) -> None:
         room_state.special_destroyed = True
 
         # ESPECÍFICO: Armería vacía su almacenamiento
-        if room_state.special_card_id == "ARMERY":
+        # CANON Fix #D: Unificar IDs (ARMERY/ARMERIA)
+        if room_state.special_card_id in ("ARMERY", "ARMERIA"):
             if room in s.armory_storage:
                 s.armory_storage[room] = []
 
         # LEGACY: Mantener flag para compatibilidad con tests existentes
-        if room_state.special_card_id == "ARMERY":
+        if room_state.special_card_id in ("ARMERY", "ARMERIA"):
             s.flags[f"ARMORY_DESTROYED_{room}"] = True
 
 
@@ -576,22 +594,37 @@ def _apply_minus5_transitions(s, cfg):
     for pid, p in s.players.items():
         if p.sanity <= cfg.S_LOSS:  # At or below -5
             if not p.at_minus5:  # Just crossed into -5
-                # Destroy keys and objects, track globally
-                s.keys_destroyed += p.keys
-                p.keys = 0
-                p.objects = []
+                # CANON Fix #A: Interrupt check
+                # Check directly in step() via flag.
+                # If flag is already set, we are waiting for user.
+                # If not set, set it now.
+                if s.flags.get(PENDING_SACRIFICE_FLAG) != str(pid):
+                     s.flags[PENDING_SACRIFICE_FLAG] = str(pid)
                 
-                # Other players lose 1 sanity
-                for other_pid, other in s.players.items():
-                    if other_pid != pid:
-                        apply_sanity_loss(s, other, 1, source="MINUS_5_TRANSITION")
-                
-                # Mark as in -5 state
-                p.at_minus5 = True
+                # Do NOT apply effects here. They are applied in step() upon ACCEPT_SACRIFICE.
+                # Effects moved to _apply_minus5_consequences(s, pid, cfg)
+            
             # CANON: NO reducir acciones por estar en -5 (eliminado)
         else:  # Above -5
             if p.at_minus5:  # Just left -5
                 p.at_minus5 = False
+
+
+def _apply_minus5_consequences(s, pid, cfg):
+    """Aux helper to apply the actual consequences of being at -5."""
+    p = s.players[pid]
+    # Destroy keys and objects, track globally
+    s.keys_destroyed += p.keys
+    p.keys = 0
+    p.objects = []
+    
+    # Other players lose 1 sanity
+    for other_pid, other in s.players.items():
+        if other_pid != pid:
+            apply_sanity_loss(s, other, 1, source="MINUS_5_TRANSITION")
+    
+    # Mark as in -5 state (consequences accepted)
+    p.at_minus5 = True
 
 
 def _apply_status_effects_end_of_round(s: GameState) -> None:
@@ -918,8 +951,14 @@ def _start_new_round(s, cfg):
     s.turn_pos = s.starter_pos
     s.phase = "PLAYER"
 
-    # B5: Reset de Peek al inicio de nueva ronda
+    # B5: Reset de Peek y Taberna al inicio de nueva ronda
+    # CANON Fix #C: Taberna reset on new round (or turn?)
+    # User said: "Si la regla es 1 vez por ronda: reset en _start_new_round()."
+    # Assuming once per round for now as it's cleaner, unless turn requested.
+    # User requested: "1 vez por turno de jugador" or "1 vez por ronda".
+    # Implementation: reset both here.
     s.peek_used_this_turn = {}
+    s.taberna_used_this_turn = {}
     
     # REINA HELADA: Limpiar bloqueo de movimiento (solo dura el turno de entrada)
     s.movement_blocked_players = []
@@ -956,8 +995,10 @@ def _start_new_round(s, cfg):
         if s.limited_action_floor_next is not None:
             if floor_of(p.room) == s.limited_action_floor_next:
                 actions = min(actions, 1)
-        if p.sanity <= cfg.S_LOSS:
-            actions = min(actions, 1)
+        
+        # CANON Fix #G: Estar en -5 NO quita acciones (siempre 2 base)
+        # if p.sanity <= cfg.S_LOSS:
+        #     actions = min(actions, 1)
         
         # REINA HELADA (turnos posteriores): Jugadores en piso de Reina solo tienen 1 acción
         if floor_of(s.players[pid].room) in reina_floors:
@@ -991,6 +1032,32 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
     s.action_log.append(
         {"round": s.round, "phase": s.phase, "actor": action.actor, "type": action.type.value, "data": action.data}
     )
+
+    # CANON Fix #A: Handle Pending Sacrifice Check
+    pending_pid_str = s.flags.get(PENDING_SACRIFICE_FLAG)
+    if pending_pid_str:
+        if action.actor != pending_pid_str:
+             raise ValueError(f"Pending sacrifice check for {pending_pid_str}, but {action.actor} acted.")
+        
+        if action.type == ActionType.SACRIFICE:
+            # Player chose to SACRIFICE
+            # Apply sacrifice cost
+            p = s.players[PlayerId(pending_pid_str)]
+            p.sanity = 0
+            p.sanity_max = max(cfg.S_LOSS, (p.sanity_max or 5) - 1)
+            # Clear flag, do NOT apply -5 consequences (as sanity is now 0 > -5)
+            # p.at_minus5 remains False (or becomes False)
+            del s.flags[PENDING_SACRIFICE_FLAG]
+            return _finalize_and_return(s, cfg)
+            
+        elif action.type == ActionType.ACCEPT_SACRIFICE:
+            # Player chose to accept consequences
+            _apply_minus5_consequences(s, PlayerId(pending_pid_str), cfg)
+            del s.flags[PENDING_SACRIFICE_FLAG]
+            return _finalize_and_return(s, cfg)
+            
+        else:
+             raise ValueError(f"Illegal action during sacrifice check: {action.type}. Must be SACRIFICE or ACCEPT_SACRIFICE.")
 
     if s.phase == "PLAYER":
         pid = PlayerId(action.actor)
@@ -1033,9 +1100,15 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             heal = 2 if is_corridor(p.room) else 1
             p.sanity = min(p.sanity + heal, p.sanity_max or p.sanity)
 
+        # SACRIFICE (Manual trigger outside of interrupt - e.g. preemptive?)
+        # Canon fix A makes sacrifice a response.
+        # But maybe we keep it as an action if user wants to do it before hitting -5?
+        # User request A says: "SACRIFICE should be an interrupt decision".
+        # If we keep it here, it duplicates logic.
+        # But if we remove it, player can't self-sacrifice at will?
+        # Let's keep it but ensure it clears flag if it was somehow active (covered above).
+        # This block is for "Standard Action Phase", so pending flag is NOT active here.
         elif action.type == ActionType.SACRIFICE:
-            # A4: Sacrificio al caer a -5
-            # Efecto: sanity -> 0, sanity_max -= 1 (costo), at_minus5 = False
             p.sanity = 0
             p.sanity_max = max(cfg.S_LOSS, (p.sanity_max or 5) - 1)
             p.at_minus5 = False
@@ -1176,7 +1249,10 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             card_b = deck_b.cards[deck_b.top] if deck_b and deck_b.remaining() > 0 else None
             
             # Registrar en state para replay
-            s.last_peek = [(str(room_a), str(card_a)), (str(room_b), str(card_b))]
+            # CANON Fix #C: Serializar last_peek
+            # Note: s.last_peek needs to be added to GameState to be persistent.
+            # For now we set it, ensure GameState has the field.
+            s.last_peek = [{"room": str(room_a), "card": str(card_a)}, {"room": str(room_b), "card": str(card_b)}]
 
         # ===== B6: ARMERÍA (drop/take) =====
         elif action.type == ActionType.USE_ARMORY_DROP:
@@ -1237,7 +1313,9 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             s.flags[f"PROTECCION_AMARILLO_{pid}"] = s.round + 1
             
             # Cada 3er uso (global): VANIDAD
-            if s.salon_belleza_uses % 3 == 0:
+            # CANON Fix: Vanidad desde el 3er uso en adelante (>= 3)
+            # User request: "el tercer jugador que activa... y los siguientes... recibiran vanidad"
+            if s.salon_belleza_uses >= 3:
                 add_status(p, "VANIDAD")
 
         # ===== B3: CÁMARA LETAL (ritual) =====

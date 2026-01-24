@@ -38,9 +38,15 @@ def test_minus5_is_reversible_and_only_limits_while_at_minus5():
     # Fin de ronda: Casa -1 => P1 pasa de -4 a -5 (pero no pierden porque P2 no está en -5)
     s2 = step(s, Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 1}), rng, cfg)
 
+    # CANON Fix #A: Interrupt triggered. P1 must accept consequences to proceed (or Sacrifice).
+    # Test assumes they stay at -5, so they ACCEPT.
+    assert s2.flags.get("PENDING_SACRIFICE_CHECK") == "P1"
+    s2 = step(s2, Action(actor="P1", type=ActionType.ACCEPT_SACRIFICE, data={}), rng, cfg)
+
     assert s2.phase == "PLAYER"
     assert s2.players[PlayerId("P1")].sanity == -5
-    assert s2.remaining_actions[PlayerId("P1")] == 1
+    # CANON Fix #G: No reduced actions at -5. Base actions 2.
+    assert s2.remaining_actions[PlayerId("P1")] == 2
 
     # P1 medita: -5 -> -4, debe salir del estado -5
     s3 = step(s2, Action(actor="P1", type=ActionType.MEDITATE, data={}), rng, cfg)
