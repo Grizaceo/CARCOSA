@@ -144,3 +144,73 @@ def neighbors(room: RoomId) -> List[RoomId]:
 def ruleta_floor(start_floor: int, d4: int) -> int:
     # Sistema de ruleta: cuenta hacia arriba d4 pisos, wrap en 1..3.
     return ((start_floor - 1 + d4) % FLOORS) + 1
+
+
+def bfs_dist_to_targets(start: RoomId, targets: set[RoomId]) -> int:
+    """Retorna la distancia mínima desde start a cualquiera de los targets."""
+    if start in targets:
+        return 0
+    
+    queue = [(start, 0)]
+    visited = {start}
+    
+    while queue:
+        current, dist = queue.pop(0)
+        
+        # Check adjacent neighbors for targets in case we popped a node that IS a target?
+        # No, current is popped from queue. Check if current is target?
+        # Wait, if `start` is target, handled above.
+        # Use queue check.
+        
+        if current in targets:
+            return dist
+        
+        for nb in neighbors(current):
+            if nb not in visited:
+                if nb in targets:
+                     return dist + 1
+                visited.add(nb)
+                queue.append((nb, dist + 1))
+                
+    return 999  # Unreachable
+
+
+def get_next_move_to_targets(start: RoomId, targets: set[RoomId]) -> RoomId:
+    """
+    Retorna el vecino de start que minimiza la distancia a los targets.
+    Si start ya está en targets o no hay camino, retorna start.
+    Priority: Primer vecino que cumple (orden de neighbors).
+    """
+    if start in targets:
+        return start
+        
+    best_step = start
+    min_dist = 999
+    
+    # Evaluar cada vecino
+    for nb in neighbors(start):
+        d = bfs_dist_to_targets(nb, targets)
+        if d < min_dist:
+            min_dist = d
+            best_step = nb
+            
+    return best_step
+
+
+def get_next_move_away_from_targets(start: RoomId, targets: set[RoomId]) -> RoomId:
+    """
+    Retorna el vecino de start que maximiza la distancia al target más cercano.
+    Flee logic.
+    """
+    best_step = start
+    max_dist = -1
+    
+    # Evaluar cada vecino
+    for nb in neighbors(start):
+        # Distancia desde el vecino al target más cercano
+        d = bfs_dist_to_targets(nb, targets)
+        if d > max_dist:
+            max_dist = d
+            best_step = nb
+            
+    return best_step

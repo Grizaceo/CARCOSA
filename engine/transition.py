@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional
 
 from engine.actions import Action, ActionType
-from engine.board import corridor_id, floor_of, ruleta_floor, rotate_boxes, rotate_boxes_intra_floor
+from engine.board import corridor_id, floor_of, ruleta_floor, rotate_boxes, rotate_boxes_intra_floor, get_next_move_to_targets, get_next_move_away_from_targets
 from engine.boxes import active_deck_for_room, sync_room_decks_from_boxes
 from engine.config import Config
 from engine.legality import get_legal_actions
@@ -329,7 +329,59 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
                     if floor_of(other.room) == monster_floor:
                         if other_pid not in s.movement_blocked_players:
                             s.movement_blocked_players.append(other_pid)
-        return
+
+            # DUENDE / GOBLIN Logic: Roba objetos y se teletransporta
+            if "DUENDE" in mid or "GOBLIN" in mid:
+                # 1. Robar objetos
+                if p.objects:
+                    # Canon: Roba objetos (asumimos todos por "borrar objetos")
+                    p.objects = []
+                    s.flags[f"GOBLIN_HAS_LOOT_{mid}"] = True
+                
+                # 2. Teleport a otro piso (misma habitación relativa)
+                if rng:
+                    current_floor = floor_of(monster_room)
+                    floors = [f for f in (1, 2, 3) if f != current_floor]
+                    if floors:
+                        new_floor = rng.choice(floors)
+                        # Reconstruir RoomId: Fx_Ry
+                        parts = str(monster_room).split("_") # e.g. ["F1", "R1"]
+                        if len(parts) >= 2:
+                             suffix = parts[1]
+                             new_room_id = RoomId(f"F{new_floor}_{suffix}")
+                             
+                             # Mover Monstruo
+                             s.monsters[-1].room = new_room_id
+                             _on_monster_enters_room(s, new_room_id)
+
+            # VIEJO / SACK Logic: Atrapa y se lleva al jugador
+            if "VIEJO" in mid or "SACK" in mid:
+                # 1. Atrapado
+                # Usar TRAPPED genérico (duración 2 o custom?) 
+                # Canon dice "atrapa", asumimos status TRAPPED.
+                # Duración por defecto o 3? Canon table says Generic TRAPPED depends on source.
+                # Asignamos 3 para ser seguros/difícil.
+                p.statuses.append(StatusInstance(status_id="TRAPPED", remaining_rounds=3, metadata={"source_monster_id": mid}))
+                s.flags[f"SACK_HAS_VICTIM_{mid}"] = True
+                
+                # 2. Teleport + Carry
+                if rng:
+                    current_floor = floor_of(monster_room)
+                    floors = [f for f in (1, 2, 3) if f != current_floor]
+                    if floors:
+                        new_floor = rng.choice(floors)
+                        parts = str(monster_room).split("_")
+                        if len(parts) >= 2:
+                             suffix = parts[1]
+                             new_room_id = RoomId(f"F{new_floor}_{suffix}")
+                             
+                             # Mover Monstruo
+                             s.monsters[-1].room = new_room_id
+                             _on_monster_enters_room(s, new_room_id)
+                             
+                             # Mover Jugador
+                             p.room = new_room_id
+                             _on_player_enters_room(s, pid, new_room_id)
     
     if s_str.startswith("STATE:"):
         sid = s_str.split(":", 1)[1]
@@ -683,10 +735,7 @@ def _apply_status_effects_end_of_round(s: GameState) -> None:
             else:
                 p.sanity += 1
 
-    # CORRECCIÓN B: Decrementar STUN de monstruos
-    for monster in s.monsters:
-        if monster.stunned_remaining_rounds > 0:
-            monster.stunned_remaining_rounds -= 1
+
 
 
 def _current_false_king_floor(s) -> Optional[int]:
@@ -733,6 +782,15 @@ def _advance_turn_or_king(s):
         pid = order[pos]
         if s.remaining_actions.get(pid, 0) > 0:
             s.turn_pos = pos
+            
+            # CANON Fix #C: PEEK/TABERNA reset on player turn start
+            # Reset EARLIER turn use if any (though usually clean)
+            # Ensure fresh flags for this player
+            if pid in s.taberna_used_this_turn:
+                del s.taberna_used_this_turn[pid]
+            if pid in s.peek_used_this_turn:
+                del s.peek_used_this_turn[pid]
+                
             return
 
     s.phase = "KING"
@@ -911,52 +969,7 @@ def _end_of_round_checks(s, cfg):
         s.outcome = "WIN"
 
 
-def _handle_trapped_escape_attempts(s, pid: PlayerId, rng: RNG) -> bool:
-    """
-    CORRECCIÓN B: Maneja intento automático de escape para jugadores con TRAPPED_SPIDER.
 
-    Se ejecuta al inicio del turno del jugador.
-    - Roll: d6 + cordura_actual >= 3 para liberarse
-    - Si éxito: remueve TRAPPED_SPIDER, aplica STUN 1 turno al monstruo fuente
-    - Si falla: jugador pierde las 2 acciones ese turno (actions_left = 0)
-
-    Returns:
-        bool: True si el jugador está trapped y falló el escape (pierde el turno completo)
-    """
-    p = s.players[pid]
-
-    # Buscar estado TRAPPED_SPIDER
-    trapped_status = None
-    for st in p.statuses:
-        if st.status_id == "TRAPPED_SPIDER":
-            trapped_status = st
-            break
-
-    if not trapped_status:
-        return False  # No está trapped
-
-    # Intento automático de escape
-    d6 = rng.randint(1, 6)
-    total = d6 + p.sanity  # Puede ser negativo
-
-    if total >= 3:
-        # ÉXITO: Liberarse
-        p.statuses = [st for st in p.statuses if st.status_id != "TRAPPED_SPIDER"]
-
-        # Aplicar STUN 1 turno al monstruo fuente
-        source_monster_id = trapped_status.metadata.get("source_monster_id")
-        if source_monster_id:
-            for monster in s.monsters:
-                if monster.monster_id == source_monster_id:
-                    # Rey de Amarillo es inmune al STUN
-                    if "YELLOW_KING" not in monster.monster_id and "KING" not in monster.monster_id:
-                        monster.stunned_remaining_rounds = max(monster.stunned_remaining_rounds, 1)
-                    break
-
-        return False  # Se liberó, puede actuar normalmente
-    else:
-        # FALLA: Pierde el turno completo (0 acciones)
-        return True  # Indica que debe setear actions = 0
 
 
 def _start_new_round(s, cfg):
@@ -969,15 +982,14 @@ def _start_new_round(s, cfg):
     s.turn_pos = s.starter_pos
     s.phase = "PLAYER"
 
-    # B5: Reset de Peek y Taberna al inicio de nueva ronda
-    # CANON Fix #C: Taberna reset on new round (or turn?)
-    # User said: "Si la regla es 1 vez por ronda: reset en _start_new_round()."
-    # Assuming once per round for now as it's cleaner, unless turn requested.
-    # User requested: "1 vez por turno de jugador" or "1 vez por ronda".
-    # Implementation: reset both here.
-    s.peek_used_this_turn = {}
-    s.taberna_used_this_turn = {}
-    
+    # CANON Fix #C: Flags de Taberna/Peek se resetean PER PLAYER al inicio de SU turno.
+    # Aquí inicia el turno del starter, así que reseteamos solo al starter.
+    initial_pid = order[s.turn_pos]
+    if initial_pid in s.taberna_used_this_turn:
+        del s.taberna_used_this_turn[initial_pid]
+    if initial_pid in s.peek_used_this_turn:
+        del s.peek_used_this_turn[initial_pid]
+
     # REINA HELADA: Limpiar bloqueo de movimiento (solo dura el turno de entrada)
     s.movement_blocked_players = []
     
@@ -1133,21 +1145,43 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
         elif action.type == ActionType.ESCAPE_TRAPPED:
             # A5: Intento de liberarse del estado TRAPPED
-            # CANON: d6 >= 3 para éxito. Cuesta 1 acción (manejado por bloque general).
-            # Fallo: termina turno inmediatamente (remaining_actions = 0)
+            # CANON: d6 + cordura >= 3 para éxito.
             d6 = rng.randint(1, 6)
-            if d6 >= 3:
+            total = d6 + p.sanity
+            
+            # Log attempt
+            s.action_log.append({"event": "ESCAPE_ATTEMPT", "d6": d6, "sanity": p.sanity, "total": total, "success": total >= 3})
+
+            if total >= 3:
                 # Éxito: remover TRAPPED
-                p.statuses = [st for st in p.statuses if st.status_id != "TRAPPED"]
-                # Aplicar STUN al monstruo en la sala 1 turno
-                for monster in s.monsters:
-                    if monster.room == p.room:
-                        monster.stunned_remaining_rounds = 1
+                # Buscar metadata para source monster antes de borrar
+                trapped_st = None
+                for st in p.statuses:
+                     if st.status_id in ("TRAPPED", "TRAPPED_SPIDER"):
+                         trapped_st = st
+                         break
+                
+                # Remover status (usando helper o filtro)
+                p.statuses = [st for st in p.statuses if st.status_id not in ("TRAPPED", "TRAPPED_SPIDER")]
+                
+                # Aplicar STUN 1 turno al monstruo fuente
+                if trapped_st and trapped_st.metadata.get("source_monster_id"):
+                    mid = trapped_st.metadata["source_monster_id"]
+                    for monster in s.monsters:
+                        if monster.monster_id == mid:
+                            if "YELLOW_KING" not in monster.monster_id:
+                                monster.stunned_remaining_rounds = 1
+                            break
+                else:
+                    # Fallback por si no hay metadata: Stun a monstruos en la sala
+                    for monster in s.monsters:
+                        if monster.room == p.room:
+                            monster.stunned_remaining_rounds = 1
+
                 # Éxito: el costo de acción se descuenta en bloque general (paid_action_types)
             else:
                 # Fracaso: termina turno inmediatamente (override del costo normal)
                 s.remaining_actions[pid] = 0
-                # Saltar bloque de descuento de acción general ya que forzamos 0
                 return _finalize_and_return(s, cfg)
 
         elif action.type == ActionType.END_TURN:
@@ -1590,19 +1624,98 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 def _monster_phase(s: GameState, cfg: Config) -> None:
     """
     Fase de Monstruos (Fin de Ronda):
-    - Monstruos STUNNED: Disminuyen contador de stun (no atacan).
-    - Monstruos ACTIVOS: Atacan (1 daño cordura) a todos los jugadores en su habitación.
+    1. Movimiento de monstruos (si no están STUNNED).
+    2. Ataque básico (1 daño cordura) a jugadores en la misma habitación.
+    3. Decremento de STUN (si están STUNNED no atacan ni mueven en este turno).
     """
+    # 1. Movimiento
+    _move_monsters(s, cfg)
+
+    # 2. Ataque y Gestión de STUN
     for m in s.monsters:
         if m.stunned_remaining_rounds > 0:
             m.stunned_remaining_rounds -= 1
         else:
-            # Attack Logic: 1 Sanity Damage to all players in same room
-            room_players = [p for p in s.players.values() if p.room == m.room]
-            for p in room_players:
-                 # Check for immunities or modifiers here if needed
-                 apply_sanity_loss(s, p, 1, source=f"MONSTER_ATTACK_{m.monster_id}")
+            # Ataca a todos los jugadores en su habitación
+            # CANON: 1 daño de cordura
+            for p in s.players.values():
+                if p.room == m.room:
+                    apply_sanity_loss(s, p, 1, source=f"MONSTER_ATTACK_{m.monster_id}")
 
-    # Notar: El decremento de stun se hizo aquí. 
-    # Si statuses de jugadores decrementan después, está bien.
+
+def _move_monsters(s: GameState, cfg: Config) -> None:
+    """
+    Lógica de movimiento de monstruos (AI).
+    """
+    player_rooms = {p.room for p in s.players.values()}
+    
+    for m in s.monsters:
+        # Si está stuneado, no se mueve
+        if m.stunned_remaining_rounds > 0:
+            continue
+
+        # ID Normalizado
+        mid = m.monster_id
+        
+        # Lógica por tipo
+        if "REINA_HELADA" in mid or "ICE_QUEEN" in mid or "FROZEN_QUEEN" in mid:
+            # Estática: No se mueve
+            continue
+            
+        elif "SPIDER" in mid or "ARAÑA" in mid:
+            # ARAÑA: Always Hunt (acercarse a jugadores)
+            # Si ya está en una habitación con jugador, no se mueve (atacará)
+            if m.room in player_rooms:
+                continue
+            
+            # Mover hacia el objetivo más cercano
+            next_room = get_next_move_to_targets(m.room, player_rooms)
+            if next_room != m.room:
+                m.room = next_room
+                _on_monster_enters_room(s, next_room)
+
+        elif "DUENDE" in mid or "GOBLIN" in mid:
+            # DUENDE:
+            # Si tiene botín ("HAS_LOOT"): Flee (alejarse)
+            # Si no: Hunt (acercarse)
+            has_loot = s.flags.get(f"GOBLIN_HAS_LOOT_{mid}", False)
+            
+            if has_loot:
+                # Flee
+                next_room = get_next_move_away_from_targets(m.room, player_rooms)
+            else:
+                # Hunt
+                if m.room in player_rooms:
+                    continue
+                next_room = get_next_move_to_targets(m.room, player_rooms)
+            
+            if next_room != m.room:
+                m.room = next_room
+                _on_monster_enters_room(s, next_room)
+
+        elif "VIEJO" in mid or "SACK" in mid:
+            # VIEJO DEL SACO:
+            # Si tiene víctima: Flee
+            # Si no: Hunt
+            has_victim = s.flags.get(f"SACK_HAS_VICTIM_{mid}", False)
+            
+            if has_victim:
+                next_room = get_next_move_away_from_targets(m.room, player_rooms)
+            else:
+                if m.room in player_rooms:
+                    continue
+                next_room = get_next_move_to_targets(m.room, player_rooms)
+                
+            if next_room != m.room:
+                m.room = next_room
+                _on_monster_enters_room(s, next_room)
+        
+        else:
+            # Comportamiento Default: Hunt (Zombie, etc)
+            if m.room in player_rooms:
+                continue
+            next_room = get_next_move_to_targets(m.room, player_rooms)
+            if next_room != m.room:
+                m.room = next_room
+                _on_monster_enters_room(s, next_room)
 
