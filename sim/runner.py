@@ -63,37 +63,49 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     cfg = cfg or Config()
     rng = RNG(seed)
 
-    # P1: Sortear habitaciones especiales
-    special_room_locations = _setup_special_rooms(rng)
+    # 1. Start with initial players (setup requires GameState which requires players/rooms)
+    players = {
+        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(1)),
+        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(2)),
+    }
 
+    # 2. Create GameState with empty rooms initially (but valid dict)
     rooms: Dict[RoomId, RoomState] = {}
-    room_ids: List[RoomId] = []
+    state = GameState(round=1, players=players, rooms=rooms, seed=seed, king_floor=1)
 
+    # 3. Setup Canonical Special Rooms & Motemey Deck
+    # This populates state.rooms (via special rooms) and state.motemey_deck
+    from engine.setup import setup_special_rooms, setup_motemey_deck
+    setup_special_rooms(state, rng)
+    setup_motemey_deck(state, rng)
+
+    # 4. Fill standard rooms (Corridors + R1-R4) respecting existing special rooms
+    room_ids: List[RoomId] = []
+    
     for f in (1, 2, 3):
-        rooms[corridor_id(f)] = RoomState(room_id=corridor_id(f), deck=DeckState(cards=[]))
+        # Corridor setup
+        c_id = corridor_id(f)
+        if c_id not in rooms:
+             rooms[c_id] = RoomState(room_id=c_id, deck=DeckState(cards=[]))
+        
+        # Room setup
         for r in (1, 2, 3, 4):
             rid = room_id(f, r)
             room_ids.append(rid)
+            
+            # If room not created by setup_special_rooms, create empty standard room
+            if rid not in rooms:
+                rooms[rid] = RoomState(
+                    room_id=rid,
+                    deck=DeckState(cards=[]),
+                    special_card_id=None,
+                    special_revealed=False,
+                    special_destroyed=False,
+                    special_activation_count=0
+                )
 
-            # P1: Verificar si esta ubicación tiene una habitación especial
-            # CORRECCIÓN A: ahora locations solo tiene {floor: room_num} para el piso asignado
-            special_card_id = None
-            for special_type, locations in special_room_locations.items():
-                if f in locations and locations[f] == r:
-                    special_card_id = special_type
-                    break
-
-            # Crear habitación con datos especiales si corresponde
-            rooms[rid] = RoomState(
-                room_id=rid,
-                deck=DeckState(cards=[]),
-                special_card_id=special_card_id,
-                special_revealed=False,
-                special_destroyed=False,
-                special_activation_count=0
-            )
-
-    # Pool global de llaves: el juego físico tiene 6 cartas de Llave.:contentReference[oaicite:2]{index=2}
+    # 5. Populate Decks (Keys first, then fillers)
+    # Pool global de llaves: el juego físico tiene 6 cartas de Llave.
     key_pool = [CardId("KEY") for _ in range(cfg.KEYS_TOTAL)]
 
     fillers = [
@@ -108,48 +120,46 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     rnd = random.Random(seed)
     rnd.shuffle(room_ids)
 
-    # Distribución mejorada: colocar llaves primero (accesibles) y luego rellenar
-    # Distribuir llaves de forma que cada habitación tenga oportunidad
+    # Distribución equitativa de llaves
     keys_per_room = [0] * len(room_ids)
     for i in range(cfg.KEYS_TOTAL):
         keys_per_room[i % len(room_ids)] += 1
     
     for rid, num_keys in zip(room_ids, keys_per_room):
-        # Agregar llaves PRIMERO (accesibles al inicio del mazo)
+        # Llaves al fondo (primero en lista = fondo si pop(0) o top si pop()? 
+        # Usually list append adds to end. top is presumably index 0 or len-1?
+        # DeckState uses 'top' index. If top starts at 0, then index 0 is top.
+        # So appending to list puts items at BOTTOM.
+        # But here we want keys accessible? 
+        # Original code: appended keys first. 
+        # If 'top' is 0, then deck[0] is top.
+        # So appending keys first -> keys are at top (index 0, 1...). 
+        # The prompt says "colocar llaves primero (accesibles)".
         for _ in range(num_keys):
             rooms[rid].deck.cards.append(CardId("KEY"))
 
-    # Luego rellenar con otros tipos de cartas
+    # Rellenar con fillers
     for rid in room_ids:
         deck = rooms[rid].deck.cards
         target = 6
         while len(deck) < target:
             deck.append(rnd.choice(fillers))
-        # Mezclar SOLO los rellenos, no las llaves
-        # Para simplificar: mezclar sin tocar primeras N posiciones
+        
+        # Mezclar SOLO los fillers si hay llaves arriba (para no perder accesibilidad)
+        # Ojo: si hay llaves en [0..k-1], y fillers en [k..N], y shuffleamos [k..N], 
+        # las llaves quedan arriba.
         if len(deck) > cfg.KEYS_TOTAL:
-            # Solo mezclar los fillers (después de las keys)
-            keys_count = sum(1 for c in deck if str(c) == "KEY")
-            rng.shuffle(deck[keys_count:])
+             keys_count = sum(1 for c in deck if str(c) == "KEY")
+             # Mezclar slice [keys_count:]
+             sublist = deck[keys_count:]
+             rng.shuffle(sublist)
+             # Recomponer
+             deck[:] = deck[:keys_count] + sublist
+        
         rooms[rid].deck = DeckState(cards=deck)
 
-    players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(1)),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(2)),
-    }
-
-    # P1: Crear GameState con flags de habitaciones especiales
-    state = GameState(round=1, players=players, rooms=rooms, seed=seed, king_floor=1)
-
-    # P1: Guardar información de habitaciones especiales en flags
-    selected_types = list(special_room_locations.keys())
-    state.flags["SPECIAL_ROOMS_SELECTED"] = selected_types
-    state.flags["SPECIAL_ROOM_LOCATIONS"] = special_room_locations
-    state.flags["CAMARA_LETAL_PRESENT"] = "CAMARA_LETAL" in selected_types
-
-    # CORRECCIÓN A: Validar invariantes de habitaciones especiales
-    from engine.setup import validate_special_rooms_invariants
-    validate_special_rooms_invariants(state)
+    # Flag setup handled by setup_special_rooms
+    state.flags["CAMARA_LETAL_PRESENT"] = "CAMARA_LETAL" in state.flags.get("SPECIAL_ROOMS_SELECTED", [])
 
     return state
 

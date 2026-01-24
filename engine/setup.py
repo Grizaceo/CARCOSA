@@ -11,7 +11,7 @@ Referencia: V0_3_Fidelity_Notes_Complement.md sección A
 """
 
 from typing import Dict, List
-from engine.state import GameState, RoomState, RoomId, DeckState
+from engine.state import GameState, RoomState, RoomId, DeckState, BoxState
 from engine.rng import RNG
 
 
@@ -210,3 +210,50 @@ def setup_special_rooms(state: GameState, rng: RNG) -> None:
                 raise ValueError(
                     f"INVARIANTE FAIL: Habitación especial debe estar en R1-R4: {room_id}"
                 )
+
+
+def setup_motemey_deck(state: GameState, rng: RNG) -> None:
+    """
+    Configura el mazo de Motemey según el Canon.
+
+    Composición (13 cartas total):
+    - 3x Brújula (COMPASS)
+    - 3x Vial (VIAL)
+    - 2x Contundente (BLUNT)
+    - 4x Tesoros (TREASURE_RING, TREASURE_STAIRS, TREASURE_SCROLL, TREASURE_PENDANT)
+    - 1x Llave (KEY)
+    - 1x Cuento (TALE_random)
+
+    Referencia: Canon Implementation Plan
+    """
+    cards = []
+    
+    # 3x COMPASS
+    cards.extend(["COMPASS"] * 3)
+    
+    # 3x VIAL
+    cards.extend(["VIAL"] * 3)
+    
+    # 2x BLUNT
+    cards.extend(["BLUNT"] * 2)
+    
+    # 4x TESOROS
+    treasures = ["TREASURE_RING", "TREASURE_STAIRS", "TREASURE_SCROLL", "TREASURE_PENDANT"]
+    cards.extend(treasures)
+    
+    # 1x KEY
+    cards.append("KEY")
+    
+    # 1x TALE (Randomly selected from the 4 tales)
+    tales = ["TALE_REPAIRER", "TALE_MASK", "TALE_DRAGON", "TALE_SIGN"]
+    # Seleccionamos uno consistente para toda la partida (o un set)
+    # Por ahora 1 random tale.
+    selected_tale = rng.choice(tales)
+    cards.append(selected_tale)
+    
+    # Mezclar
+    rng.shuffle(cards)
+    
+    # Asignar a state
+    state.motemey_deck = DeckState(cards=cards)
+    state.motemey_deck.top = 0
