@@ -153,7 +153,7 @@ def setup_special_rooms(state: GameState, rng: RNG) -> None:
         # Guardar ubicación
         if special_type not in special_locations:
             special_locations[special_type] = {}
-        special_locations[special_type][floor_num] = room_id
+        special_locations[special_type][floor_num] = d4_roll
 
         # Setear en RoomState
         if room_id not in state.rooms:

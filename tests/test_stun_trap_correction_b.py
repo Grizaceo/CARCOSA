@@ -132,11 +132,12 @@ def test_spider_escape_roll_success_releases_and_stuns():
         )
     )
 
-    # Mock RNG: d6=3 garantizado
+
+    # Mock RNG: d6=3 guaranteed. Sanity=5. Total 8 >= 3. Success.
     class MockRNG:
         def randint(self, a, b):
             if (a, b) == (1, 6):
-                return 3  # d6=3 -> éxito
+                return 3  # d6=3
             return a
 
     mock_rng = MockRNG()
@@ -157,11 +158,12 @@ def test_spider_escape_roll_success_releases_and_stuns():
 
 def test_spider_escape_roll_fail_loses_actions():
     """
-    Escape fallido (d6 < 3): jugador pierde todas las acciones ese turno.
+    Escape fallido (d6 + sanity < 3): jugador pierde todas las acciones ese turno.
     CANON: Escape es MANUAL via ESCAPE_TRAPPED action.
     """
     s = make_test_state()
     p1 = s.players[PlayerId("P1")]
+    p1.sanity = 0 # Baseline sanity for failure case
 
     # Aplicar TRAPPED
     p1.statuses.append(
@@ -172,11 +174,11 @@ def test_spider_escape_roll_fail_loses_actions():
         )
     )
 
-    # Mock RNG: d6=2 -> falla
+    # Mock RNG: d6=2. Total = 2 + 0 = 2 < 3 -> falla
     class MockRNG:
         def randint(self, a, b):
             if (a, b) == (1, 6):
-                return 2  # d6=2 < 3 (falla)
+                return 2  # d6=2
             return a
 
     mock_rng = MockRNG()
@@ -236,28 +238,30 @@ def test_yellow_king_not_stunnable():
     assert king.stunned_remaining_rounds == 0
 
 
-def test_stun_decrements_at_end_of_round():
+def test_stun_decrements_at_monster_phase():
     """
-    stunned_remaining_rounds se decrementa al final de ronda.
+    stunned_remaining_rounds se decrementa en Fase de Monstruos (no en end_of_round types).
     """
-    from engine.transition import _apply_status_effects_end_of_round
+    from engine.transition import _monster_phase
 
     s = make_test_state()
     spider = s.monsters[0]
     spider.stunned_remaining_rounds = 2
 
-    # Aplicar efectos de fin de ronda
-    _apply_status_effects_end_of_round(s)
+    # Aplicar Fase de Monstruos
+    _monster_phase(s, Config())
 
     # Verificar que decrementó
     assert spider.stunned_remaining_rounds == 1
 
     # Segundo tick
-    _apply_status_effects_end_of_round(s)
+    _monster_phase(s, Config())
     assert spider.stunned_remaining_rounds == 0
 
-    # Tercer tick (ya en 0, no debe ser negativo)
-    _apply_status_effects_end_of_round(s)
+    # Tercer tick (ya en 0, no debe ser negativo ni atacar si estaba stuneado? Si llega 0 ataca?)
+    # Canon: Si empieza fase stun=0, ataca. Si empieza stun>0, decrementa y NO ataca.
+    # Aquí solo probamos decremento.
+    _monster_phase(s, Config())
     assert spider.stunned_remaining_rounds == 0
 
 
