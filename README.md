@@ -274,29 +274,21 @@ source .venv/bin/activate
 
 All tests are **deterministic**, use **fixed seeds**, and **no warnings**.
 
-## P0 Implementation Status
 
-| Feature | File | Implementation | Tests | Status |
-|---------|------|---|---|---|
-| P0.1 Adjacencies | `engine/board.py` | Canonical R1<->R2, R3<->R4 | 6 | OK |
-| P0.2 Expel | `engine/transition.py` | Floor mapping to stairs | 4 | OK |
-| P0.3 Stairs Reroll | `engine/transition.py` | 1d4 per floor RNG | 3 | OK |
-| P0.4a Event -5 | `engine/transition.py` | Key destruction + counter | 9 | OK |
-| P0.4b Attract | `engine/transition.py` | With false_king exception | 3 | OK |
-| P0.5 Presence | `engine/transition.py` | Canon table (R1-3->1, R4-6->2, ...) | 15 | OK |
+## Implementation Status (v0.4.0 - Canon Compliant)
 
-## Nuevas Mecánicas (En Progreso)
+| Feature | Implementation | Status |
+|---------|---|---|
+| **P0 Core** | Adjacencies, Expel, Stairs, Events, Presence | ✅ COMPLETED |
+| **Canon: Motemey** | Deck (14 cards), Buy/Sell, Key Logic | ✅ COMPLETED |
+| **Canon: Monsters** | Attack Phase, Stun, Trapped (3 turns) | ✅ COMPLETED |
+| **Canon: Keys** | Role Capacity, Return-to-Deck, Camera Letal | ✅ COMPLETED |
+| **Canon: Rooms** | Yellow Doors (Targeted), Armory (Infinite), etc. | ✅ COMPLETED |
+| **RNG** | Chi-Squared Verified Uniformity | ✅ COMPLETED |
 
-### Habitaciones Especiales
- Sistema dinámico de habitaciones con acciones únicas:
- - **Tipos**: MOTEMEY, Cámara Letal, Salón de Belleza, Puertas, Taberna, Armería.
- - **Acción**: `USE_SPECIAL_ROOM`.
-
-### Mecánicas de Jugador
- - **Sacrificio**: Opción en -5 Cordura para evitar daño grupal a cambio de penalización permanente.
- - **Atrapado**: Estado que requiere acción (d6>=3) para liberarse.
- - **Escaleras (d6=1)**: Regla de movimiento vertical condicionada.
-
+## Official Documentation
+For the canonical source of truth regarding game rules, refer to:
+- [docs/Carcosa_Libro_Tecnico_CANON.md](docs/Carcosa_Libro_Tecnico_CANON.md)
 
 ## Development Utilities
 
@@ -304,3 +296,4 @@ See `tools/README.md` for:
 - **Setup scripts**: Historical implementation records
 - **Debug tools**: Step-by-step debugging
 - **Validation**: Syntax, imports, and quick P0 checks
+

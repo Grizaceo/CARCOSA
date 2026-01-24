@@ -11,6 +11,7 @@ from engine.tension import king_utility
 from engine.transition import step
 from engine.types import RoomId
 
+from engine.board import floor_of
 from sim.pathing import bfs_next_step
 
 
@@ -135,7 +136,13 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             return a
 
         move_actions = [a for a in acts if a.type == ActionType.MOVE]
-        return rng.choice(move_actions) if move_actions else Action(actor=actor, type=ActionType.END_TURN, data={})
+        # Fallback: Random legal action (prefer move, but take anything over forced illegal END_TURN)
+        if move_actions:
+            return rng.choice(move_actions)
+        elif acts:
+            return rng.choice(acts)
+        
+        return Action(actor=actor, type=ActionType.END_TURN, data={})
 
 
 @dataclass
@@ -144,6 +151,9 @@ class HeuristicKingPolicy(KingPolicy):
 
     def choose(self, state: GameState, rng: RNG) -> Action:
         acts = get_legal_actions(state, "KING")
+        if not acts:
+             # Should not happen in canonical simulation
+             return None
 
         # Gate: permitir WIN cuando sea alcanzable desde cierto umbral,
         # o cuando se acumulan "win_ready_hits".
@@ -191,4 +201,160 @@ class HeuristicKingPolicy(KingPolicy):
                 best_u = u
                 best = a
 
+        # Fallback to random choice if no 'best' found (e.g. all lose)
         return best if best is not None else rng.choice(acts)
+
+
+@dataclass
+class CowardPolicy(PlayerPolicy):
+    """
+    Política Miedosa ("The Coward"):
+    - Medita agresivamente si Sanity < Max.
+    - Evita habitaciones con monstruos.
+    - Nunca se sacrifica.
+    """
+    cfg: Config = Config()
+
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        pid = state.turn_order[state.turn_pos]
+        actor = str(pid)
+        p = state.players[pid]
+        acts = get_legal_actions(state, actor)
+        if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
+
+        # 1. Self-Preservation: Meditate if ANY damage taken
+        if p.sanity < (p.sanity_max or 5):
+            a = _pick_first(acts, ActionType.MEDITATE)
+            if a: return a
+
+        # 2. Avoid Sacrificing (Accept if forced, but prefer Accept over Sacrifice??)
+        # Actually logic says if pending sacrifice check, only valid actions are SACRIFICE or ACCEPT_SACRIFICE.
+        # Coward chooses ACCEPT_SACRIFICE (live with consequences) rather than resetting to 0 sanity?
+        # A4: Sacrifice resets to 0. Accept means you live (with consequences? wait)
+        # Wait, A4 says Sacrifice sets sanity=0 and max-=1. Accept applies minus5 consequences (loss of items + ?)
+        # Usually Sacrifice is "Save the Group". Coward saves SELF.
+        # If Accept leads to death, they might Sacrifice.
+        # If forced choice:
+        sac_acts = [a for a in acts if a.type in (ActionType.SACRIFICE, ActionType.ACCEPT_SACRIFICE)]
+        if sac_acts:
+            # Prefer ACCEPT_SACRIFICE unless it kills instantly?
+            # For simplicity: Coward never Sacrifices voluntarily.
+            a = _pick_first(acts, ActionType.ACCEPT_SACRIFICE)
+            if a: return a
+            return acts[0]
+
+        # 3. Safe Exploration
+        # Move away from King/Monsters?
+        # Simple for now: Random movement but avoid King's floor
+        move_acts = [a for a in acts if a.type == ActionType.MOVE]
+        safe_moves = []
+        for a in move_acts:
+            target_room = RoomId(a.data["to"])
+            if floor_of(target_room) != state.king_floor:
+                safe_moves.append(a)
+        
+        if safe_moves:
+            return rng.choice(safe_moves)
+        elif move_acts:
+            return rng.choice(move_acts)
+            
+        return rng.choice(acts)
+
+
+@dataclass
+class BerserkerPolicy(PlayerPolicy):
+    """
+    Política Agresiva ("The Berserker"):
+    - Nunca medita voluntariamente.
+    - Siempre SEARCH si hay cartas.
+    - Siempre SACRIFICE si está disponible.
+    - Busca monstruos o items.
+    """
+    cfg: Config = Config()
+
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        pid = state.turn_order[state.turn_pos]
+        actor = str(pid)
+        acts = get_legal_actions(state, actor)
+        if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
+
+        # 1. ALWAYS SACRIFICE (Heroic/Crazy)
+        a = _pick_first(acts, ActionType.SACRIFICE)
+        if a: return a
+
+        # 2. SEARCH Priority
+        a = _pick_first(acts, ActionType.SEARCH)
+        if a: return a
+
+        # 3. Special Rooms (Motemey, Armory, etc)
+        special_acts = [a for a in acts if "USE_" in a.type.value]
+        if special_acts:
+            return rng.choice(special_acts)
+
+        # 4. Aggressive Movement (Random for now, ortowards unexplored)
+        return rng.choice(acts)
+
+
+@dataclass
+class SpeedrunnerPolicy(PlayerPolicy):
+    """
+    Política Speedrunner:
+    - Optimiza ruta a llaves y luego a Umbral.
+    - Ignora todo lo demás (monstruos, loot extra, meditar).
+    - Solo medita si es CRÍTICO para no morir antes de llegar.
+    """
+    cfg: Config = Config()
+
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        pid = state.turn_order[state.turn_pos]
+        actor = str(pid)
+        p = state.players[pid]
+        acts = get_legal_actions(state, actor)
+        if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
+
+        keys_total = _keys_total(state)
+        umbral = RoomId(self.cfg.UMBRAL_NODE)
+
+        # 1. Emergency Meditate (Don't die on split)
+        if p.sanity <= -2:
+            a = _pick_first(acts, ActionType.MEDITATE)
+            if a: return a
+
+        # 2. Win condition
+        if keys_total >= self.cfg.KEYS_TO_WIN:
+            if p.room == umbral:
+                return Action(actor=actor, type=ActionType.END_TURN, data={})
+            nxt = bfs_next_step(state, p.room, umbral)
+            if nxt:
+                for a in acts:
+                    if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                        return a
+
+        # 3. Hunt Keys (Best Room Global)
+        goal = _best_room_global(state)
+        if goal and p.room != goal:
+            nxt = bfs_next_step(state, p.room, goal)
+            if nxt:
+                for a in acts:
+                    if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                        return a
+        elif _room_remaining(state, p.room) > 0:
+            a = _pick_first(acts, ActionType.SEARCH)
+            if a: return a
+
+        return rng.choice(acts)
+
+
+@dataclass
+class RandomPolicy(PlayerPolicy):
+    """
+    Política Aleatoria (Baseline):
+    - Elige cualquier acción legal con probabilidad uniforme.
+    """
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        pid = state.turn_order[state.turn_pos]
+        actor = str(pid)
+        acts = get_legal_actions(state, actor)
+        if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
+        return rng.choice(acts)
+

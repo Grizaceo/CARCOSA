@@ -164,29 +164,67 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     return state
 
 
+
 def run_episode(
     max_steps: int = 400,
     seed: int = 1,
     out_path: Optional[str] = None,
     cfg: Optional[Config] = None,
+    policy_name: str = "GOAL",
 ) -> GameState:
     cfg = cfg or Config()
     rng = RNG(seed)
     state = make_smoke_state(seed=seed, cfg=cfg)
 
-    ppol = GoalDirectedPlayerPolicy(cfg)
+    # Policy Selection
+    from sim.policies import (
+        GoalDirectedPlayerPolicy, 
+        CowardPolicy, 
+        BerserkerPolicy, 
+        SpeedrunnerPolicy, 
+        RandomPolicy
+    )
+    
+    if policy_name == "COWARD":
+        ppol = CowardPolicy(cfg)
+    elif policy_name == "BERSERKER":
+        ppol = BerserkerPolicy(cfg)
+    elif policy_name == "SPEEDRUNNER":
+        ppol = SpeedrunnerPolicy(cfg)
+    elif policy_name == "RANDOM":
+        ppol = RandomPolicy()
+    else:
+        ppol = GoalDirectedPlayerPolicy(cfg)
+
     kpol = HeuristicKingPolicy(cfg)
 
     records: List[Dict[str, Any]] = []
     step_idx = 0
 
     while step_idx < max_steps and not state.game_over:
-        if state.phase == "PLAYER":
+        # Check for Sacrifice Interrupt
+        pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
+        
+        if pending_sacrifice_pid:
+            # INTERRUPT: Only the pending player can act (Sacrifice/Accept)
+            actor = str(pending_sacrifice_pid)
+            # Use player policy for this decision
+            action = ppol.choose(state, rng) 
+            # Note: Policies must be robust enough to pick SACRIFICE/ACCEPT if available.
+        elif state.phase == "PLAYER":
             actor = str(state.turn_order[state.turn_pos])
             action = ppol.choose(state, rng)
         else:
             actor = "KING"
             action = kpol.choose(state, rng)
+            
+        if action is None:
+            # Fallback if policy fails (should be rare)
+            from engine.actions import Action, ActionType
+            if actor == "KING":
+                 action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+            else:
+                 action = Action(actor=actor, type=ActionType.END_TURN, data={})
 
         next_state = step(state, action, rng, cfg)
 
@@ -195,6 +233,7 @@ def run_episode(
         if action.type.value == "KING_ENDROUND" and rng.last_king_d6 is not None:
             action_dict["d6"] = rng.last_king_d6
 
+        # Add policy info to record for analysis
         records.append(
             transition_record(
                 state=state,
@@ -204,6 +243,8 @@ def run_episode(
                 step_idx=step_idx,
             )
         )
+        # Inject Policy Name into record (hacky but useful)
+        records[-1]["policy"] = policy_name
 
         state = next_state
         step_idx += 1
@@ -211,7 +252,7 @@ def run_episode(
     if out_path is None:
         Path("runs").mkdir(exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_path = f"runs/run_seed{seed}_{ts}.jsonl"
+        out_path = f"runs/run_{policy_name}_seed{seed}_{ts}.jsonl"
 
     write_jsonl(out_path, records)
     print(f"Saved run to: {out_path}")
@@ -224,8 +265,17 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--max-steps", type=int, default=400)
     ap.add_argument("--out", type=str, default=None)
+    ap.add_argument("--policy", type=str, default="GOAL", 
+                    choices=["GOAL", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM"],
+                    help="Player policy to use")
     args = ap.parse_args()
-    run_episode(max_steps=args.max_steps, seed=args.seed, out_path=args.out)
+    
+    run_episode(
+        max_steps=args.max_steps, 
+        seed=args.seed, 
+        out_path=args.out,
+        policy_name=args.policy
+    )
 
 
 if __name__ == "__main__":
