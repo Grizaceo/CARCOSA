@@ -33,7 +33,7 @@ def load_jsonl(path: str) -> List[Dict[str, Any]]:
     return records
 
 
-def extract_states_actions_rewards(records: List[Dict[str, Any]]) -> Dict[str, List]:
+def extract_states_actions_rewards(records: List[Dict[str, Any]], reward_field: str = "reward") -> Dict[str, List]:
     """Extrae tuplas (state, action, reward, next_state, done) para RL."""
     data = {
         "step": [],
@@ -51,7 +51,7 @@ def extract_states_actions_rewards(records: List[Dict[str, Any]]) -> Dict[str, L
         data["round"].append(r["round"])
         data["state_pre"].append(json.dumps(r["summary_pre"]))
         data["action"].append(r["action_type"])
-        data["reward"].append(r.get("king_reward", 0.0))
+        data["reward"].append(r.get(reward_field, 0.0))
         data["state_post"].append(json.dumps(r["summary_post"]))
         data["done"].append(r["done"])
         data["outcome"].append(r["outcome"])
@@ -170,6 +170,8 @@ def main():
                     default="csv", help="Formato de salida")
     ap.add_argument("--mode", type=str, choices=["rl", "features", "policy", "all", "summary"], 
                     default="all", help="Modo de extracción")
+    ap.add_argument("--reward-field", type=str, default="reward", choices=["reward", "king_reward"],
+                    help="Field to use for RL reward (default: reward)")
     
     args = ap.parse_args()
     
@@ -198,7 +200,7 @@ def main():
     # Extraer datos según modo
     if args.mode == "rl":
         print("Extrayendo datos para Reinforcement Learning...")
-        data = extract_states_actions_rewards(all_records)
+        data = extract_states_actions_rewards(all_records, args.reward_field)
         name = "rl_transitions"
     elif args.mode == "features":
         print("Extrayendo secuencias de features...")
@@ -242,15 +244,15 @@ def main():
         df = pd.DataFrame(data)
         if args.format == "csv":
             df.to_csv(args.output, index=False)
-            print(f"✓ Guardado CSV: {args.output}")
+            print(f"[OK] Guardado CSV: {args.output}")
         elif args.format == "parquet":
             df.to_parquet(args.output, index=False)
-            print(f"✓ Guardado Parquet: {args.output}")
+            print(f"[OK] Guardado Parquet: {args.output}")
     
     if args.format == "json" or not HAS_PANDAS:
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"✓ Guardado JSON: {args.output}")
+        print(f"[OK] Guardado JSON: {args.output}")
 
 
 if __name__ == "__main__":

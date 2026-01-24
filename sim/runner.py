@@ -64,10 +64,36 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     rng = RNG(seed)
 
     # 1. Start with initial players (setup requires GameState which requires players/rooms)
-    players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(1)),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(2)),
-    }
+    # CANON 4-Player Roles Config
+    # P1: SCOUT (Move +1)
+    # P2: HIGH_ROLLER (Events)
+    # P3: TANK (Capacity/Stam)
+    # P4: BRAWLER (Combat)
+    from engine.roles import get_sanity_max, get_starting_items
+    
+    p_defs = [
+        ("P1", "SCOUT"),
+        ("P2", "HIGH_ROLLER"),
+        ("P3", "TANK"),
+        ("P4", "BRAWLER")
+    ]
+    
+    players = {}
+    corridors = [corridor_id(1), corridor_id(2), corridor_id(1), corridor_id(2)] # Split start
+    
+    for i, (pid_str, role) in enumerate(p_defs):
+        pid = PlayerId(pid_str)
+        s_max = get_sanity_max(role)
+        items = get_starting_items(role)
+        players[pid] = PlayerState(
+            player_id=pid,
+            sanity=s_max,
+            room=corridors[i],
+            role_id=role,
+            sanity_max=s_max,
+            objects=items,
+            keys=0
+        )
 
     # 2. Create GameState with empty rooms initially (but valid dict)
     rooms: Dict[RoomId, RoomState] = {}
@@ -184,6 +210,7 @@ def run_episode(
         SpeedrunnerPolicy, 
         RandomPolicy
     )
+    from sim.mcts_policy import MCTSPlayerPolicy
     
     if policy_name == "COWARD":
         ppol = CowardPolicy(cfg)
@@ -193,6 +220,17 @@ def run_episode(
         ppol = SpeedrunnerPolicy(cfg)
     elif policy_name == "RANDOM":
         ppol = RandomPolicy()
+    elif policy_name == "MCTS":
+        # Extraer config de argumentos si existen, por ahora defaults
+        # Hack: Parse args generically or expect caller to modify cfg?
+        # For P0 CLI args are parsed in main(), but run_episode receives only signature args.
+        # We'll rely on MCTSPlayerPolicy defaults or update cfg if we want to pass them.
+        # Better: Pass params via kwargs or extend Config. 
+        # Since I can't easily change run_episode signature without breaking other calls (if any),
+        # I will assume defaults for now or pass via cfg if I had added them to Config.
+        # BUT `main` has `args`. `run_episode` doesn't take kwargs.
+        # I'll rely on defaults for P0 or simple hack:
+        ppol = MCTSPlayerPolicy(cfg, rollouts=getattr(cfg, "MCTS_ROLLOUTS", 100)) 
     else:
         ppol = GoalDirectedPlayerPolicy(cfg)
 
@@ -269,15 +307,25 @@ def main():
     ap.add_argument("--max-steps", type=int, default=400)
     ap.add_argument("--out", type=str, default=None)
     ap.add_argument("--policy", type=str, default="GOAL", 
-                    choices=["GOAL", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM"],
+                    choices=["GOAL", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM", "MCTS"],
                     help="Player policy to use")
+    
+    # MCTS Args
+    ap.add_argument("--mcts-rollouts", type=int, default=100)
+    
     args = ap.parse_args()
+    
+    # Inject MCTS params into Config via constructor
+    cfg = Config(
+        MCTS_ROLLOUTS=args.mcts_rollouts
+    )
     
     run_episode(
         max_steps=args.max_steps, 
         seed=args.seed, 
         out_path=args.out,
-        policy_name=args.policy
+        policy_name=args.policy,
+        cfg=cfg
     )
 
 

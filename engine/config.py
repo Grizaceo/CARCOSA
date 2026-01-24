@@ -68,6 +68,11 @@ class Config:
     # --- Termination (sim-only) ---
     # 0 desactiva. Si round > MAX_ROUNDS => TIMEOUT
     MAX_ROUNDS: int = 60
+    # MCTS Configuration
+    MCTS_ROLLOUTS: int = 100
+    MCTS_DEPTH: int = 50
+    MCTS_TOP_K: int = 5
+    MCTS_DETERMINIZE: bool = False
     TIMEOUT_OUTCOME: str = "TIMEOUT"
     # Si True y no quedan cartas en habitaciones (no pasillos) => LOSE_DECK
     LOSE_ON_DECK_EXHAUSTION: bool = False
