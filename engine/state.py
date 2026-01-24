@@ -171,6 +171,10 @@ class GameState:
     # B5: PEEK flag (una vez por turno)
     peek_used_this_turn: Dict[PlayerId, bool] = field(default_factory=dict)
     
+    # CANON Fix #C: Last peek data for UI/Serialization
+    # List of {"room": str, "card": str}
+    last_peek: Optional[List[Dict[str, str]]] = None
+    
     # Reina Helada: jugadores con movimiento bloqueado (turno de entrada)
     # Se limpia al inicio del siguiente turno
     movement_blocked_players: List[PlayerId] = field(default_factory=list)
@@ -366,6 +370,7 @@ class GameState:
             taberna_used_this_turn=taberna_used_this_turn,
             # B5: PEEK
             peek_used_this_turn=peek_used_this_turn,
+            last_peek=d.get("last_peek"),
             # B6: ARMORY
             armory_storage=armory_storage,
             # Reina Helada: movimiento bloqueado

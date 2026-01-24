@@ -73,6 +73,19 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
     if state.game_over:
         return []
 
+    # CANON Fix #A: Sacrifice Interrupt
+    # Si hay un chequeo de sacrificio pendiente, solo el jugador afectado puede actuar.
+    # Debe elegir entre SACRIFICE o ACCEPT_SACRIFICE.
+    pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
+    if pending_sacrifice_pid:
+        if actor == pending_sacrifice_pid:
+            return [
+                Action(actor=actor, type=ActionType.SACRIFICE, data={}),
+                Action(actor=actor, type=ActionType.ACCEPT_SACRIFICE, data={})
+            ]
+        else:
+            return []
+
     if state.phase == "PLAYER":
         pid = _current_player_id(state)
         if actor != str(pid):
@@ -294,10 +307,8 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         if actor != "KING":
             return []
         # NOTA: El piso se determina por ruleta d4 (RNG), no por acción del policy.
-        # Generamos 3 acciones (placeholder) pero el piso se decide aleatoriamente en transition.py.
-        acts: List[Action] = []
-        for floor in (1, 2, 3):
-            acts.append(Action(actor="KING", type=ActionType.KING_ENDROUND, data={}))
-        return acts
+        # CANON Fix #H: Single action for King phase.
+        # UI/AI solo debe llamar a esta acción única para resolver la fase del Rey.
+        return [Action(actor="KING", type=ActionType.KING_ENDROUND, data={})]
 
     return []
