@@ -33,6 +33,55 @@ def _summary(state: GameState, cfg: Config) -> Dict[str, Any]:
     }
 
 
+
+def calculate_reward(state: GameState, next_state: GameState, cfg: Config) -> float:
+    """
+    Calcula la recompensa (reward) para RL basada en la transición.
+    Schema propuesta:
+    - WIN: +100
+    - LOSE: -10
+    - Encontrar Llave (Global): +1
+    - Revelar Habitación: +0.1
+    - Perder Cordura: -0.1 per point
+    - Morir (Game Over Lose): -10 (ya cubierto por LOSE, pero si es personal...)
+    """
+    if next_state.game_over:
+        if next_state.outcome == "WIN":
+            return 100.0
+        else:
+            return -10.0
+
+    reward = 0.0
+
+    # 1. Keys Progress
+    keys_prev = sum(p.keys for p in state.players.values())
+    keys_next = sum(p.keys for p in next_state.players.values())
+    if keys_next > keys_prev:
+        reward += 1.0 * (keys_next - keys_prev)
+
+    # 2. Key Pool Increase (Cámara Letal success)
+    # Check effective keys total? 
+    # Hard to track directly without diffing cfg/state complexly. 
+    # Let's stick to keys in hand for now.
+
+    # 3. Exploration (Revealed Rooms)
+    revealed_prev = sum(1 for r in state.rooms.values() if r.revealed > 0)
+    revealed_next = sum(1 for r in next_state.rooms.values() if r.revealed > 0)
+    if revealed_next > revealed_prev:
+        reward += 0.1 * (revealed_next - revealed_prev)
+
+    # 4. Sanity Loss (Penalización leve)
+    # Comparar sanidad total
+    sanity_prev = sum(p.sanity for p in state.players.values())
+    sanity_next = sum(p.sanity for p in next_state.players.values())
+    diff_sanity = sanity_next - sanity_prev
+    # Note: diff_sanity is negative if damage taken
+    if diff_sanity < 0:
+        reward += 0.1 * diff_sanity # -0.1 per point lost
+
+    return reward
+
+
 def transition_record(
     state: GameState,
     action: Dict[str, Any],
@@ -44,6 +93,9 @@ def transition_record(
     f1 = compute_features(next_state, cfg)
     T0 = tension_T(state, cfg, features=f0)
     T1 = tension_T(next_state, cfg, features=f1)
+
+    # Calculate RL Reward
+    reward = calculate_reward(state, next_state, cfg)
 
     # Prepare action_data, including d6 if present
     action_data = action.get("data", {}).copy()
@@ -57,6 +109,8 @@ def transition_record(
         "actor": action["actor"],
         "action_type": action["type"],
         "action_data": action_data,
+
+        "reward": reward,  # New RL Field
 
         "T_pre": T0,
         "T_post": T1,
