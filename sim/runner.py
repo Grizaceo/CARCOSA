@@ -206,12 +206,15 @@ def run_episode(
         pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
         
         if pending_sacrifice_pid:
+            # print(f"DEBUG RUNNER: Interrupt active for {pending_sacrifice_pid}")
             # INTERRUPT: Only the pending player can act (Sacrifice/Accept)
             actor = str(pending_sacrifice_pid)
             # Use player policy for this decision
             action = ppol.choose(state, rng) 
             # Note: Policies must be robust enough to pick SACRIFICE/ACCEPT if available.
         elif state.phase == "PLAYER":
+            if "PENDING_SACRIFICE_CHECK" in state.flags:
+                print(f"DEBUG RUNNER WARN: Flag exists but value is '{state.flags['PENDING_SACRIFICE_CHECK']}'")
             actor = str(state.turn_order[state.turn_pos])
             action = ppol.choose(state, rng)
         else:

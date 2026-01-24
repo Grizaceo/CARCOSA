@@ -9,10 +9,21 @@ from engine.rng import RNG
 from engine.state import GameState
 from engine.tension import king_utility
 from engine.transition import step
-from engine.types import RoomId
+from engine.types import RoomId, PlayerId
 
 from engine.board import floor_of
 from sim.pathing import bfs_next_step
+
+
+
+def _get_active_actor(state: GameState) -> str:
+    # 1. Check Interrupts
+    pending = state.flags.get("PENDING_SACRIFICE_CHECK")
+    if pending:
+        return str(pending)
+    # 2. Normal Turn
+    pid = state.turn_order[state.turn_pos]
+    return str(pid)
 
 
 class PlayerPolicy:
@@ -73,9 +84,12 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
     MEDITATE_CRITICAL: int = -2
 
     def choose(self, state: GameState, rng: RNG) -> Action:
-        pid = state.turn_order[state.turn_pos]
-        actor = str(pid)
-        p = state.players[pid]
+        actor = _get_active_actor(state)
+        if actor not in ("KING",):
+            pid = PlayerId(actor)
+            p = state.players[pid]
+        else:
+             return Action(actor=actor, type=ActionType.END_TURN, data={})
 
         acts = get_legal_actions(state, actor)
         if not acts or state.remaining_actions.get(pid, 0) <= 0:
@@ -216,9 +230,13 @@ class CowardPolicy(PlayerPolicy):
     cfg: Config = Config()
 
     def choose(self, state: GameState, rng: RNG) -> Action:
-        pid = state.turn_order[state.turn_pos]
-        actor = str(pid)
-        p = state.players[pid]
+        actor = _get_active_actor(state)
+        if actor not in ("KING",):
+            pid = PlayerId(actor)
+            p = state.players[pid]
+        else:
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
+            
         acts = get_legal_actions(state, actor)
         if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
 
@@ -273,8 +291,7 @@ class BerserkerPolicy(PlayerPolicy):
     cfg: Config = Config()
 
     def choose(self, state: GameState, rng: RNG) -> Action:
-        pid = state.turn_order[state.turn_pos]
-        actor = str(pid)
+        actor = _get_active_actor(state)
         acts = get_legal_actions(state, actor)
         if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
 
@@ -306,8 +323,12 @@ class SpeedrunnerPolicy(PlayerPolicy):
     cfg: Config = Config()
 
     def choose(self, state: GameState, rng: RNG) -> Action:
-        pid = state.turn_order[state.turn_pos]
-        actor = str(pid)
+        actor = _get_active_actor(state)
+        # Verify valid player actor
+        if actor not in state.players:
+             return Action(actor=actor, type=ActionType.END_TURN, data={})
+        
+        pid = PlayerId(actor)
         p = state.players[pid]
         acts = get_legal_actions(state, actor)
         if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
@@ -352,8 +373,7 @@ class RandomPolicy(PlayerPolicy):
     - Elige cualquier acción legal con probabilidad uniforme.
     """
     def choose(self, state: GameState, rng: RNG) -> Action:
-        pid = state.turn_order[state.turn_pos]
-        actor = str(pid)
+        actor = _get_active_actor(state)
         acts = get_legal_actions(state, actor)
         if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
         return rng.choice(acts)

@@ -97,6 +97,18 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         p = state.players[pid]
         acts: List[Action] = []
         
+        # CANON Fix: TRAPPED State blocks ALL actions except Escape/Sacrifice
+        if has_status(p, "TRAPPED"):
+            # Solo permitir ESCAPE_TRAPPED
+            acts.append(Action(actor=str(pid), type=ActionType.ESCAPE_TRAPPED, data={}))
+            
+            # Permitir SACRIFICE si está en condiciones (SCARED/-5)
+            if p.sanity <= -5 or p.at_minus5:
+                acts.append(Action(actor=str(pid), type=ActionType.SACRIFICE, data={}))
+                
+            return acts
+
+
         # MOVIMIENTO_BLOQUEADO: Reina Helada bloquea movimiento
         movement_allowed = not _is_movement_blocked(state, pid)
 
@@ -274,7 +286,6 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             room_destroyed = room_state.special_destroyed
             if is_salon and not room_destroyed:
                 # Si tiene VANIDAD ya no puede usarlo (canon check)
-                from engine.effects.states_canonical import has_status
                 if not has_status(p, "VANIDAD"):
                     acts.append(Action(actor=str(pid), type=ActionType.USE_SALON_BELLEZA, data={}))
 
