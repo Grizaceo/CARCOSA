@@ -71,6 +71,43 @@ def _best_room_global(state: GameState) -> Optional[RoomId]:
     return best[2] if best else None
 
 
+ARMORY_STREAK_LIMIT = 2
+STALL_KEY_STEPS = 24
+
+
+def _policy_flags(state: GameState) -> dict:
+    if state.flags is None:
+        state.flags = {}
+    return state.flags
+
+
+def _policy_update_stall(state: GameState, keys_total: int) -> int:
+    flags = _policy_flags(state)
+    last = int(flags.get("POLICY_LAST_KEYS_TOTAL", keys_total))
+    steps = int(flags.get("POLICY_NO_KEY_STEPS", 0))
+    if keys_total > last:
+        steps = 0
+    else:
+        steps += 1
+    flags["POLICY_LAST_KEYS_TOTAL"] = keys_total
+    flags["POLICY_NO_KEY_STEPS"] = steps
+    return steps
+
+
+def _policy_armory_streak(state: GameState, pid: PlayerId) -> int:
+    flags = _policy_flags(state)
+    return int(flags.get(f"POLICY_ARMORY_STREAK_{pid}", 0))
+
+
+def _policy_record_action(state: GameState, pid: PlayerId, action: Action) -> None:
+    flags = _policy_flags(state)
+    if action.type in (ActionType.USE_ARMORY_DROP, ActionType.USE_ARMORY_TAKE):
+        flags[f"POLICY_ARMORY_STREAK_{pid}"] = int(flags.get(f"POLICY_ARMORY_STREAK_{pid}", 0)) + 1
+    else:
+        flags[f"POLICY_ARMORY_STREAK_{pid}"] = 0
+    flags[f"POLICY_LAST_ACTION_{pid}"] = action.type.value
+
+
 def _choose_sacrifice_action(acts: List[Action], state: GameState, pid: PlayerId) -> Optional[Action]:
     """
     Decide entre SACRIFICE y ACCEPT_SACRIFICE.
@@ -110,7 +147,17 @@ def _choose_forced_action(acts: List[Action], state: GameState, pid: PlayerId, r
     return None
 
 
-def _choose_special_action(acts: List[Action], state: GameState, pid: PlayerId, rng: RNG, cfg: Config) -> Optional[Action]:
+def _choose_special_action(
+    acts: List[Action],
+    state: GameState,
+    pid: PlayerId,
+    rng: RNG,
+    cfg: Config,
+    avoid_armory: bool = False,
+    armory_streak: int = 0,
+    avoid_salon: bool = False,
+    key_progress_only: bool = False,
+) -> Optional[Action]:
     p = state.players[pid]
 
     # Reacción inmediata: BLUNT si hay monstruo en la sala
@@ -133,7 +180,7 @@ def _choose_special_action(acts: List[Action], state: GameState, pid: PlayerId, 
                 return buy
 
     # Motemey: vender si cordura baja
-    if p.sanity <= 0:
+    if not key_progress_only and p.sanity <= 1:
         sell_actions = [a for a in acts if a.type == ActionType.USE_MOTEMEY_SELL]
         # Preferir no tesoros
         for a in sell_actions:
@@ -160,16 +207,18 @@ def _choose_special_action(acts: List[Action], state: GameState, pid: PlayerId, 
             if best:
                 return best
 
-    # Armería: tomar si hay espacio
+    armory_blocked = armory_streak >= ARMORY_STREAK_LIMIT or avoid_armory
+
+    # Armeria: tomar si hay espacio
     take = _pick_first(acts, ActionType.USE_ARMORY_TAKE)
-    if take:
+    if take and not armory_blocked and not key_progress_only:
         key_slots, obj_slots = get_inventory_limits(p)
         if get_object_count(p) < obj_slots or get_key_count(p) < key_slots:
             return take
 
-    # Armería: dejar objeto si está al límite
+    # Armeria: dejar objeto si esta al limite
     drop_actions = [a for a in acts if a.type == ActionType.USE_ARMORY_DROP]
-    if drop_actions:
+    if drop_actions and not armory_blocked and not key_progress_only:
         _, obj_slots = get_inventory_limits(p)
         if get_object_count(p) >= obj_slots:
             for a in drop_actions:
@@ -193,29 +242,30 @@ def _choose_special_action(acts: List[Action], state: GameState, pid: PlayerId, 
                     return a
             return doors_actions[0]
 
-    # Capilla: curar si cordura baja
-    if p.sanity <= 1:
-        a = _pick_first(acts, ActionType.USE_CAPILLA)
-        if a:
-            return a
-
-    # Salón de belleza: protección si cordura baja
-    if p.sanity <= 2:
-        a = _pick_first(acts, ActionType.USE_SALON_BELLEZA)
-        if a:
-            return a
-
     # Cámara Letal: intentar ritual si faltan llaves y cordura suficiente
     if _keys_total(state) < cfg.KEYS_TO_WIN and p.sanity >= 3:
         a = _pick_first(acts, ActionType.USE_CAMARA_LETAL_RITUAL)
         if a:
             return a
 
+    # Capilla: curar si cordura baja
+    if not key_progress_only and p.sanity <= 1:
+        a = _pick_first(acts, ActionType.USE_CAPILLA)
+        if a:
+            return a
+
+    # Salón de belleza: protección solo si no hay Capilla disponible
+    if not key_progress_only and not avoid_salon and p.sanity <= 1:
+        if not _pick_first(acts, ActionType.USE_CAPILLA):
+            a = _pick_first(acts, ActionType.USE_SALON_BELLEZA)
+            if a:
+                return a
+
     # Healer: curar aliados muy bajos
     a = _pick_first(acts, ActionType.USE_HEALER_HEAL)
     if a:
         for other_pid, other in state.players.items():
-            if other_pid != pid and other.sanity <= -1:
+            if other_pid != pid and other.sanity <= 0:
                 return a
 
     # Libro + Cuentos
@@ -268,23 +318,21 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         if not acts:
             return Action(actor=actor, type=ActionType.END_TURN, data={})
 
-        forced = _choose_forced_action(acts, state, pid, rng)
-        if forced is not None:
-            return forced
+        def finalize(a: Action) -> Action:
+            _policy_record_action(state, pid, a)
+            return a
 
         keys_total = _keys_total(state)
         umbral = RoomId(self.cfg.UMBRAL_NODE)
+        need_keys = keys_total < self.cfg.KEYS_TO_WIN
 
-        # 1) Panico extremo (cerca de -5): meditar si existe
-        if p.sanity <= self.cfg.PLAYER_SANITY_PANIC:
-            a = _pick_first(acts, ActionType.MEDITATE)
-            if a:
-                return a
+        stall_steps = _policy_update_stall(state, keys_total)
+        armory_streak = _policy_armory_streak(state, pid)
+        avoid_armory = stall_steps >= STALL_KEY_STEPS
 
-        # 2) Heuristica humana: usar habitaciones especiales/objetos si aplica
-        special = _choose_special_action(acts, state, pid, rng, self.cfg)
-        if special:
-            return special
+        forced = _choose_forced_action(acts, state, pid, rng)
+        if forced is not None:
+            return finalize(forced)
 
         danger = _danger_score(state, pid)
         meditate_threshold = self.MEDITATE_CRITICAL
@@ -293,64 +341,111 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         if danger >= 2:
             meditate_threshold += 1
 
-        # 3) Si ya hay llaves suficientes: converger a Umbral
+        # 1) Panico extremo: meditar si existe
+        if p.sanity <= self.cfg.PLAYER_SANITY_PANIC:
+            a = _pick_first(acts, ActionType.MEDITATE)
+            if a:
+                return finalize(a)
+
+        # 2) Supervivencia inmediata si hay peligro alto
+        if danger > 0 and p.sanity <= meditate_threshold:
+            a = _pick_first(acts, ActionType.MEDITATE)
+            if a:
+                return finalize(a)
+
+        # 3) Progreso de llaves: specials de progreso primero
+        if need_keys and p.sanity > meditate_threshold:
+            key_special = _choose_special_action(
+                acts,
+                state,
+                pid,
+                rng,
+                self.cfg,
+                avoid_armory=avoid_armory,
+                armory_streak=armory_streak,
+                avoid_salon=True,
+                key_progress_only=True,
+            )
+            if key_special:
+                return finalize(key_special)
+
+            if _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold):
+                a = _pick_first(acts, ActionType.SEARCH)
+                if a:
+                    return finalize(a)
+
+        # 4) Especiales generales (evitar salon cuando estamos en progreso)
+        avoid_salon = need_keys and p.sanity > meditate_threshold
+        special = _choose_special_action(
+            acts,
+            state,
+            pid,
+            rng,
+            self.cfg,
+            avoid_armory=avoid_armory,
+            armory_streak=armory_streak,
+            avoid_salon=avoid_salon,
+            key_progress_only=False,
+        )
+        if special:
+            return finalize(special)
+
+        # 5) Si ya hay llaves suficientes: converger a Umbral
         if keys_total >= self.cfg.KEYS_TO_WIN:
             if p.room == umbral:
-                # en Umbral: estabiliza solo si critico; si no, termina turno
                 if p.sanity <= meditate_threshold:
                     a = _pick_first(acts, ActionType.MEDITATE)
                     if a:
-                        return a
-                return Action(actor=actor, type=ActionType.END_TURN, data={})
+                        return finalize(a)
+                return finalize(Action(actor=actor, type=ActionType.END_TURN, data={}))
 
             if danger > 0 and p.sanity <= meditate_threshold:
                 a = _pick_first(acts, ActionType.MEDITATE)
                 if a:
-                    return a
+                    return finalize(a)
 
             nxt = bfs_next_step(state, p.room, umbral)
             if nxt is not None:
                 for a in acts:
                     if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
-                        return a
+                        return finalize(a)
 
             move_actions = [a for a in acts if a.type == ActionType.MOVE]
-            return rng.choice(move_actions) if move_actions else Action(actor=actor, type=ActionType.END_TURN, data={})
+            return finalize(rng.choice(move_actions)) if move_actions else finalize(Action(actor=actor, type=ActionType.END_TURN, data={}))
 
-        # 4) Falta llaves: si puedes SEARCH y hay cartas restantes, SEARCH (progreso > curacion leve)
-        if _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold):
+        # 6) Falta llaves: SEARCH si hay cartas y no esta estancado por riesgo
+        if need_keys and _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold):
             a = _pick_first(acts, ActionType.SEARCH)
             if a:
-                return a
+                return finalize(a)
 
-        # 5) Si estas critico o en peligro, meditar
+        # 7) Si estas critico o en peligro, meditar
         if p.sanity <= meditate_threshold:
             a = _pick_first(acts, ActionType.MEDITATE)
             if a:
-                return a
+                return finalize(a)
 
-        # 6) Exploracion GLOBAL: ir al room con mas cartas restantes
+        # 8) Exploracion GLOBAL: ir al room con mas cartas restantes
         goal = _best_room_global(state)
         if goal is not None and p.room != goal:
             nxt = bfs_next_step(state, p.room, goal)
             if nxt is not None:
                 for a in acts:
                     if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
-                        return a
+                        return finalize(a)
 
-        # 7) Si no hay rooms con cartas restantes, meditar si ayuda, si no END_TURN
+        # 9) Si no hay rooms con cartas restantes, meditar si ayuda, si no END_TURN
         a = _pick_first(acts, ActionType.MEDITATE)
         if a and p.sanity < (p.sanity_max or p.sanity):
-            return a
+            return finalize(a)
 
         move_actions = [a for a in acts if a.type == ActionType.MOVE]
-        # Fallback: Random legal action (prefer move, but take anything over forced illegal END_TURN)
         if move_actions:
-            return rng.choice(move_actions)
+            return finalize(rng.choice(move_actions))
         elif acts:
-            return rng.choice(acts)
-        
-        return Action(actor=actor, type=ActionType.END_TURN, data={})
+            return finalize(rng.choice(acts))
+
+        return finalize(Action(actor=actor, type=ActionType.END_TURN, data={}))
 @dataclass
 class HeuristicKingPolicy(KingPolicy):
     cfg: Config = Config()
