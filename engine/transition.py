@@ -11,6 +11,7 @@ from engine.state import GameState, StatusInstance, ensure_canonical_rooms
 from engine.types import PlayerId, RoomId, CardId
 from engine.roles import get_scout_actions, brawler_blunt_free
 from engine.objects import use_object, get_effective_sanity_max, get_max_keys_capacity, is_soulbound, OBJECT_CATALOG
+from engine.inventory import get_inventory_limits
 from engine.inventory import consume_object, add_object
 from engine.effects.states_canonical import has_status, decrement_status_durations, remove_all_statuses
 from engine.effects.event_utils import add_status
@@ -30,6 +31,65 @@ def _heal(p, amount: int) -> None:
 def _get_base_keys_total(cfg) -> int:
     # Base: 5 en mazos + 1 en Motemey
     return int(getattr(cfg, "KEYS_TOTAL", 6))
+
+
+def _available_sacrifice_options(p) -> dict:
+    # Opciones de sacrificio disponibles
+    obj_options = [obj for obj in p.objects if not is_soulbound(obj)]
+    can_reduce_sanity = (p.sanity_max is not None and p.sanity_max > -1)
+    _, current_slots = get_inventory_limits(p)
+    can_reduce_object_slots = current_slots > 0
+    return {
+        "object_options": obj_options,
+        "can_reduce_sanity": can_reduce_sanity,
+        "can_reduce_object_slots": can_reduce_object_slots,
+        "current_object_slots": current_slots,
+    }
+
+
+def _apply_sacrifice_choice(s: GameState, pid: PlayerId, cfg, choice: dict) -> None:
+    p = s.players[pid]
+    opts = _available_sacrifice_options(p)
+
+    mode = (choice or {}).get("mode")
+    if mode == "OBJECT_SLOT":
+        if not opts["can_reduce_object_slots"]:
+            raise ValueError("Sacrifice OBJECT_SLOT not available (no object slots to reduce).")
+
+        # Penalidad permanente de slots
+        p.object_slots_penalty = max(0, int(getattr(p, "object_slots_penalty", 0)) + 1)
+
+        # Ajustar inventario si excede el nuevo límite
+        _, obj_slots = get_inventory_limits(p)
+        while True:
+            non_soul = [obj for obj in p.objects if not is_soulbound(obj)]
+            if len(non_soul) <= obj_slots:
+                break
+            # Si el jugador eligió qué descartar, priorizarlo
+            drop = (choice or {}).get("discard_object_id")
+            if drop not in non_soul:
+                drop = non_soul[-1]
+            p.objects.remove(drop)
+            s.discard_pile.append(drop)
+
+    elif mode == "SANITY_MAX":
+        if not opts["can_reduce_sanity"]:
+            raise ValueError("Sacrifice SANITY_MAX not available (sanity_max already at -1).")
+        p.sanity_max = max(-1, int(p.sanity_max) - 1)
+        if p.sanity > p.sanity_max:
+            p.sanity = p.sanity_max
+    else:
+        # Si no se indicó modo, decidir solo si hay una opción
+        if opts["object_options"] and not opts["can_reduce_sanity"]:
+            _apply_sacrifice_choice(s, pid, cfg, {"mode": "OBJECT_SLOT"})
+        elif opts["can_reduce_sanity"] and not opts["object_options"]:
+            _apply_sacrifice_choice(s, pid, cfg, {"mode": "SANITY_MAX"})
+        else:
+            raise ValueError("Sacrifice choice requires explicit mode when multiple options exist.")
+
+    # Al sacrificar, la cordura vuelve a 0 inmediatamente
+    p.sanity = 0
+    p.at_minus5 = False
 
 
 def apply_sanity_loss(s, player, amount: int, cfg: Config = None, source: str = "GENERIC"):
@@ -225,7 +285,8 @@ def _finalize_step(s, cfg):
     # === CONDICIONES CANÓNICAS DE FIN DE JUEGO ===
     # Nota: Victoria se verifica típicamente al fin de ronda, 
     # pero aquí hacemos check por seguridad
-    _check_defeat(s, cfg)
+    if not s.flags.get(PENDING_SACRIFICE_FLAG):
+        _check_defeat(s, cfg)
 
     # pérdida por agotamiento de mazos (modo simulación)
     if (not s.game_over) and getattr(cfg, "LOSE_ON_DECK_EXHAUSTION", False):
@@ -726,7 +787,6 @@ def _resolve_event(s: GameState, pid: PlayerId, event_id: str, cfg: Config, rng:
     # Evento vuelve al fondo del mazo (convención)
     # CORRECCIÓN: Usar put_bottom() para no duplicar la carta
     # La carta ya fue extraída del mazo por _reveal_one (avanzó deck.top)
-    from engine.boxes import active_deck_for_room
     deck = active_deck_for_room(s, p.room)
     if deck is not None:
         deck.put_bottom(CardId(f"{card_prefix}:{event_id}"))
@@ -1255,7 +1315,7 @@ def _end_of_round_checks(s, cfg):
         return
 
     # Delegar la decisión de derrota a la función especializada
-    if _check_defeat(s, cfg):
+    if not s.flags.get(PENDING_SACRIFICE_FLAG) and _check_defeat(s, cfg):
         return  # Outcome ya seteado por _check_defeat
     _check_victory(s, cfg)
 
@@ -1365,8 +1425,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             # Player chose to SACRIFICE
             # Apply sacrifice cost
             p = s.players[PlayerId(pending_pid_str)]
-            p.sanity = 0
-            p.sanity_max = max(cfg.S_LOSS, (p.sanity_max or 5) - 1)
+            _apply_sacrifice_choice(s, PlayerId(pending_pid_str), cfg, action.data)
             # Clear flag, do NOT apply -5 consequences (as sanity is now 0 > -5)
             # p.at_minus5 remains False (or becomes False)
             del s.flags[PENDING_SACRIFICE_FLAG]
@@ -1435,9 +1494,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         # Let's keep it but ensure it clears flag if it was somehow active (covered above).
         # This block is for "Standard Action Phase", so pending flag is NOT active here.
         elif action.type == ActionType.SACRIFICE:
-            p.sanity = 0
-            p.sanity_max = max(cfg.S_LOSS, (p.sanity_max or 5) - 1)
-            p.at_minus5 = False
+            _apply_sacrifice_choice(s, pid, cfg, action.data)
 
         elif action.type == ActionType.ESCAPE_TRAPPED:
             # A5: Intento de liberarse del estado TRAPPED
@@ -1636,42 +1693,34 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
         # ===== B6: ARMERÍA (drop/take) =====
         elif action.type == ActionType.USE_ARMORY_DROP:
-            # CANON: Dejar objeto O llave en armería (max 2 total)
+            # CANON: Dejar objeto en armeria (max 2 objetos)
             item_name = action.data.get("item_name", "")
-            item_type = action.data.get("item_type", "object")
             armory_room = p.room
             
             if armory_room not in s.armory_storage:
                 s.armory_storage[armory_room] = []
             
             if len(s.armory_storage[armory_room]) < 2:
-                if item_type == "key" and p.keys > 0:
-                    # DROP llave
-                    p.keys -= 1
-                    s.armory_storage[armory_room].append({"type": "key", "value": 1})
-                elif item_type == "object" and item_name in p.objects and not is_soulbound(item_name):
+                if item_name in p.objects and not is_soulbound(item_name):
                     # DROP objeto
                     p.objects.remove(item_name)
-                    s.armory_storage[armory_room].append({"type": "object", "value": item_name})
-
+                    s.armory_storage[armory_room].append(item_name)
         elif action.type == ActionType.USE_ARMORY_TAKE:
-            # CANON: Tomar item de armería (objeto o llave)
+            # CANON: Tomar objeto de armeria
             armory_room = p.room
             if armory_room in s.armory_storage and len(s.armory_storage[armory_room]) > 0:
                 item = s.armory_storage[armory_room].pop()
                 if isinstance(item, dict):
+                    # Compatibilidad con almacenamiento legacy
+                    item_name = item.get("value", "")
                     if item.get("type") == "key":
                         p.keys += item.get("value", 1)
                     else:
-                        item_name = item.get("value", "")
                         if not add_object(s, pid, item_name, discard_choice=action.data.get("discard_choice")):
                             s.armory_storage[armory_room].append(item)
                 else:
-                    # Compatibilidad: item es string (objeto)
                     if not add_object(s, pid, item, discard_choice=action.data.get("discard_choice")):
                         s.armory_storage[armory_room].append(item)
-
-        # ===== B1: CAPILLA (Sanación con riesgo) =====
         elif action.type == ActionType.USE_CAPILLA:
             # d6 + 2 de sanación
             d6 = rng.randint(1, 6)
@@ -1913,7 +1962,8 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             decrement_status_durations(p)
 
         # Check defeat finally
-        _check_defeat(s, cfg)
+        if not s.flags.get(PENDING_SACRIFICE_FLAG):
+            _check_defeat(s, cfg)
 
         # PASO 6: Check del Falso Rey
         _false_king_check(s, rng, cfg)

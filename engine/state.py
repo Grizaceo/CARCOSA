@@ -28,6 +28,8 @@ class PlayerState:
     objects: List[str] = field(default_factory=list)
     soulbound_items: List[str] = field(default_factory=list)
     statuses: List[StatusInstance] = field(default_factory=list)
+    # Penalidad permanente de slots de objetos (sacrificio)
+    object_slots_penalty: int = 0
 
     at_umbral: bool = False
 
@@ -270,6 +272,7 @@ class GameState:
                 statuses=statuses,
                 at_umbral=pdata.get("at_umbral", False),
                 at_minus5=pdata.get("at_minus5", False),
+                object_slots_penalty=pdata.get("object_slots_penalty", 0),
             )
 
         monsters = [MonsterState(monster_id=m["monster_id"], room=RoomId(m["room"])) for m in d.get("monsters", [])]
