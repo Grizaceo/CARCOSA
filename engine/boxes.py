@@ -35,3 +35,24 @@ def sync_room_decks_from_boxes(state: "GameState") -> None:
         if box is None:
             continue
         room.deck = box.deck
+
+
+def sync_boxes_from_rooms(state: "GameState") -> None:
+    """
+    Ensure box decks reference the same DeckState instances as rooms.
+    This keeps active_deck_for_room consistent after room decks are rebuilt.
+    """
+    from engine.state import BoxState
+
+    for rid, room in state.rooms.items():
+        if is_corridor(rid):
+            continue
+        box_id = state.box_at_room.get(rid)
+        if not box_id:
+            box_id = str(rid)
+            state.box_at_room[rid] = box_id
+        box = state.boxes.get(box_id)
+        if box is None:
+            state.boxes[box_id] = BoxState(box_id=box_id, deck=room.deck)
+        else:
+            box.deck = room.deck

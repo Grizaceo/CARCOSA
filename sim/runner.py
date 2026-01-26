@@ -168,78 +168,9 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
 
     # 5. Populate Decks CANONICALLY
     # ===============================
-    # Gran Mazo (104 cartas aprox) repartido entre 12 habitaciones
-    # ------------------------------------------------------------
-    cards: List[CardId] = []
-    
-    # --- EVENTOS (48) ---
-    cards.extend([CardId("EVENT:FURIA_AMARILLO")] * 2)
-    cards.extend([CardId("EVENT:HAY_CADAVER")] * 5)
-    cards.extend([CardId("EVENT:ESPEJO_AMARILLO")] * 5)
-    cards.extend([CardId("EVENT:COMIDA_SERVIDA")] * 5)
-    cards.extend([CardId("EVENT:DIVAN_AMARILLO")] * 6)
-    cards.extend([CardId("EVENT:CAMBIA_CARAS")] * 5)
-    cards.extend([CardId("EVENT:GOLPE_AMARILLO")] * 5)
-    cards.extend([CardId("EVENT:ASCENSOR")] * 6)
-    cards.extend([CardId("EVENT:TRAMPILLA")] * 5)
-    cards.extend([CardId("EVENT:EVENTO_MOTEMEY")] * 4)
-
-    # --- ESTADOS EN MAZO (14) ---
-    cards.extend([CardId("STATE:ENVENENADO")] * 2)
-    cards.extend([CardId("STATE:SANIDAD")] * 2)
-    cards.extend([CardId("STATE:MALDITO")] * 5)
-    cards.extend([CardId("STATE:PARANOIA")] * 5)
-
-    # --- OBJETOS (24) ---
-    cards.extend([CardId("OBJECT:COMPASS")] * 8)
-    cards.extend([CardId("OBJECT:VIAL")] * 8)
-    cards.extend([CardId("OBJECT:BLUNT")] * 8)
-
-    # --- MONSTRUOS (7) ---
-    cards.extend([CardId("MONSTER:TUE_TUE")] * 3)
-    cards.extend([CardId("MONSTER:REINA_HELADA")] * 1)
-    cards.extend([CardId("MONSTER:DUENDE")] * 1)
-    cards.extend([CardId("MONSTER:VIEJO_DEL_SACO")] * 1)
-    cards.extend([CardId("MONSTER:ARAÑA")] * 1)
-
-    # --- ESPECIALES / TESOROS / LLAVES ---
-    cards.extend([CardId("KEY")] * cfg.KEYS_TOTAL) # 5 keys
-    cards.append(CardId("OBJECT:BOOK_CHAMBERS"))
-    
-    # 3 Cuentos (random o fijos, usaremos 3 distintos por ahora)
-    cards.append(CardId("OBJECT:TALE_REPAIRER"))
-    cards.append(CardId("OBJECT:TALE_MASK"))
-    cards.append(CardId("OBJECT:TALE_DRAGON"))
-    
-    # Tesoros en mazo regular
-    cards.append(CardId("OBJECT:TREASURE_RING")) # Llavero
-    cards.append(CardId("OBJECT:RING"))          # Anillo
-
-    # Mezclar el Gran Mazo
-    rnd = random.Random(seed)
-    rnd.shuffle(cards)
-
-    # Repartir ciegamente entre R1-R4 de F1-F3 (12 rooms)
-    # Las llaves y monstruos quedan donde caigan
-    room_ids_target = [r for r in room_ids if not is_corridor(r)]
-    
-    # Round-robin distribution
-    idx = 0
-    while idx < len(cards):
-        for rid in room_ids_target:
-            if idx >= len(cards):
-                break
-            rooms[rid].deck.cards.append(cards[idx])
-            idx += 1
-            
-    # Estado final de mazos: invertimos para que append sea bottom y [0] sea top?
-    # No, DeckState no tiene logica compleja, top apunta a indice.
-    # Pero para eficiencia de pop(), solemos usar pop() del final?
-    # El sistema actual usa DeckState.top avanzando.
-    # Así que la lista es [Carta 1, Carta 2, ...]. Carta 1 está en index 0.
-    # Reveal usa cards[top].
-    # Así que el orden de append es el orden de robo. Shuffle ya randomizó.
-    # Todo OK.
+    # Use the centralized setup logic from engine.setup
+    from engine.setup import setup_canonical_deck
+    setup_canonical_deck(state, rng)
 
     # Flag setup handled by setup_special_rooms
     state.flags["CAMARA_LETAL_PRESENT"] = "CAMARA_LETAL" in state.flags.get("SPECIAL_ROOMS_SELECTED", [])
