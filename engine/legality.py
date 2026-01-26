@@ -243,7 +243,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         armory_destroyed = state.flags.get(f"ARMORY_DESTROYED_{p.room}", False)
 
         if is_in_armory and not armory_destroyed:
-            # CANON: Storage permite hasta 2 objetos en total
+            # CANON: Storage permite hasta 2 ítems en total (objetos y llaves)
             current_storage_count = len(state.armory_storage.get(p.room, []))
             
             # DROP OBJECTS: si tiene objetos y hay espacio (< 2)
@@ -251,7 +251,10 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                 for obj in p.objects:
                     if not is_soulbound(obj):
                         acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": obj, "item_type": "object"}))
-            
+
+            # DROP KEYS: si tiene llaves y hay espacio (< 2)
+            if p.keys > 0 and current_storage_count < 2:
+                acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": "KEY", "item_type": "key"}))
 
             # TAKE: si hay ítems en almacenamiento
             if current_storage_count > 0:

@@ -249,7 +249,7 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
 
 
 def run_episode(
-    max_steps: int = 1200,
+    max_steps: int = 2000,
     seed: int = 1,
     out_path: Optional[str] = None,
     cfg: Optional[Config] = None,
@@ -411,7 +411,7 @@ def run_episode(
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--max-steps", type=int, default=1200)
+    ap.add_argument("--max-steps", type=int, default=2000)
     ap.add_argument("--out", type=str, default=None)
     ap.add_argument("--policy", type=str, default="GOAL", 
                     choices=["GOAL", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM", "MCTS"],
