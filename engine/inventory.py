@@ -12,7 +12,7 @@ Reglas canónicas:
 from typing import List, Optional, Tuple
 from engine.state import GameState, PlayerState
 from engine.types import PlayerId
-from engine.objects import OBJECT_CATALOG, is_soulbound
+from engine.objects import OBJECT_CATALOG, is_soulbound, get_max_keys_capacity
 
 
 # ==============================================================================
@@ -40,7 +40,10 @@ def get_inventory_limits(player: PlayerState) -> Tuple[int, int]:
         Tuple[int, int]: (key_slots, object_slots)
     """
     role_id = getattr(player, "role_id", "DEFAULT")
-    return ROLE_INVENTORY_LIMITS.get(role_id, ROLE_INVENTORY_LIMITS["DEFAULT"])
+    key_slots, object_slots = ROLE_INVENTORY_LIMITS.get(role_id, ROLE_INVENTORY_LIMITS["DEFAULT"])
+    # Llavero (TREASURE_RING) aumenta la capacidad de llaves en +1
+    key_slots = get_max_keys_capacity(player)
+    return key_slots, object_slots
 
 
 def get_object_count(player: PlayerState) -> int:
@@ -75,7 +78,7 @@ def can_add_key(player: PlayerState) -> bool:
     """
     Verifica si el jugador puede agregar una llave sin exceder límite.
     """
-    key_slots, _ = get_inventory_limits(player)
+    key_slots = get_max_keys_capacity(player)
     current_keys = get_key_count(player)
     return current_keys < key_slots
 
@@ -109,7 +112,7 @@ def add_object(state: GameState, player_id: PlayerId, object_id: str,
             player.objects = objects
             
             # Libro de Chambers se registra especialmente
-            if object_id == "CHAMBERS_BOOK":
+            if object_id in ("BOOK_CHAMBERS", "CHAMBERS_BOOK"):
                 state.chambers_book_holder = player_id
         return True
     
@@ -118,8 +121,8 @@ def add_object(state: GameState, player_id: PlayerId, object_id: str,
         objects.append(object_id)
         player.objects = objects
         
-        # CHAMBERS_BOOK: registrar holder (aunque no sea soulbound)
-        if object_id == "CHAMBERS_BOOK":
+        # BOOK_CHAMBERS: registrar holder (aunque no sea soulbound)
+        if object_id in ("BOOK_CHAMBERS", "CHAMBERS_BOOK"):
             state.chambers_book_holder = player_id
         
         return True

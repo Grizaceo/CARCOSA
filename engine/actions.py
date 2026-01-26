@@ -8,6 +8,7 @@ class ActionType(str, Enum):
     MOVE = "MOVE"
     SEARCH = "SEARCH"
     MEDITATE = "MEDITATE"
+    DISCARD_SANIDAD = "DISCARD_SANIDAD"
     END_TURN = "END_TURN"
 
     # Punto de decisión del Rey al final de ronda:

@@ -9,8 +9,9 @@ from engine.config import Config
 from engine.rng import RNG
 from engine.state import GameState, PlayerState, RoomState, DeckState
 from engine.types import PlayerId, RoomId, CardId
-from engine.board import corridor_id, room_id
+from engine.board import corridor_id, room_id, is_corridor
 from engine.transition import step
+from engine.legality import get_legal_actions
 from sim.policies import GoalDirectedPlayerPolicy, HeuristicKingPolicy
 from sim.metrics import transition_record, write_jsonl
 
@@ -130,59 +131,80 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
                     special_activation_count=0
                 )
 
-    # 5. Populate Decks (Keys first, then fillers)
-    # Pool global de llaves: el juego físico tiene 6 cartas de Llave.
-    key_pool = [CardId("KEY") for _ in range(cfg.KEYS_TOTAL)]
-
-    fillers = [
-        CardId("EVENT:X"),
-        CardId("EVENT:Y"),
-        CardId("STATE:STUN"),
-        CardId("STATE:CURSE"),
-        CardId("MONSTER:SPIDER"),
-        CardId("MONSTER:WORM"),
-    ]
-
-    rnd = random.Random(seed)
-    rnd.shuffle(room_ids)
-
-    # Distribución equitativa de llaves
-    keys_per_room = [0] * len(room_ids)
-    for i in range(cfg.KEYS_TOTAL):
-        keys_per_room[i % len(room_ids)] += 1
+    # 5. Populate Decks CANONICALLY
+    # ===============================
+    # Gran Mazo (104 cartas aprox) repartido entre 12 habitaciones
+    # ------------------------------------------------------------
+    cards: List[CardId] = []
     
-    for rid, num_keys in zip(room_ids, keys_per_room):
-        # Llaves al fondo (primero en lista = fondo si pop(0) o top si pop()? 
-        # Usually list append adds to end. top is presumably index 0 or len-1?
-        # DeckState uses 'top' index. If top starts at 0, then index 0 is top.
-        # So appending to list puts items at BOTTOM.
-        # But here we want keys accessible? 
-        # Original code: appended keys first. 
-        # If 'top' is 0, then deck[0] is top.
-        # So appending keys first -> keys are at top (index 0, 1...). 
-        # The prompt says "colocar llaves primero (accesibles)".
-        for _ in range(num_keys):
-            rooms[rid].deck.cards.append(CardId("KEY"))
+    # --- EVENTOS (48) ---
+    cards.extend([CardId("EVENT:FURIA_AMARILLO")] * 2)
+    cards.extend([CardId("EVENT:HAY_CADAVER")] * 5)
+    cards.extend([CardId("EVENT:ESPEJO_AMARILLO")] * 5)
+    cards.extend([CardId("EVENT:COMIDA_SERVIDA")] * 5)
+    cards.extend([CardId("EVENT:DIVAN_AMARILLO")] * 6)
+    cards.extend([CardId("EVENT:CAMBIA_CARAS")] * 5)
+    cards.extend([CardId("EVENT:GOLPE_AMARILLO")] * 5)
+    cards.extend([CardId("EVENT:ASCENSOR")] * 6)
+    cards.extend([CardId("EVENT:TRAMPILLA")] * 5)
+    cards.extend([CardId("EVENT:EVENTO_MOTEMEY")] * 4)
 
-    # Rellenar con fillers
-    for rid in room_ids:
-        deck = rooms[rid].deck.cards
-        target = 6
-        while len(deck) < target:
-            deck.append(rnd.choice(fillers))
-        
-        # Mezclar SOLO los fillers si hay llaves arriba (para no perder accesibilidad)
-        # Ojo: si hay llaves en [0..k-1], y fillers en [k..N], y shuffleamos [k..N], 
-        # las llaves quedan arriba.
-        if len(deck) > cfg.KEYS_TOTAL:
-             keys_count = sum(1 for c in deck if str(c) == "KEY")
-             # Mezclar slice [keys_count:]
-             sublist = deck[keys_count:]
-             rng.shuffle(sublist)
-             # Recomponer
-             deck[:] = deck[:keys_count] + sublist
-        
-        rooms[rid].deck = DeckState(cards=deck)
+    # --- ESTADOS EN MAZO (14) ---
+    cards.extend([CardId("STATE:ENVENENADO")] * 2)
+    cards.extend([CardId("STATE:SANIDAD")] * 2)
+    cards.extend([CardId("STATE:MALDITO")] * 5)
+    cards.extend([CardId("STATE:PARANOIA")] * 5)
+
+    # --- OBJETOS (24) ---
+    cards.extend([CardId("OBJECT:COMPASS")] * 8)
+    cards.extend([CardId("OBJECT:VIAL")] * 8)
+    cards.extend([CardId("OBJECT:BLUNT")] * 8)
+
+    # --- MONSTRUOS (7) ---
+    cards.extend([CardId("MONSTER:TUE_TUE")] * 3)
+    cards.extend([CardId("MONSTER:REINA_HELADA")] * 1)
+    cards.extend([CardId("MONSTER:DUENDE")] * 1)
+    cards.extend([CardId("MONSTER:VIEJO_DEL_SACO")] * 1)
+    cards.extend([CardId("MONSTER:ARAÑA")] * 1)
+
+    # --- ESPECIALES / TESOROS / LLAVES ---
+    cards.extend([CardId("KEY")] * cfg.KEYS_TOTAL) # 5 keys
+    cards.append(CardId("OBJECT:BOOK_CHAMBERS"))
+    
+    # 3 Cuentos (random o fijos, usaremos 3 distintos por ahora)
+    cards.append(CardId("OBJECT:TALE_REPAIRER"))
+    cards.append(CardId("OBJECT:TALE_MASK"))
+    cards.append(CardId("OBJECT:TALE_DRAGON"))
+    
+    # Tesoros en mazo regular
+    cards.append(CardId("OBJECT:TREASURE_RING")) # Llavero
+    cards.append(CardId("OBJECT:RING"))          # Anillo
+
+    # Mezclar el Gran Mazo
+    rnd = random.Random(seed)
+    rnd.shuffle(cards)
+
+    # Repartir ciegamente entre R1-R4 de F1-F3 (12 rooms)
+    # Las llaves y monstruos quedan donde caigan
+    room_ids_target = [r for r in room_ids if not is_corridor(r)]
+    
+    # Round-robin distribution
+    idx = 0
+    while idx < len(cards):
+        for rid in room_ids_target:
+            if idx >= len(cards):
+                break
+            rooms[rid].deck.cards.append(cards[idx])
+            idx += 1
+            
+    # Estado final de mazos: invertimos para que append sea bottom y [0] sea top?
+    # No, DeckState no tiene logica compleja, top apunta a indice.
+    # Pero para eficiencia de pop(), solemos usar pop() del final?
+    # El sistema actual usa DeckState.top avanzando.
+    # Así que la lista es [Carta 1, Carta 2, ...]. Carta 1 está en index 0.
+    # Reveal usa cards[top].
+    # Así que el orden de append es el orden de robo. Shuffle ya randomizó.
+    # Todo OK.
 
     # Flag setup handled by setup_special_rooms
     state.flags["CAMARA_LETAL_PRESENT"] = "CAMARA_LETAL" in state.flags.get("SPECIAL_ROOMS_SELECTED", [])
@@ -266,6 +288,19 @@ def run_episode(
                  action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
             else:
                  action = Action(actor=actor, type=ActionType.END_TURN, data={})
+
+        # Safety: si la policy devuelve una acción ilegal, escoger una legal
+        legal = get_legal_actions(state, actor)
+        if action not in legal:
+            if legal:
+                action = rng.choice(legal)
+            else:
+                # Sin acciones legales: forzar END_TURN o KING_ENDROUND
+                from engine.actions import Action, ActionType
+                if actor == "KING":
+                    action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+                else:
+                    action = Action(actor=actor, type=ActionType.END_TURN, data={})
 
         next_state = step(state, action, rng, cfg)
 

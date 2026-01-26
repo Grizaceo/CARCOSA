@@ -123,7 +123,8 @@ class TestDefeatConditions:
         
         assert result is True
         assert s.game_over is True
-        assert s.outcome == "LOSE_ALL_MINUS5"
+        # Since no source was tracked for the initial -5, it defaults to UNKNOWN
+        assert s.outcome == "LOSE_ALL_MINUS5 (UNKNOWN)"
     
     def test_no_defeat_one_not_minus5(self):
         """No derrota si al menos uno no está en -5"""
@@ -162,7 +163,7 @@ class TestDefeatConditions:
             player_sanity={"P1": 5, "P2": 5}
         )
         s.keys_destroyed = 2  # 6 - 2 = 4 llaves (no derrota)
-        cfg = Config()
+        cfg = Config(KEYS_TOTAL=6)
         
         result = _check_defeat(s, cfg)
         
