@@ -1029,6 +1029,11 @@ def _apply_minus5_transitions(s, cfg):
     for pid, p in s.players.items():
         if p.sanity <= cfg.S_LOSS:  # At or below -5
             if not p.at_minus5:  # Just crossed into -5
+                last_round = getattr(p, "last_minus5_round", -1)
+                if last_round == s.round:
+                    p.at_minus5 = True
+                    p.last_minus5_round = s.round
+                    continue
                 # CANON Fix #A: Interrupt check
                 # Check directly in step() via flag.
                 # If flag is already set, we are waiting for user.
@@ -1060,6 +1065,7 @@ def _apply_minus5_consequences(s, pid, cfg):
     
     # Mark as in -5 state (consequences accepted)
     p.at_minus5 = True
+    p.last_minus5_round = s.round
 
 
 def _apply_status_effects_end_of_round(s: GameState) -> None:
@@ -1693,16 +1699,19 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
         # ===== B6: ARMERÍA (drop/take) =====
         elif action.type == ActionType.USE_ARMORY_DROP:
-            # CANON: Dejar objeto en armeria (max 2 objetos)
+            # CANON: Dejar objeto o llave en armeria (max 2 items)
             item_name = action.data.get("item_name", "")
+            item_type = action.data.get("item_type", "object")
             armory_room = p.room
             
             if armory_room not in s.armory_storage:
                 s.armory_storage[armory_room] = []
             
             if len(s.armory_storage[armory_room]) < 2:
-                if item_name in p.objects and not is_soulbound(item_name):
-                    # DROP objeto
+                if item_type == "key" and p.keys > 0:
+                    p.keys -= 1
+                    s.armory_storage[armory_room].append({"type": "key", "value": 1})
+                elif item_type == "object" and item_name in p.objects and not is_soulbound(item_name):
                     p.objects.remove(item_name)
                     s.armory_storage[armory_room].append(item_name)
         elif action.type == ActionType.USE_ARMORY_TAKE:

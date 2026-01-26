@@ -35,6 +35,8 @@ class PlayerState:
 
     # CORRECCIÓN: este flag ahora significa "actualmente está en -5 y ya se aplicaron efectos de entrar a -5"
     at_minus5: bool = False
+    # Ronda en la que se aplicaron los efectos de llegar a -5 (para evitar reactivacion en la misma ronda)
+    last_minus5_round: int = -1
     
     # FASE 1: Sistema de roles
     role_id: str = "DEFAULT"  # Rol del personaje (HEALER, TANK, etc.)
@@ -272,6 +274,7 @@ class GameState:
                 statuses=statuses,
                 at_umbral=pdata.get("at_umbral", False),
                 at_minus5=pdata.get("at_minus5", False),
+                last_minus5_round=pdata.get("last_minus5_round", -1),
                 object_slots_penalty=pdata.get("object_slots_penalty", 0),
             )
 
