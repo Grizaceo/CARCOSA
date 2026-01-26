@@ -260,8 +260,8 @@ def test_event_furia_amarillo_total_0():
 
     _resolve_card_minimal(s, PlayerId("P1"), CardId("EVENT:FURIA_AMARILLO"), cfg, rng)
 
-    # Con Total 0, dobla daño del Rey por 2 rondas
-    assert s.flags.get("KING_DAMAGE_DOUBLE_UNTIL") == s.round + 2
+    # Con Total 0, dobla daño del Rey PERMANENTEMENTE
+    assert s.flags.get("KING_DAMAGE_DOUBLE_PERMANENT") is True
 
 
 def test_event_furia_amarillo_total_high():
@@ -276,5 +276,5 @@ def test_event_furia_amarillo_total_high():
 
     _resolve_card_minimal(s, PlayerId("P1"), CardId("EVENT:FURIA_AMARILLO"), cfg, rng)
 
-    # Con Total 5+, aturde al Rey 1 ronda
-    assert s.king_vanish_ends == s.round + 1
+    # Con Total 5+, aturde al Rey 1 ronda (vanished)
+    assert s.king_vanished_turns > 0

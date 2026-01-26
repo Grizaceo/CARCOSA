@@ -30,12 +30,12 @@ class Config:
 
     # --- Llaves ---
     KEYS_TO_WIN: int = 4
-    KEYS_TOTAL: int = 6              # pool finito (ajústalo si confirmas otro valor)
+    KEYS_TOTAL: int = 6              # pool canónico base: 5 en mazos + 1 en Motemey
     KEYS_LOSE_THRESHOLD: int = 3     # derrota si quedan <= 3 llaves "en juego" (no destruidas)
 
     # --- Umbral ---
     # CORRECCIÓN: Umbral de Amarillo es el pasillo del piso 1
-    UMBRAL_NODE: str = "F1_P"
+    UMBRAL_NODE: str = "F2_P"
 
     # --- Pesos tensión (baseline) ---
     BIAS: float = -1.2

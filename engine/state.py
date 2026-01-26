@@ -205,6 +205,9 @@ class GameState:
     
     # Anillo activado (para efecto de -2 cordura/turno)
     ring_activated_by: Optional[PlayerId] = None
+    
+    # Tracking de derrota
+    last_sanity_loss_event: Optional[str] = None  # Fuente del último daño significativo (que llevó a -5)
 
     def __post_init__(self) -> None:
         ensure_canonical_rooms(self)
@@ -220,12 +223,8 @@ class GameState:
 
         if not self.remaining_actions:
             for pid in self.turn_order:
-                base_actions = 2
-                # Scout tiene +1 acción adicional
-                player = self.players.get(pid)
-                if player and getattr(player, "role_id", "") == "SCOUT":
-                    base_actions = 3
-                self.remaining_actions[pid] = base_actions
+                # Acciones base unificadas (Scout usa movimiento gratis, no +1 acción)
+                self.remaining_actions[pid] = 2
 
         if not self.stairs:
             for f in (1, 2, 3):
@@ -387,4 +386,7 @@ class GameState:
             
             # Anillo
             ring_activated_by=PlayerId(d["ring_activated_by"]) if d.get("ring_activated_by") else None,
+            
+            # Tracking
+            last_sanity_loss_event=d.get("last_sanity_loss_event"),
         )

@@ -112,6 +112,7 @@ def test_reveal_does_not_consume_actions():
     state.turn_order = [PlayerId("P1"), PlayerId("P2")]
     state.turn_pos = 0
     state.remaining_actions = {PlayerId("P1"): 2}
+    state.players[PlayerId("P1")].role_id = "GENERAL"
 
     # Mover a habitación especial (cuesta 1 acción)
     move_action = Action(
