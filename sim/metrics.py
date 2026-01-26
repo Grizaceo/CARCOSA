@@ -126,6 +126,9 @@ def transition_record(
 
         "done": bool(next_state.game_over),
         "outcome": next_state.outcome,
+        
+        # FULL REPLAY STATE
+        "full_state": state.to_dict()
     }
     return rec
 
