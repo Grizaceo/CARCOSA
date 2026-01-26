@@ -36,10 +36,11 @@ def test_sacrifice_behavior_transition_to_minus5():
     Verifica que al entrar en -5 se pueda sacrificar.
     """
     s, rng, cfg = setup_basic_state(sanity_p1=-5, sanity_p2=3)
-    s.players[PlayerId("P1")].at_minus5 = True # Asumimos que ya entro
+    # Simular chequeo pendiente de sacrificio (antes de aplicar consecuencias)
+    s.flags["PENDING_SACRIFICE_CHECK"] = "P1"
     
-    # Action
-    action = Action(actor="P1", type=ActionType.SACRIFICE, data={})
+    # Action (sacrifica reduciendo sanity max)
+    action = Action(actor="P1", type=ActionType.SACRIFICE, data={"mode": "SANITY_MAX"})
     
     # Pre-assertions
     assert s.players[PlayerId("P1")].sanity == -5
@@ -47,7 +48,7 @@ def test_sacrifice_behavior_transition_to_minus5():
     s_new = step(s, action, rng, cfg)
     
     p1 = s_new.players[PlayerId("P1")]
-    # Check Reset
+    # Check Reset (cordura vuelve a 0)
     assert p1.sanity == 0, "Sacrifice should reset sanity to 0"
     assert p1.at_minus5 is False, "Should remove -5 status"
     
@@ -76,7 +77,7 @@ def test_trapped_legality():
     assert not any(a.type == ActionType.MOVE for a in acts_trapped), "MOVES should be blocked when Trapped"
     assert not any(a.type == ActionType.SEARCH for a in acts_trapped), "SEARCH should be blocked when Trapped"
     
-    allowed_types = {ActionType.ESCAPE_TRAPPED, ActionType.SACRIFICE, ActionType.END_TURN}
+    allowed_types = {ActionType.ESCAPE_TRAPPED}
     action_types = {a.type for a in acts_trapped}
     for at in action_types:
         assert at in allowed_types, f"Illegal action type allowed while TRAPPED: {at}"

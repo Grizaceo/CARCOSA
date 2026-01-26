@@ -8,6 +8,7 @@ from engine.state import GameState, RoomState
 from engine.types import PlayerId, RoomId
 from engine.effects.states_canonical import has_status
 from engine.objects import is_soulbound
+from engine.inventory import get_inventory_limits
 
 
 def _get_special_room_type(state: GameState, room_id: RoomId) -> Optional[str]:
@@ -80,10 +81,26 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
     pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
     if pending_sacrifice_pid:
         if actor == pending_sacrifice_pid:
-            return [
-                Action(actor=actor, type=ActionType.SACRIFICE, data={}),
-                Action(actor=actor, type=ActionType.ACCEPT_SACRIFICE, data={})
-            ]
+            p = state.players[PlayerId(actor)]
+            options = []
+            # SACRIFICE options
+            _, obj_slots = get_inventory_limits(p)
+            if obj_slots > 0:
+                # Si al reducir slots habría overflow, permitir elegir qué descartar
+                non_soul = [obj for obj in p.objects if not is_soulbound(obj)]
+                new_slots = max(0, obj_slots - 1)
+                if len(non_soul) > new_slots:
+                    for obj in non_soul:
+                        options.append(Action(actor=actor, type=ActionType.SACRIFICE, data={"mode": "OBJECT_SLOT", "discard_object_id": obj}))
+                else:
+                    options.append(Action(actor=actor, type=ActionType.SACRIFICE, data={"mode": "OBJECT_SLOT"}))
+
+            if p.sanity_max is not None and p.sanity_max > -1:
+                options.append(Action(actor=actor, type=ActionType.SACRIFICE, data={"mode": "SANITY_MAX"}))
+
+            # Always allow ACCEPT
+            options.append(Action(actor=actor, type=ActionType.ACCEPT_SACRIFICE, data={}))
+            return options
         else:
             return []
 
@@ -113,18 +130,11 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         acts: List[Action] = []
         
-        # CANON Fix: TRAPPED State blocks ALL actions except Escape/Sacrifice
+        # CANON Fix: TRAPPED State blocks ALL actions except Escape
         if has_status(p, "TRAPPED"):
             # Solo permitir ESCAPE_TRAPPED
             acts.append(Action(actor=str(pid), type=ActionType.ESCAPE_TRAPPED, data={}))
-            
-            # Permitir SACRIFICE si está en condiciones (SCARED/-5)
-            if p.sanity <= -5 or p.at_minus5:
-                acts.append(Action(actor=str(pid), type=ActionType.SACRIFICE, data={}))
-                
             return acts
-
-
         # MOVIMIENTO_BLOQUEADO: Reina Helada bloquea movimiento
         movement_allowed = not _is_movement_blocked(state, pid)
 
@@ -177,12 +187,6 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         if has_status(p, "SANIDAD"):
             acts.append(Action(actor=str(pid), type=ActionType.DISCARD_SANIDAD, data={}))
 
-        # SACRIFICE: solo si status "SCARED" o sanity <= S_LOSS (si la regla lo permite)
-        # Por ahora lo permitimos sisanity -5 (o cerca) para testear
-        if p.sanity <= -5 or p.at_minus5:
-             acts.append(Action(actor=str(pid), type=ActionType.SACRIFICE, data={}))
-
-        # ESCAPE_TRAPPED: solo si tiene status "TRAPPED"
         if any(st.status_id == "TRAPPED" for st in p.statuses):
              acts.append(Action(actor=str(pid), type=ActionType.ESCAPE_TRAPPED, data={}))
 
@@ -239,7 +243,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         armory_destroyed = state.flags.get(f"ARMORY_DESTROYED_{p.room}", False)
 
         if is_in_armory and not armory_destroyed:
-            # CANON: Storage permite objetos, tesoros Y llaves (hasta 2 items total)
+            # CANON: Storage permite hasta 2 objetos en total
             current_storage_count = len(state.armory_storage.get(p.room, []))
             
             # DROP OBJECTS: si tiene objetos y hay espacio (< 2)
@@ -248,9 +252,6 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                     if not is_soulbound(obj):
                         acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": obj, "item_type": "object"}))
             
-            # DROP KEYS: si tiene llaves y hay espacio (< 2)
-            if p.keys > 0 and current_storage_count < 2:
-                acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": "KEY", "item_type": "key"}))
 
             # TAKE: si hay ítems en almacenamiento
             if current_storage_count > 0:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 from typing import Dict, List, Any, Optional
+import json
 import random
 from pathlib import Path
 from datetime import datetime
 import argparse
 
+from engine.actions import ActionType
 from engine.config import Config
 from engine.rng import RNG
 from engine.state import GameState, PlayerState, RoomState, DeckState
@@ -14,6 +16,39 @@ from engine.transition import step
 from engine.legality import get_legal_actions
 from sim.policies import GoalDirectedPlayerPolicy, HeuristicKingPolicy
 from sim.metrics import transition_record, write_jsonl
+
+
+SPECIAL_ACTION_TYPES = {
+    ActionType.USE_MOTEMEY_BUY_START,
+    ActionType.USE_MOTEMEY_BUY_CHOOSE,
+    ActionType.USE_MOTEMEY_SELL,
+    ActionType.USE_TABERNA_ROOMS,
+    ActionType.USE_ARMORY_TAKE,
+    ActionType.USE_ARMORY_DROP,
+    ActionType.USE_YELLOW_DOORS,
+    ActionType.USE_CAPILLA,
+    ActionType.USE_SALON_BELLEZA,
+    ActionType.USE_CAMARA_LETAL_RITUAL,
+}
+
+OBJECT_ACTION_TYPES = {
+    ActionType.USE_BLUNT,
+    ActionType.USE_PORTABLE_STAIRS,
+    ActionType.USE_ATTACH_TALE,
+    ActionType.USE_READ_YELLOW_SIGN,
+}
+
+
+def _status_counts(state: GameState) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for p in state.players.values():
+        for st in p.statuses:
+            counts[st.status_id] = counts.get(st.status_id, 0) + 1
+    return counts
+
+
+def _bump(counter: Dict[str, int], key: str, amount: int = 1) -> None:
+    counter[key] = counter.get(key, 0) + amount
 
 
 def _setup_special_rooms(rng: RNG) -> Dict[str, Dict[int, int]]:
@@ -214,7 +249,7 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
 
 
 def run_episode(
-    max_steps: int = 400,
+    max_steps: int = 1200,
     seed: int = 1,
     out_path: Optional[str] = None,
     cfg: Optional[Config] = None,
@@ -260,6 +295,13 @@ def run_episode(
 
     records: List[Dict[str, Any]] = []
     step_idx = 0
+    episode_stats: Dict[str, Dict[str, int]] = {
+        "special_actions": {},
+        "object_actions": {},
+        "status_gained": {},
+        "status_cleared": {},
+    }
+    prev_status_counts = _status_counts(state)
 
     while step_idx < max_steps and not state.game_over:
         # Check for Sacrifice Interrupt
@@ -309,6 +351,23 @@ def run_episode(
         if action.type.value == "KING_ENDROUND" and rng.last_king_d6 is not None:
             action_dict["d6"] = rng.last_king_d6
 
+        # Episode metrics: specials/objects/status transitions
+        if action.type in SPECIAL_ACTION_TYPES:
+            _bump(episode_stats["special_actions"], action.type.value)
+        if action.type in OBJECT_ACTION_TYPES:
+            _bump(episode_stats["object_actions"], action.type.value)
+
+        next_status_counts = _status_counts(next_state)
+        for st, count in next_status_counts.items():
+            prev = prev_status_counts.get(st, 0)
+            if count > prev:
+                _bump(episode_stats["status_gained"], st, count - prev)
+        for st, count in prev_status_counts.items():
+            nxt = next_status_counts.get(st, 0)
+            if count > nxt:
+                _bump(episode_stats["status_cleared"], st, count - nxt)
+        prev_status_counts = next_status_counts
+
         # Add policy info to record for analysis
         records.append(
             transition_record(
@@ -331,7 +390,20 @@ def run_episode(
         out_path = f"runs/run_{policy_name}_seed{seed}_{ts}.jsonl"
 
     write_jsonl(out_path, records)
+    summary = {
+        "policy": policy_name,
+        "seed": seed,
+        "steps": step_idx,
+        "round": state.round,
+        "game_over": state.game_over,
+        "outcome": state.outcome,
+        **episode_stats,
+    }
+    summary_path = out_path.replace(".jsonl", "_summary.json")
+    with open(summary_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2)
     print(f"Saved run to: {out_path}")
+    print(f"Saved summary to: {summary_path}")
     print("Finished:", state.game_over, state.outcome, "round", state.round, "steps", step_idx)
     return state
 
@@ -339,7 +411,7 @@ def run_episode(
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--max-steps", type=int, default=400)
+    ap.add_argument("--max-steps", type=int, default=1200)
     ap.add_argument("--out", type=str, default=None)
     ap.add_argument("--policy", type=str, default="GOAL", 
                     choices=["GOAL", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM", "MCTS"],

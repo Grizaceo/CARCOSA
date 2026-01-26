@@ -43,6 +43,9 @@ def get_inventory_limits(player: PlayerState) -> Tuple[int, int]:
     key_slots, object_slots = ROLE_INVENTORY_LIMITS.get(role_id, ROLE_INVENTORY_LIMITS["DEFAULT"])
     # Llavero (TREASURE_RING) aumenta la capacidad de llaves en +1
     key_slots = get_max_keys_capacity(player)
+    # Penalidad por sacrificio reduce slots de objetos
+    penalty = getattr(player, "object_slots_penalty", 0)
+    object_slots = max(0, object_slots - penalty)
     return key_slots, object_slots
 
 
