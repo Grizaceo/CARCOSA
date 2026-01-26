@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime
 import argparse
 
-from engine.actions import ActionType
+from engine.actions import Action, ActionType
 from engine.config import Config
 from engine.rng import RNG
 from engine.state import GameState, PlayerState, RoomState, DeckState
@@ -231,6 +231,17 @@ def run_episode(
         "object_actions": {},
         "status_gained": {},
         "status_cleared": {},
+        "sacrifice": {
+            "opportunities": 0,
+            "sacrifice_available": 0,
+            "sacrifice": 0,
+            "accept": 0,
+            "sacrifice_with_keys": 0,
+            "accept_with_keys": 0,
+            "sacrifice_mode": {},
+            "keys_destroyed_by": {},
+            "keys_destroyed_sources": {},
+        },
     }
     prev_status_counts = _status_counts(state)
 
@@ -239,6 +250,10 @@ def run_episode(
         pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
         
         if pending_sacrifice_pid:
+            episode_stats["sacrifice"]["opportunities"] += 1
+            legal_for_pending = get_legal_actions(state, str(pending_sacrifice_pid))
+            if any(a.type == ActionType.SACRIFICE for a in legal_for_pending):
+                episode_stats["sacrifice"]["sacrifice_available"] += 1
             # print(f"DEBUG RUNNER: Interrupt active for {pending_sacrifice_pid}")
             # INTERRUPT: Only the pending player can act (Sacrifice/Accept)
             actor = str(pending_sacrifice_pid)
@@ -256,7 +271,6 @@ def run_episode(
             
         if action is None:
             # Fallback if policy fails (should be rare)
-            from engine.actions import Action, ActionType
             if actor == "KING":
                  action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
             else:
@@ -269,11 +283,23 @@ def run_episode(
                 action = rng.choice(legal)
             else:
                 # Sin acciones legales: forzar END_TURN o KING_ENDROUND
-                from engine.actions import Action, ActionType
                 if actor == "KING":
                     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
                 else:
                     action = Action(actor=actor, type=ActionType.END_TURN, data={})
+
+        if actor in state.players:
+            pid_actor = PlayerId(actor)
+            if action.type == ActionType.SACRIFICE:
+                episode_stats["sacrifice"]["sacrifice"] += 1
+                if state.players[pid_actor].keys > 0:
+                    episode_stats["sacrifice"]["sacrifice_with_keys"] += 1
+                mode = action.data.get("mode", "UNKNOWN")
+                _bump(episode_stats["sacrifice"]["sacrifice_mode"], str(mode))
+            elif action.type == ActionType.ACCEPT_SACRIFICE:
+                episode_stats["sacrifice"]["accept"] += 1
+                if state.players[pid_actor].keys > 0:
+                    episode_stats["sacrifice"]["accept_with_keys"] += 1
 
         next_state = step(state, action, rng, cfg)
 
@@ -287,6 +313,13 @@ def run_episode(
             _bump(episode_stats["special_actions"], action.type.value)
         if action.type in OBJECT_ACTION_TYPES:
             _bump(episode_stats["object_actions"], action.type.value)
+
+        keys_delta = next_state.keys_destroyed - state.keys_destroyed
+        if keys_delta > 0:
+            who = actor if actor in state.players else "UNKNOWN"
+            _bump(episode_stats["sacrifice"]["keys_destroyed_by"], str(who), keys_delta)
+            source = state.last_sanity_loss_event or "UNKNOWN"
+            _bump(episode_stats["sacrifice"]["keys_destroyed_sources"], str(source), keys_delta)
 
         next_status_counts = _status_counts(next_state)
         for st, count in next_status_counts.items():
@@ -328,6 +361,8 @@ def run_episode(
         "round": state.round,
         "game_over": state.game_over,
         "outcome": state.outcome,
+        "keys_destroyed_total": state.keys_destroyed,
+        "keys_in_hand": sum(p.keys for p in state.players.values()),
         **episode_stats,
     }
     summary_path = out_path.replace(".jsonl", "_summary.json")
