@@ -90,6 +90,8 @@ OBJECT_CATALOG = {
 
 def is_soulbound(object_id: str) -> bool:
     """Retorna True si el objeto es soulbound (no puede descartarse)."""
+    if object_id == "CHAMBERS_BOOK":
+        object_id = "BOOK_CHAMBERS"
     obj_def = OBJECT_CATALOG.get(object_id)
     return obj_def.is_soulbound if obj_def else False
 
@@ -143,7 +145,7 @@ def _use_compass(s: GameState, pid: PlayerId, cfg) -> None:
 def _use_vial(s: GameState, pid: PlayerId, cfg) -> None:
     """Vial: Recupera 2 de cordura. Acción gratuita."""
     p = s.players[pid]
-    p.sanity = min(p.sanity + 2, p.sanity_max or p.sanity + 2)
+    p.sanity = min(p.sanity + 2, get_effective_sanity_max(p))
 
 
 def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
@@ -157,6 +159,13 @@ def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
     p = s.players[pid]
     for monster in s.monsters:
         if monster.room == p.room:
+            # BABY_SPIDER: Stun = Muerte
+            if "BABY_SPIDER" in monster.monster_id:
+                  s.monsters.remove(monster)
+                  # Log kill? flag?
+                  # s.flags[f"KILLED_{monster.monster_id}"] = True
+                  break
+
             # Rey de Amarillo es inmune al STUN
             if "YELLOW_KING" not in monster.monster_id and "KING" not in monster.monster_id:
                 monster.stunned_remaining_rounds = max(monster.stunned_remaining_rounds, 2)
@@ -183,10 +192,11 @@ def has_treasure_ring(p: PlayerState) -> bool:
 def get_max_keys_capacity(p: PlayerState) -> int:
     """
     Retorna la capacidad máxima de llaves del jugador.
-    Base: 1 llave
+    Base: slots por rol
     +1 si tiene Llavero (TREASURE_RING)
     """
-    base_capacity = 1
+    from engine.roles import get_key_slots
+    base_capacity = get_key_slots(getattr(p, "role_id", ""))
     if has_treasure_ring(p):
         base_capacity += 1
     return base_capacity

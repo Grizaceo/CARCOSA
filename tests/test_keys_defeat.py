@@ -27,4 +27,4 @@ def test_lose_when_keys_in_game_leq_threshold():
     s2 = step(s, a, rng, cfg)
 
     assert s2.game_over is True
-    assert s2.outcome == "LOSE"
+    assert s2.outcome == "LOSE_KEYS_DESTROYED"

@@ -7,6 +7,7 @@ from engine.boxes import active_deck_for_room
 from engine.state import GameState, RoomState
 from engine.types import PlayerId, RoomId
 from engine.effects.states_canonical import has_status
+from engine.objects import is_soulbound
 
 
 def _get_special_room_type(state: GameState, room_id: RoomId) -> Optional[str]:
@@ -86,15 +87,30 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         else:
             return []
 
+    # Motemey pending choice: solo CHOOSE es legal
+    if state.pending_motemey_choice and actor in state.pending_motemey_choice:
+        acts = [
+            Action(actor=actor, type=ActionType.USE_MOTEMEY_BUY_CHOOSE, data={"chosen_index": 0}),
+            Action(actor=actor, type=ActionType.USE_MOTEMEY_BUY_CHOOSE, data={"chosen_index": 1}),
+            Action(actor=actor, type=ActionType.END_TURN, data={}),
+        ]
+        # SANIDAD puede descartarse incluso en este estado
+        if actor in state.players and has_status(state.players[PlayerId(actor)], "SANIDAD"):
+            acts.insert(0, Action(actor=actor, type=ActionType.DISCARD_SANIDAD, data={}))
+        return acts
+
     if state.phase == "PLAYER":
         pid = _current_player_id(state)
         if actor != str(pid):
             return []
 
-        if state.remaining_actions.get(pid, 0) <= 0:
-            return [Action(actor=str(pid), type=ActionType.END_TURN, data={})]
-
         p = state.players[pid]
+        if state.remaining_actions.get(pid, 0) <= 0:
+            acts = [Action(actor=str(pid), type=ActionType.END_TURN, data={})]
+            if has_status(p, "SANIDAD"):
+                acts.insert(0, Action(actor=str(pid), type=ActionType.DISCARD_SANIDAD, data={}))
+            return acts
+
         acts: List[Action] = []
         
         # CANON Fix: TRAPPED State blocks ALL actions except Escape/Sacrifice
@@ -157,6 +173,10 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         if can_meditate:
             acts.append(Action(actor=str(pid), type=ActionType.MEDITATE, data={}))
 
+        # SANIDAD: puede descartarse gratis para eliminar todos los estados
+        if has_status(p, "SANIDAD"):
+            acts.append(Action(actor=str(pid), type=ActionType.DISCARD_SANIDAD, data={}))
+
         # SACRIFICE: solo si status "SCARED" o sanity <= S_LOSS (si la regla lo permite)
         # Por ahora lo permitimos sisanity -5 (o cerca) para testear
         if p.sanity <= -5 or p.at_minus5:
@@ -171,21 +191,15 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         is_in_motemey = _get_special_room_type(state, p.room) == "MOTEMEY"
 
         if is_in_motemey or state.motemey_event_active:
-            # CORRECCIÓN D: Sistema de elección de 2 pasos
-            # Si hay pending_choice para este jugador: solo CHOOSE es legal
-            if state.pending_motemey_choice and str(pid) in state.pending_motemey_choice:
-                # Paso 2: Elegir carta (0 o 1)
-                acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_CHOOSE, data={"chosen_index": 0}))
-                acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_CHOOSE, data={"chosen_index": 1}))
-            else:
-                # Paso 1: Iniciar compra (requiere sanidad >= 2)
-                if p.sanity >= 2 and state.motemey_deck.remaining() >= 2:
-                    acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_START, data={}))
+            # Paso 1: Iniciar compra (requiere sanidad >= 2)
+            if p.sanity >= 2 and state.motemey_deck.remaining() >= 2:
+                acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_START, data={}))
 
             # SELL: requiere tener al menos un objeto (siempre disponible)
             if p.objects:
-                for idx, item in enumerate(p.objects):
-                    acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_SELL, data={"item_name": item}))
+                for item in p.objects:
+                    if not is_soulbound(item):
+                        acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_SELL, data={"item_name": item}))
 
         # ===== B4: PUERTAS AMARILLO =====
         # ===== B4: PUERTAS AMARILLO =====
@@ -231,7 +245,8 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             # DROP OBJECTS: si tiene objetos y hay espacio (< 2)
             if p.objects and current_storage_count < 2:
                 for obj in p.objects:
-                    acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": obj, "item_type": "object"}))
+                    if not is_soulbound(obj):
+                        acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": obj, "item_type": "object"}))
             
             # DROP KEYS: si tiene llaves y hay espacio (< 2)
             if p.keys > 0 and current_storage_count < 2:
@@ -305,7 +320,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         # ===== FASE 4: USE_ATTACH_TALE (Unir cuento al libro) =====
         # Requiere: Tener el Libro (BOOK_CHAMBERS) y al menos un Cuento (TALE_*)
-        if "BOOK_CHAMBERS" in p.objects:
+        if "BOOK_CHAMBERS" in p.objects or "CHAMBERS_BOOK" in p.objects:
             for obj in p.objects:
                 if obj.startswith("TALE_"):
                     # Es un cuento, podemos unirlo

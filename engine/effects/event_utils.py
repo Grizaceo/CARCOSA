@@ -32,9 +32,13 @@ def remove_status(p: PlayerState, status_id: str) -> bool:
     return len(p.statuses) < original_len
 
 
-def add_status(p: PlayerState, status_id: str, duration: int = 2) -> None:
-    """Agrega un estado con duración."""
-    p.statuses.append(StatusInstance(status_id=status_id, remaining_rounds=duration))
+from typing import List, Dict, Any
+
+def add_status(p: PlayerState, status_id: str, duration: int = 2, metadata: Dict[str, Any] = None) -> None:
+    """Agrega un estado con duración y metadata opcional."""
+    if metadata is None:
+        metadata = {}
+    p.statuses.append(StatusInstance(status_id=status_id, remaining_rounds=duration, metadata=metadata))
 
 
 def get_player_by_turn_offset(s: GameState, pid: PlayerId, offset: int) -> PlayerId:

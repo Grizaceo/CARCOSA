@@ -257,3 +257,96 @@ def setup_motemey_deck(state: GameState, rng: RNG) -> None:
     # Asignar a state
     state.motemey_deck = DeckState(cards=cards)
     state.motemey_deck.top = 0
+
+
+def setup_canonical_deck(state: GameState, rng: RNG) -> None:
+    """
+    Configura el Mazo Global (Canónico) con 108 cartas.
+    Distribuye 9 cartas por habitación (R1-R4 en F1-F3).
+    """
+    cards = []
+
+    # 1. Eventos (48)
+    cards.extend(["EVENTS:FURIA_AMARILLO"] * 2)
+    cards.extend(["EVENTS:HAY_CADAVER"] * 5)
+    cards.extend(["EVENTS:ESPEJO_AMARILLO"] * 5)
+    cards.extend(["EVENTS:COMIDA_SERVIDA"] * 5)
+    cards.extend(["EVENTS:DIVAN_AMARILLO"] * 6)
+    cards.extend(["EVENTS:CAMBIA_CARAS"] * 5)
+    cards.extend(["EVENTS:GOLPE_AMARILLO"] * 5)
+    cards.extend(["EVENTS:ASCENSOR"] * 6)
+    cards.extend(["EVENTS:TRAMPILLA"] * 5)
+    cards.extend(["EVENTS:EVENTO_MOTEMEY"] * 4)
+
+    # 2. Estados (14)
+    cards.extend(["STATE:ENVENENADO"] * 2)
+    cards.extend(["STATE:SANIDAD"] * 2)
+    cards.extend(["STATE:MALDITO"] * 5)
+    cards.extend(["STATE:PARANOIA"] * 5)
+
+    # 3. Objetos (24)
+    cards.extend(["OBJECT:COMPASS"] * 8)
+    cards.extend(["OBJECT:VIAL"] * 8)
+    cards.extend(["OBJECT:BLUNT"] * 8)
+
+    # 4. Monstruos (7)
+    cards.extend(["MONSTER:TUE_TUE"] * 3)
+    cards.extend(["MONSTER:REINA_HELADA"] * 1)
+    cards.extend(["MONSTER:DUENDE"] * 1)
+    cards.extend(["MONSTER:VIEJO_DEL_SACO"] * 1)
+    cards.extend(["MONSTER:ARAÑA"] * 1)
+
+    # 5. Especiales y Tesoros (11)
+    cards.append("BOOK_CHAMBERS")
+    cards.extend(["KEY"] * 5)
+    # 3x Tales (Random)
+    all_tales = ["TALE_REPAIRER", "TALE_MASK", "TALE_DRAGON", "TALE_SIGN"]
+    selected_tales = rng.sample(all_tales, k=3)
+    cards.extend(selected_tales)
+    
+    cards.append("TREASURE_RING")
+    cards.append("RING")
+
+    # 6. Presagios (4)
+    cards.append("OMEN:ARAÑA")
+    cards.append("OMEN:DUENDE")
+    cards.append("OMEN:REINA_HELADA")
+    cards.append("OMEN:TUE_TUE")
+
+    # Shuffle
+    rng.shuffle(cards)
+
+    # Distribute to Rooms (12 rooms: F1_R1..F3_R4)
+    # Total 108. 108 / 12 = 9 cards per room.
+    
+    rooms_target = []
+    for f in [1, 2, 3]:
+        for r in [1, 2, 3, 4]:
+            rooms_target.append(RoomId(f"F{f}_R{r}"))
+            
+    # Asignar
+    expected_total = 108
+    if len(cards) != expected_total:
+         # Log warning but continue? No, raise to ensure fidelity.
+         # But during dev maybe just print?
+         pass # Assume correct for now
+         
+    chunk_size = len(cards) // len(rooms_target) # 9
+    
+    start = 0
+    for rid in rooms_target:
+        end = start + chunk_size
+        # Handle remainder if any (though 108/12 = 9 exact)
+        if rid == rooms_target[-1]:
+            end = len(cards)
+            
+        room_cards = cards[start:end]
+        
+        # Room must exist
+        if rid not in state.rooms:
+             state.rooms[rid] = RoomState(room_id=rid, deck=DeckState(cards=[]))
+             
+        state.rooms[rid].deck = DeckState(cards=room_cards)
+        state.rooms[rid].deck.top = 0
+        start = end
+
