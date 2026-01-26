@@ -28,17 +28,17 @@ def test_sacrifice_interrupt():
     assert p1.keys == 2
     assert not p1.at_minus5
     
-    # Check legality: Only SACRIFICE/ACCEPT allowed
+    # Check legality: SACRIFICE options + ACCEPT
     legal = get_legal_actions(s, "P1")
-    assert len(legal) == 2
     types = [a.type for a in legal]
     assert ActionType.SACRIFICE in types
     assert ActionType.ACCEPT_SACRIFICE in types
     
-    # Execute SACRIFICE
-    s2 = step(s, Action(actor="P1", type=ActionType.SACRIFICE, data={}), None, cfg)
+    # Execute SACRIFICE (solo opción: SANITY_MAX)
+    s2 = step(s, Action(actor="P1", type=ActionType.SACRIFICE, data={"mode": "SANITY_MAX"}), None, cfg)
     assert s2.flags.get("PENDING_SACRIFICE_CHECK") is None
     assert s2.players[PlayerId("P1")].sanity == 0
+    assert s2.players[PlayerId("P1")].sanity_max == 4
     assert s2.players[PlayerId("P1")].keys == 2 # Keys saved!
     
 
