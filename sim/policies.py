@@ -108,33 +108,63 @@ def _policy_record_action(state: GameState, pid: PlayerId, action: Action) -> No
     flags[f"POLICY_LAST_ACTION_{pid}"] = action.type.value
 
 
-def _choose_sacrifice_action(acts: List[Action], state: GameState, pid: PlayerId) -> Optional[Action]:
+def _choose_sacrifice_action(acts: List[Action], state: GameState, pid: PlayerId, cfg: Config) -> Optional[Action]:
     """
-    Decide entre SACRIFICE y ACCEPT_SACRIFICE.
-    Preferencia: OBJECT_SLOT si está disponible; luego SANITY_MAX; si no, ACCEPT.
+    Decide entre SACRIFICE y ACCEPT_SACRIFICE con foco en evitar destruccion de llaves.
+    - Si el jugador lleva llaves, prioriza SACRIFICE.
+    - Si el equipo esta fragil, prioriza SACRIFICE para evitar cascadas.
+    - Si no hay riesgo, puede ACCEPT para evitar penalidades permanentes.
     """
+    p = state.players[pid]
     sac_actions = [a for a in acts if a.type == ActionType.SACRIFICE]
     acc_action = _pick_first(acts, ActionType.ACCEPT_SACRIFICE)
-    if sac_actions:
-        obj_slot = [a for a in sac_actions if a.data.get("mode") == "OBJECT_SLOT"]
-        sanity_max = [a for a in sac_actions if a.data.get("mode") == "SANITY_MAX"]
-        if obj_slot:
-            # Si hay que descartar, preferir no-tesoro
-            for a in obj_slot:
-                drop = a.data.get("discard_object_id")
-                if drop and not str(drop).startswith("TREASURE"):
-                    return a
-            return obj_slot[0]
-        if sanity_max:
-            return sanity_max[0]
-        return sac_actions[0]
-    return acc_action
+    if not sac_actions:
+        return acc_action
+
+    team_low = sum(1 for pl in state.players.values() if pl.sanity <= -3)
+    team_critical = sum(1 for pl in state.players.values() if pl.sanity <= -4)
+    other_key_critical = any(
+        (pl.player_id != pid and pl.keys > 0 and pl.sanity <= -4) for pl in state.players.values()
+    )
+    close_to_win = _keys_total(state) >= max(0, cfg.KEYS_TO_WIN - 1)
+
+    prefer_sacrifice = False
+    if p.keys > 0:
+        prefer_sacrifice = True
+    if team_critical >= 1 or team_low >= 3 or other_key_critical:
+        prefer_sacrifice = True
+    if close_to_win:
+        prefer_sacrifice = True
+
+    if not prefer_sacrifice and acc_action is not None:
+        return acc_action
+
+    def _sacrifice_cost(a: Action) -> float:
+        mode = a.data.get("mode")
+        if mode == "OBJECT_SLOT":
+            drop = a.data.get("discard_object_id")
+            if not drop:
+                return 0.25
+            cost = 1.0
+            if str(drop).startswith("TREASURE"):
+                cost += 2.0
+            if is_soulbound(str(drop)):
+                cost += 3.0
+            return cost
+        if mode == "SANITY_MAX":
+            base = 1.5
+            if p.sanity_max is not None and p.sanity_max <= 0:
+                base += 1.5
+            return base
+        return 2.0
+
+    return min(sac_actions, key=_sacrifice_cost)
 
 
-def _choose_forced_action(acts: List[Action], state: GameState, pid: PlayerId, rng: RNG) -> Optional[Action]:
+def _choose_forced_action(acts: List[Action], state: GameState, pid: PlayerId, rng: RNG, cfg: Config) -> Optional[Action]:
     # Pending sacrifice: only SACRIFICE/ACCEPT are legal
     if _pick_first(acts, ActionType.ACCEPT_SACRIFICE):
-        choice = _choose_sacrifice_action(acts, state, pid)
+        choice = _choose_sacrifice_action(acts, state, pid, cfg)
         return choice if choice is not None else rng.choice(acts)
 
     # TRAPPED: only ESCAPE_TRAPPED (and maybe SACRIFICE) are legal
@@ -157,6 +187,7 @@ def _choose_special_action(
     armory_streak: int = 0,
     avoid_salon: bool = False,
     key_progress_only: bool = False,
+    risk_averse: bool = False,
 ) -> Optional[Action]:
     p = state.players[pid]
 
@@ -173,7 +204,7 @@ def _choose_special_action(
 
     # Motemey: comprar si hay espacio o falta llaves
     buy = _pick_first(acts, ActionType.USE_MOTEMEY_BUY_START)
-    if buy:
+    if buy and not risk_averse:
         key_slots, obj_slots = get_inventory_limits(p)
         if get_object_count(p) < obj_slots or get_key_count(p) < key_slots:
             if p.sanity >= 2:
@@ -192,7 +223,7 @@ def _choose_special_action(
 
     # Taberna: usar si cordura suficiente y faltan llaves
     taberna_actions = [a for a in acts if a.type == ActionType.USE_TABERNA_ROOMS]
-    if taberna_actions and p.sanity >= 2:
+    if taberna_actions and p.sanity >= 2 and not risk_averse:
         if _keys_total(state) < cfg.KEYS_TO_WIN:
             # Elegir la combinación con más cartas restantes
             best = None
@@ -211,14 +242,14 @@ def _choose_special_action(
 
     # Armeria: tomar si hay espacio
     take = _pick_first(acts, ActionType.USE_ARMORY_TAKE)
-    if take and not armory_blocked and not key_progress_only:
+    if take and not armory_blocked and not key_progress_only and not risk_averse:
         key_slots, obj_slots = get_inventory_limits(p)
         if get_object_count(p) < obj_slots or get_key_count(p) < key_slots:
             return take
 
     # Armeria: dejar objeto si esta al limite
     drop_actions = [a for a in acts if a.type == ActionType.USE_ARMORY_DROP]
-    if drop_actions and not armory_blocked and not key_progress_only:
+    if drop_actions and not armory_blocked and not key_progress_only and not risk_averse:
         _, obj_slots = get_inventory_limits(p)
         if get_object_count(p) >= obj_slots:
             for a in drop_actions:
@@ -243,7 +274,7 @@ def _choose_special_action(
             return doors_actions[0]
 
     # Cámara Letal: intentar ritual si faltan llaves y cordura suficiente
-    if _keys_total(state) < cfg.KEYS_TO_WIN and p.sanity >= 3:
+    if _keys_total(state) < cfg.KEYS_TO_WIN and p.sanity >= 3 and not risk_averse:
         a = _pick_first(acts, ActionType.USE_CAMARA_LETAL_RITUAL)
         if a:
             return a
@@ -292,6 +323,27 @@ def _danger_score(state: GameState, pid: PlayerId) -> int:
     return score
 
 
+def _danger_score_room(state: GameState, room: RoomId) -> int:
+    score = 0
+    if any(m.room == room for m in state.monsters):
+        score += 2
+    near = set(neighbors(room))
+    if any(m.room in near for m in state.monsters):
+        score += 1
+    pfloor = floor_of(room)
+    if pfloor == state.king_floor:
+        score += 1
+    if state.false_king_floor is not None and pfloor == state.false_king_floor:
+        score += 1
+    return score
+
+
+def _team_fragility(state: GameState) -> Tuple[int, int]:
+    low = sum(1 for p in state.players.values() if p.sanity <= -3)
+    critical = sum(1 for p in state.players.values() if p.sanity <= -4)
+    return low, critical
+
+
 @dataclass
 class GoalDirectedPlayerPolicy(PlayerPolicy):
     """
@@ -330,16 +382,26 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         armory_streak = _policy_armory_streak(state, pid)
         avoid_armory = stall_steps >= STALL_KEY_STEPS
 
-        forced = _choose_forced_action(acts, state, pid, rng)
+        forced = _choose_forced_action(acts, state, pid, rng, self.cfg)
         if forced is not None:
             return finalize(forced)
 
         danger = _danger_score(state, pid)
         meditate_threshold = self.MEDITATE_CRITICAL
+        key_carrier = p.keys > 0
+        team_low, team_critical = _team_fragility(state)
         if danger > 0:
             meditate_threshold += 1
         if danger >= 2:
             meditate_threshold += 1
+        if team_low >= 2:
+            meditate_threshold += 1
+        if team_critical >= 1:
+            meditate_threshold += 1
+        if key_carrier:
+            meditate_threshold += 1
+
+        carrier_caution = key_carrier and (danger > 0 or team_critical > 0)
 
         # 1) Panico extremo: meditar si existe
         if p.sanity <= self.cfg.PLAYER_SANITY_PANIC:
@@ -353,8 +415,34 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             if a:
                 return finalize(a)
 
+        # 2.5) Guardrail para portadores de llaves en riesgo: curar o escapar primero
+        if carrier_caution:
+            safe_special = _choose_special_action(
+                acts,
+                state,
+                pid,
+                rng,
+                self.cfg,
+                avoid_armory=True,
+                armory_streak=armory_streak,
+                avoid_salon=False,
+                key_progress_only=False,
+                risk_averse=True,
+            )
+            if safe_special:
+                return finalize(safe_special)
+
+            move_actions = [a for a in acts if a.type == ActionType.MOVE]
+            if move_actions:
+                best = min(
+                    move_actions,
+                    key=lambda a: _danger_score_room(state, RoomId(a.data.get("to"))),
+                )
+                if _danger_score_room(state, RoomId(best.data.get("to"))) < danger:
+                    return finalize(best)
+
         # 3) Progreso de llaves: specials de progreso primero
-        if need_keys and p.sanity > meditate_threshold:
+        if need_keys and p.sanity > meditate_threshold and not carrier_caution:
             key_special = _choose_special_action(
                 acts,
                 state,
@@ -365,6 +453,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                 armory_streak=armory_streak,
                 avoid_salon=True,
                 key_progress_only=True,
+                risk_averse=False,
             )
             if key_special:
                 return finalize(key_special)
@@ -376,6 +465,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
 
         # 4) Especiales generales (evitar salon cuando estamos en progreso)
         avoid_salon = need_keys and p.sanity > meditate_threshold
+        risk_averse = carrier_caution or team_critical >= 1
         special = _choose_special_action(
             acts,
             state,
@@ -386,6 +476,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             armory_streak=armory_streak,
             avoid_salon=avoid_salon,
             key_progress_only=False,
+            risk_averse=risk_averse,
         )
         if special:
             return finalize(special)
@@ -414,7 +505,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             return finalize(rng.choice(move_actions)) if move_actions else finalize(Action(actor=actor, type=ActionType.END_TURN, data={}))
 
         # 6) Falta llaves: SEARCH si hay cartas y no esta estancado por riesgo
-        if need_keys and _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold):
+        if need_keys and _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold) and not carrier_caution:
             a = _pick_first(acts, ActionType.SEARCH)
             if a:
                 return finalize(a)
@@ -527,7 +618,7 @@ class CowardPolicy(PlayerPolicy):
         acts = get_legal_actions(state, actor)
         if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
 
-        forced = _choose_forced_action(acts, state, pid, rng)
+        forced = _choose_forced_action(acts, state, pid, rng, self.cfg)
         if forced is not None:
             return forced
 
@@ -592,7 +683,7 @@ class BerserkerPolicy(PlayerPolicy):
         if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
 
         if actor in state.players:
-            forced = _choose_forced_action(acts, state, PlayerId(actor), rng)
+            forced = _choose_forced_action(acts, state, PlayerId(actor), rng, self.cfg)
             if forced is not None:
                 return forced
 
@@ -634,7 +725,7 @@ class SpeedrunnerPolicy(PlayerPolicy):
         acts = get_legal_actions(state, actor)
         if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
 
-        forced = _choose_forced_action(acts, state, pid, rng)
+        forced = _choose_forced_action(acts, state, pid, rng, self.cfg)
         if forced is not None:
             return forced
 
