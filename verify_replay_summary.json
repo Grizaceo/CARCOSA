@@ -1,0 +1,12 @@
+{
+  "policy": "GOAL",
+  "seed": 42,
+  "steps": 5,
+  "round": 1,
+  "game_over": false,
+  "outcome": null,
+  "special_actions": {},
+  "object_actions": {},
+  "status_gained": {},
+  "status_cleared": {}
+}

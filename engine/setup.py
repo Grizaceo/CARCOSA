@@ -12,6 +12,7 @@ Referencia: V0_3_Fidelity_Notes_Complement.md sección A
 
 from typing import Dict, List
 from engine.state import GameState, RoomState, RoomId, DeckState, BoxState
+from engine.boxes import sync_boxes_from_rooms
 from engine.rng import RNG
 
 
@@ -349,4 +350,7 @@ def setup_canonical_deck(state: GameState, rng: RNG) -> None:
         state.rooms[rid].deck = DeckState(cards=room_cards)
         state.rooms[rid].deck.top = 0
         start = end
+
+    # Keep boxes aligned with room decks for active_deck_for_room
+    sync_boxes_from_rooms(state)
 
