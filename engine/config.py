@@ -33,8 +33,22 @@ class Config:
     KEYS_TOTAL: int = 6              # pool canónico base: 5 en mazos + 1 en Motemey
     KEYS_LOSE_THRESHOLD: int = 3     # derrota si quedan <= 3 llaves "en juego" (no destruidas)
 
+    # --- Roles ---
+    ROLE_DRAW_MODE: str = "FIXED"  # FIXED | RANDOM_UNIQUE | RANDOM_WITH_REPLACEMENT
+    ROLE_POOL: tuple[str, ...] = field(
+        default_factory=lambda: (
+            "HEALER",
+            "TANK",
+            "HIGH_ROLLER",
+            "SCOUT",
+            "BRAWLER",
+            "PSYCHIC",
+        )
+    )
+
     # --- Umbral ---
-    # CORRECCIÓN: Umbral de Amarillo es el pasillo del piso 1
+    # --- Umbral ---
+    # CANON (2026): El Umbral de Amarillo es el pasillo del piso 2 (F2_P)
     UMBRAL_NODE: str = "F2_P"
 
     # --- Pesos tensión (baseline) ---

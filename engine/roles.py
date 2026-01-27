@@ -16,8 +16,9 @@ ROLES CANÓNICOS (2026-01-22):
 
 Todos los roles tienen cordura mínima = -5
 """
-from typing import List, Optional
+from typing import Dict, List, Optional, Sequence
 from engine.catalogs.roles import ROLE_CATALOG, RoleDefinition
+from engine.rng import RNG
 
 def get_role(role_id: str) -> Optional[RoleDefinition]:
     """Obtiene la definición de un rol."""
@@ -126,3 +127,37 @@ def brawler_blunt_free(player) -> bool:
     Verifica si el jugador puede usar contundente sin coste de acción.
     """
     return has_ability(getattr(player, "role_id", ""), "BLUNT_REACTION")
+
+
+def draw_roles(
+    player_ids: Sequence[str],
+    role_draw_mode: str,
+    role_pool: Sequence[str],
+    rng: RNG,
+) -> Dict[str, str]:
+    """
+    Sortea roles segÃºn modo y pool configurado.
+    """
+    mode = (role_draw_mode or "").upper()
+    pool_list = list(role_pool) if role_pool else []
+
+    if not pool_list:
+        raise ValueError("role_pool is empty")
+
+    invalid = [r for r in pool_list if r not in ROLE_CATALOG]
+    if invalid:
+        raise ValueError(f"Unknown roles in role_pool: {invalid}")
+
+    if mode == "RANDOM_UNIQUE":
+        if len(player_ids) > len(pool_list):
+            raise ValueError(
+                f"RANDOM_UNIQUE requires len(role_pool) >= players "
+                f"({len(pool_list)} < {len(player_ids)})"
+            )
+        roles = rng.sample(pool_list, len(player_ids))
+    elif mode == "RANDOM_WITH_REPLACEMENT":
+        roles = [rng.choice(pool_list) for _ in player_ids]
+    else:
+        raise ValueError(f"Unknown role_draw_mode: {role_draw_mode}")
+
+    return {str(pid): role for pid, role in zip(player_ids, roles)}
