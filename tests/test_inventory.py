@@ -2,20 +2,19 @@
 Tests para el sistema de inventario.
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId, RoomId
+from engine.state_factory import make_game_state, make_player
 from engine.inventory import (
     get_inventory_limits, get_object_count, can_add_object, can_add_key,
     add_object, remove_object, consume_object, is_tale_of_yellow, attach_tale_to_chambers
 )
 
 
-def create_test_player(role_id: str = "DEFAULT", objects: list = None, keys: int = 0) -> PlayerState:
+def create_test_player(role_id: str = "DEFAULT", objects: list = None, keys: int = 0):
     """Crea un jugador de prueba."""
-    p = PlayerState(
-        player_id=PlayerId("P1"),
+    p = make_player(
+        player_id="P1",
+        room="F1_R1",
         sanity=5,
-        room=RoomId("F1_R1"),
         sanity_max=10,
         keys=keys,
     )
@@ -24,18 +23,26 @@ def create_test_player(role_id: str = "DEFAULT", objects: list = None, keys: int
     return p
 
 
-def create_test_state(player: PlayerState) -> GameState:
+def create_test_state(player):
     """Crea un estado de juego de prueba."""
-    rooms = {
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[])),
-    }
-    return GameState(
+    room = str(player.room)
+    s = make_game_state(
         round=1,
-        players={player.player_id: player},
-        rooms=rooms,
+        players={
+            str(player.player_id): {
+                "room": room,
+                "sanity": player.sanity,
+                "sanity_max": player.sanity_max,
+                "keys": player.keys,
+                "objects": list(player.objects),
+            }
+        },
+        rooms=[room],
         phase="PLAYER",
         king_floor=3,
     )
+    s.players[player.player_id] = player
+    return s
 
 
 class TestInventoryLimits:

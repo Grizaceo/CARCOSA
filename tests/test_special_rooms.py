@@ -1,6 +1,6 @@
 
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state, make_player
 from engine.types import PlayerId, RoomId
 from engine.actions import Action, ActionType
 from engine.transition import step
@@ -10,21 +10,15 @@ from engine.rng import RNG
 from engine.effects.states_canonical import has_status
 
 def create_base_state():
-    """Helper: crea un estado básico funcional."""
-    s = GameState(round=1, players={})
-    # Setup mínimo
-    s.rooms = {}
-    # Crear algunas habitaciones genéricas
-    for r in ["F1_R1", "F1_R2", "F1_R3", "F1_R4"]:
-        s.rooms[RoomId(r)] = RoomState(room_id=RoomId(r), deck=DeckState(cards=[]))
-    
-    s.players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), room=RoomId("F1_R1"), sanity=3, sanity_max=5)
-    }
-    s.turn_order = ["P1"]
-    s.remaining_actions["P1"] = 2
-    s.phase = "PLAYER"
-    return s
+    """Helper: crea un estado basico funcional."""
+    return make_game_state(
+        players={"P1": {"room": "F1_R1", "sanity": 3, "sanity_max": 5}},
+        rooms=["F1_R1", "F1_R2", "F1_R3", "F1_R4"],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+        phase="PLAYER",
+        king_floor=1,
+    )
 
 def test_legality_special_rooms():
     """Verifica que las acciones especiales aparezcan en la lista de legales."""
@@ -145,7 +139,7 @@ def test_puertas_amarillas_teleport():
     """B4: Puertas Amarillas - Teleport a target, target -1 sanity."""
     s = create_base_state()
     # Add P2 in F1_R4
-    s.players["P2"] = PlayerState(player_id=PlayerId("P2"), room=RoomId("F1_R4"), sanity=5, sanity_max=5)
+    s.players[PlayerId("P2")] = make_player(player_id="P2", room="F1_R4", sanity=5, sanity_max=5)
     
     p = s.players["P1"]
     p.room = RoomId("F1_R1")
@@ -190,7 +184,7 @@ def test_camara_letal_ritual():
     s.flags["CAMARA_LETAL_PRESENT"] = True # Requisito
     
     # Add P2 in same room
-    s.players["P2"] = PlayerState(player_id=PlayerId("P2"), room=RoomId("F1_R1"), sanity=5, sanity_max=5)
+    s.players[PlayerId("P2")] = make_player(player_id="P2", room="F1_R1", sanity=5, sanity_max=5)
     
     p = s.players["P1"]
     p.room = RoomId("F1_R1")

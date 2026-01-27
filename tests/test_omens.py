@@ -1,6 +1,7 @@
 
 import pytest
-from engine.state import GameState, PlayerState, DeckState, MonsterState, RoomState
+from engine.state import MonsterState
+from engine.state_factory import make_game_state, make_room
 from engine.types import PlayerId, RoomId
 from engine.config import Config
 from engine.rng import RNG
@@ -15,7 +16,7 @@ class TestOmens:
         """Verify deck has 108 cards total across all rooms."""
         cfg = Config()
         rng = RNG(seed=42)
-        s = GameState(round=1, players={})
+        s = make_game_state(round=1, players={}, rooms=[])
         
         setup_canonical_deck(s, rng)
         
@@ -41,9 +42,8 @@ class TestOmens:
         """Test Spider Omen Logic: 0-1 -> Spider, 2+ -> Baby Spider."""
         cfg = Config()
         rng = RNG(seed=1)
-        p1 = PlayerState(player_id=PlayerId("p1"), room=RoomId("F1_R1"), sanity=5)
-        s = GameState(round=1, players={PlayerId("p1"): p1})
-        s.rooms[RoomId("F1_R1")] = RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[]))
+        s = make_game_state(round=1, players={"p1": {"room": "F1_R1", "sanity": 5}}, rooms=["F1_R1"])
+        s.rooms[RoomId("F1_R1")] = make_room("F1_R1")
         
         # 1st Omen: ARAÑA
         # Should spawn SPIDER
@@ -77,8 +77,7 @@ class TestOmens:
         """Baby Spider dies if stunned (e.g. by BLUNT)."""
         cfg = Config()
         rng = RNG(seed=1)
-        p1 = PlayerState(player_id=PlayerId("p1"), room=RoomId("F1_R1"), objects=["BLUNT"], sanity=5)
-        s = GameState(round=1, players={PlayerId("p1"): p1})
+        s = make_game_state(round=1, players={"p1": {"room": "F1_R1", "sanity": 5, "objects": ["BLUNT"]}}, rooms=["F1_R1"])
         
         # Add Baby Spider in same room
         baby = MonsterState(monster_id="MONSTER:BABY_SPIDER", room=RoomId("F1_R1"))
@@ -96,8 +95,7 @@ class TestOmens:
         """Ice Servant limits actions on floor to 1."""
         cfg = Config()
         rng = RNG(seed=1)
-        p1 = PlayerState(player_id=PlayerId("p1"), room=RoomId("F1_R1"), sanity=5)
-        s = GameState(round=1, players={PlayerId("p1"): p1}, turn_order=[PlayerId("p1")])
+        s = make_game_state(round=1, players={"p1": {"room": "F1_R1", "sanity": 5}}, rooms=["F1_R1"], turn_order=["p1"])
         s.starter_pos = 0 # manually set
         
         # Add Ice Servant
@@ -120,9 +118,9 @@ class TestOmens:
         """Duende: 0-1 -> Spawn, 2+ -> Lose Object."""
         cfg = Config()
         rng = RNG(seed=1)
-        p1 = PlayerState(player_id=PlayerId("p1"), room=RoomId("F1_R1"), objects=["COMPASS"], sanity=5)
-        s = GameState(round=1, players={PlayerId("p1"): p1})
-        s.rooms[RoomId("F1_R1")] = RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[]))
+        s = make_game_state(round=1, players={"p1": {"room": "F1_R1", "sanity": 5, "objects": ["COMPASS"]}}, rooms=["F1_R1"])
+        s.rooms[RoomId("F1_R1")] = make_room("F1_R1")
+        p1 = s.players[PlayerId("p1")]
         
         # 1st: Spawn
         _resolve_card_minimal(s, PlayerId("p1"), "OMEN:DUENDE", cfg, rng)

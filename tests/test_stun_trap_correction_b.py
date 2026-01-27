@@ -10,80 +10,63 @@ Cubre:
 """
 
 import pytest
-from engine.state import GameState, PlayerState, MonsterState, StatusInstance, DeckState, RoomState
-from engine.types import PlayerId, RoomId, CardId
+from engine.state import MonsterState, StatusInstance
+from engine.state_factory import make_game_state, make_player
+from engine.types import PlayerId, RoomId
 from engine.actions import ActionType, Action
 from engine.transition import step
 from engine.config import Config
 from engine.rng import RNG
 
 
-def make_test_state() -> GameState:
+def make_test_state():
     """
     Setup base para tests: 1 jugador, 1 monstruo araña, configuración mínima.
     """
-    s = GameState(
+    s = make_game_state(
         round=1,
         players={
-            PlayerId("P1"): PlayerState(
-                player_id=PlayerId("P1"),
-                sanity=5,
-                room=RoomId("F1_R1"),
-                sanity_max=5,
-                keys=0,
-                objects=[],
-                soulbound_items=[],
-                statuses=[],
-                at_umbral=False,
-                at_minus5=False
-            )
+            "P1": {"room": "F1_R1", "sanity": 5, "sanity_max": 5, "keys": 0, "objects": []}
         },
-        monsters=[
-            MonsterState(
-                monster_id="SPIDER_001",
-                room=RoomId("F1_R1"),
-                stunned_remaining_rounds=0
-            )
-        ],
-        rooms={
-            RoomId("F1_R1"): RoomState(
-                room_id=RoomId("F1_R1"),
-                deck=DeckState(cards=[]),
-                revealed=0
-            )
-        },
+        rooms={"F1_R1": {}},
         phase="PLAYER",
-        turn_order=[PlayerId("P1")],
+        turn_order=["P1"],
         starter_pos=0,
         turn_pos=0,
-        remaining_actions={PlayerId("P1"): 2},
+        remaining_actions={"P1": 2},
         king_floor=1,
-        false_king_floor=2,
-        keys_destroyed=0,
-        limited_action_floor_next=None,
-        king_vanish_ends=0,
-        game_over=False,
-        outcome=None
     )
+    s.monsters = [
+        MonsterState(
+            monster_id="SPIDER_001",
+            room=RoomId("F1_R1"),
+            stunned_remaining_rounds=0
+        )
+    ]
+    s.false_king_floor = 2
+    s.keys_destroyed = 0
+    s.limited_action_floor_next = None
+    s.king_vanish_ends = 0
+    s.game_over = False
+    s.outcome = None
     return s
-
 
 def test_trapped_spider_duration_3_turns():
     """
     TRAPPED_SPIDER debe tener duración de 3 turnos y decrementar cada ronda.
     """
-    p = PlayerState(
-        player_id=PlayerId("P1"),
+    p = make_player(
+        player_id="P1",
+        room="F1_R1",
         sanity=5,
-        room=RoomId("F1_R1"),
-        statuses=[
-            StatusInstance(
-                status_id="TRAPPED_SPIDER",
-                remaining_rounds=3,
-                metadata={"source_monster_id": "SPIDER_001"}
-            )
-        ]
     )
+    p.statuses = [
+        StatusInstance(
+            status_id="TRAPPED_SPIDER",
+            remaining_rounds=3,
+            metadata={"source_monster_id": "SPIDER_001"}
+        )
+    ]
 
     # Verificar duración inicial
     assert p.statuses[0].remaining_rounds == 3

@@ -1,23 +1,23 @@
 from engine.actions import Action, ActionType
 from engine.config import Config
 from engine.rng import RNG
-from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId
+from engine.state_factory import make_game_state
 from engine.board import corridor_id
+from engine.types import PlayerId
 from engine.transition import step
 
 
-def _state(round_n: int, king_floor: int, p_floor: int) -> GameState:
+def _state(round_n: int, king_floor: int, p_floor: int):
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(p_floor)),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(p_floor)),
+        "P1": {"room": str(corridor_id(p_floor)), "sanity": 3},
+        "P2": {"room": str(corridor_id(p_floor)), "sanity": 3},
     }
-    rooms = {
-        corridor_id(1): RoomState(room_id=corridor_id(1), deck=DeckState(cards=[])),
-        corridor_id(2): RoomState(room_id=corridor_id(2), deck=DeckState(cards=[])),
-        corridor_id(3): RoomState(room_id=corridor_id(3), deck=DeckState(cards=[])),
-    }
-    return GameState(round=round_n, players=players, rooms=rooms, king_floor=king_floor, phase="KING")
+    rooms = [
+        str(corridor_id(1)),
+        str(corridor_id(2)),
+        str(corridor_id(3)),
+    ]
+    return make_game_state(round=round_n, players=players, rooms=rooms, king_floor=king_floor, phase="KING")
 
 
 def test_king_no_damage_on_departure_only_arrival():

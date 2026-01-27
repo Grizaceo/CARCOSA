@@ -2,7 +2,7 @@
 Tests para B4: PUERTAS DE AMARILLO
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 from engine.rng import RNG
 
@@ -11,36 +11,23 @@ def setup_yellow_doors_state():
     """
     Estado básico con múltiples jugadores y habitaciones para testear teleportación.
     """
-    rooms = {
-        RoomId("F1_P"): RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[])),  # Puertas
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[])),
-        RoomId("F1_R2"): RoomState(room_id=RoomId("F1_R2"), deck=DeckState(cards=[])),
-    }
+    rooms = ["F1_P", "F1_R1", "F1_R2"]
     players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"), sanity=10, room=RoomId("F1_P"), 
-            sanity_max=10, keys=0, objects=[]
-        ),
-        PlayerId("P2"): PlayerState(
-            player_id=PlayerId("P2"), sanity=8, room=RoomId("F1_R1"), 
-            sanity_max=10, keys=0, objects=[]
-        ),
-        PlayerId("P3"): PlayerState(
-            player_id=PlayerId("P3"), sanity=9, room=RoomId("F1_R2"), 
-            sanity_max=10, keys=0, objects=[]
-        ),
+        "P1": {"room": "F1_P", "sanity": 10, "sanity_max": 10, "keys": 0, "objects": []},
+        "P2": {"room": "F1_R1", "sanity": 8, "sanity_max": 10, "keys": 0, "objects": []},
+        "P3": {"room": "F1_R2", "sanity": 9, "sanity_max": 10, "keys": 0, "objects": []},
     }
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
         phase="PLAYER",
         king_floor=3,
         turn_pos=0,
-        remaining_actions={PlayerId("P1"): 1, PlayerId("P2"): 2, PlayerId("P3"): 2},
-        turn_order=[PlayerId("P1"), PlayerId("P2"), PlayerId("P3")],
-        flags={},
+        remaining_actions={"P1": 1, "P2": 2, "P3": 2},
+        turn_order=["P1", "P2", "P3"],
     )
+    s.flags = {}
     return s
 
 

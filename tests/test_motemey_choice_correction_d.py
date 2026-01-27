@@ -9,8 +9,9 @@ Verifica el sistema de elección de 2 pasos:
 """
 
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId, RoomId, CardId
+from engine.state import DeckState
+from engine.state_factory import make_game_state
+from engine.types import PlayerId, CardId
 from engine.actions import ActionType, Action
 from engine.transition import step
 from engine.legality import get_legal_actions
@@ -18,11 +19,11 @@ from engine.config import Config
 from engine.rng import RNG
 
 
-def make_motemey_state() -> GameState:
+def make_motemey_state():
     """
     Setup para tests de Motemey: jugador en habitación MOTEMEY con deck.
     """
-    motemey_room = RoomId("F1_R1")
+    motemey_room = "F1_R1"
 
     # Deck de Motemey con 4 cartas conocidas
     motemey_deck = DeckState(
@@ -35,33 +36,27 @@ def make_motemey_state() -> GameState:
         top=0
     )
 
-    s = GameState(
+    rooms = {
+        motemey_room: {"special_card_id": "MOTEMEY", "special_revealed": True},
+    }
+    players = {
+        "P1": {
+            "room": motemey_room,
+            "sanity": 5,
+            "sanity_max": 5,
+            "keys": 0,
+            "objects": [],
+        }
+    }
+    s = make_game_state(
         round=1,
-        players={
-            PlayerId("P1"): PlayerState(
-                player_id=PlayerId("P1"),
-                sanity=5,
-                room=motemey_room,
-                sanity_max=5,
-                keys=0,
-                objects=[],
-                soulbound_items=[],
-                statuses=[]
-            )
-        },
-        motemey_deck=motemey_deck,
-        rooms={
-            motemey_room: RoomState(
-                room_id=motemey_room,
-                deck=DeckState(cards=[]),
-                special_card_id="MOTEMEY",
-                special_revealed=True
-            )
-        },
+        players=players,
+        rooms=rooms,
         phase="PLAYER",
-        turn_order=[PlayerId("P1")],
-        remaining_actions={PlayerId("P1"): 2}
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
     )
+    s.motemey_deck = motemey_deck
 
     return s
 

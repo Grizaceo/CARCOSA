@@ -1,6 +1,7 @@
 
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, MonsterState
+from engine.state import RoomState, DeckState, MonsterState, BoxState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId, CardId
 from engine.config import Config
 from engine.transition import _resolve_card_minimal, _monster_phase
@@ -8,7 +9,7 @@ from engine.setup import setup_motemey_deck
 from engine.rng import RNG
 
 def test_motemey_deck_composition():
-    s = GameState(round=1, players={}, rooms={}, seed=1, king_floor=1)
+    s = make_game_state(players={}, rooms=[], turn_order=[], phase="PLAYER", king_floor=1)
     rng = RNG(1)
     setup_motemey_deck(s, rng)
     
@@ -31,10 +32,15 @@ def test_motemey_deck_composition():
     assert tales == 1
 
 def test_key_capacity_enforcement():
-    s = GameState(round=1, players={}, rooms={}, seed=1, king_floor=1)
-    p = PlayerState(player_id=PlayerId("P1"), sanity=5, room=RoomId("F1_R1"), role_id="SCOUT")
-    # Scout has 1 key slot
-    s.players[PlayerId("P1")] = p
+    s = make_game_state(
+        players={"P1": {"room": "F1_R1", "sanity": 5, "role_id": "SCOUT"}},
+        rooms=["F1_R1"],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+        phase="PLAYER",
+        king_floor=1,
+    )
+    p = s.players[PlayerId("P1")]
     
     # Mock room and deck
     deck = DeckState(cards=[CardId("KEY")])
@@ -58,7 +64,6 @@ def test_key_capacity_enforcement():
     # Let's check boxes.py implementation logic or ensure boxes are set.
     
     # Setup boxes to be safe
-    from engine.state import BoxState
     s.boxes["F1_R1"] = BoxState(box_id="F1_R1", deck=deck)
     s.box_at_room[RoomId("F1_R1")] = "F1_R1"
     
@@ -74,9 +79,15 @@ def test_key_capacity_enforcement():
     assert str(deck.cards[-1]) == "KEY"
 
 def test_monster_phase():
-    s = GameState(round=1, players={}, rooms={}, seed=1, king_floor=1)
-    p = PlayerState(player_id=PlayerId("P1"), sanity=5, room=RoomId("F1_R1"))
-    s.players[PlayerId("P1")] = p
+    s = make_game_state(
+        players={"P1": {"room": "F1_R1", "sanity": 5}},
+        rooms=["F1_R1"],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+        phase="PLAYER",
+        king_floor=1,
+    )
+    p = s.players[PlayerId("P1")]
     
     # Monster in same room
     m = MonsterState(monster_id="TEST_MONSTER", room=RoomId("F1_R1"))

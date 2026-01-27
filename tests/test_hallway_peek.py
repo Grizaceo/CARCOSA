@@ -1,33 +1,29 @@
 import pytest
-from engine.state import GameState, RoomState, PlayerState, DeckState, CardId
-from engine.types import RoomId, PlayerId
+from engine.state_factory import make_game_state
+from engine.types import PlayerId
 from engine.actions import Action, ActionType
-from engine.transition import step, _consume_action_if_needed
+from engine.transition import step
 from engine.config import Config
 from engine.legality import get_legal_actions
 from engine.board import corridor_id, room_id
-from engine.boxes import active_deck_for_room
 
 def create_peek_state():
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=5, room=room_id(1, 1)) # Starts in F1_R1
-    
-    # Setup rooms dictionary BEFORE creating GameState
-    rooms = {}
-    # F1_R1 (Current)
-    rooms[room_id(1, 1)] = RoomState(room_id=room_id(1, 1), deck=DeckState(cards=[CardId("C1")]))
-    # F1_R2 (Other room)
-    rooms[room_id(1, 2)] = RoomState(room_id=room_id(1, 2), deck=DeckState(cards=[CardId("C2")]))
-    # F1_P (Corridor) - Destination
-    rooms[corridor_id(1)] = RoomState(room_id=corridor_id(1), deck=DeckState(cards=[]))
-    # F2_P (Corridor other floor)
-    rooms[corridor_id(2)] = RoomState(room_id=corridor_id(2), deck=DeckState(cards=[]))
-    
-    s = GameState(round=1, players={PlayerId("P1"): p1}, rooms=rooms)
-    
-    # Init basic game state fields to allow actions
-    s.turn_order = [PlayerId("P1")]
-    s.remaining_actions = {PlayerId("P1"): 2}
-    s.phase = "PLAYER"
+    rooms = {
+        str(room_id(1, 1)): {"cards": ["C1"]},
+        str(room_id(1, 2)): {"cards": ["C2"]},
+        str(corridor_id(1)): {},
+        str(corridor_id(2)): {},
+    }
+    players = {"P1": {"room": str(room_id(1, 1)), "sanity": 5}}
+
+    s = make_game_state(
+        round=1,
+        players=players,
+        rooms=rooms,
+        phase="PLAYER",
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+    )
     
     return s
 

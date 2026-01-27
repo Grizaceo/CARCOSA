@@ -2,44 +2,36 @@
 Tests para E) Serialización/replay: verificar que from_dict restaura todos los campos.
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId, RoomId, CardId
-from engine.config import Config
+from engine.state import GameState
+from engine.state_factory import make_game_state, make_room
+from engine.types import PlayerId, RoomId
 
 
 def test_gamestate_roundtrip_basic():
-    """to_dict() -> from_dict() preserva campos básicos"""
-    # Setup estado básico
-    players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"),
-            sanity=5,
-            room=RoomId("F1_P"),
-            keys=2,
-            objects=["COMPASS", "VIAL"]
-        ),
-    }
-
-    rooms = {
-        RoomId("F1_P"): RoomState(
-            room_id=RoomId("F1_P"),
-            deck=DeckState(cards=[CardId("KEY"), CardId("MONSTER:SPIDER")])
-        ),
-    }
-
-    original = GameState(
+    """to_dict() -> from_dict() preserva campos basicos"""
+    # Setup estado basico
+    original = make_game_state(
         round=10,
-        players=players,
-        rooms=rooms,
+        players={
+            "P1": {
+                "room": "F1_P",
+                "sanity": 5,
+                "keys": 2,
+                "objects": ["COMPASS", "VIAL"],
+            }
+        },
+        rooms={
+            "F1_P": {"cards": ["KEY", "MONSTER:SPIDER"]},
+        },
         king_floor=2,
-        seed=42
     )
+    original.seed = 42
 
     # Serializar y deserializar
     data = original.to_dict()
     restored = GameState.from_dict(data)
 
-    # Verificar campos básicos
+    # Verificar campos basicos
     assert restored.round == 10
     assert restored.king_floor == 2
     assert restored.seed == 42
@@ -51,22 +43,16 @@ def test_gamestate_roundtrip_basic():
 
 def test_gamestate_roundtrip_motemey_deck():
     """to_dict() -> from_dict() preserva motemey_deck"""
-    motemey_cards = [CardId("COMPASS"), CardId("VIAL"), CardId("KEY")]
-    motemey_deck = DeckState(cards=motemey_cards, top=1)
+    motemey_deck = make_room("F1_P", cards=["COMPASS", "VIAL", "KEY"]).deck
+    motemey_deck.top = 1
 
-    original = GameState(
+    original = make_game_state(
         round=1,
-        players={
-            PlayerId("P1"): PlayerState(
-                player_id=PlayerId("P1"),
-                sanity=3,
-                room=RoomId("F1_P")
-            )
-        },
-        rooms={},
-        motemey_deck=motemey_deck,
-        motemey_event_active=True
+        players={"P1": {"room": "F1_P", "sanity": 3}},
+        rooms=["F1_P"],
     )
+    original.motemey_deck = motemey_deck
+    original.motemey_event_active = True
 
     data = original.to_dict()
     restored = GameState.from_dict(data)
@@ -79,26 +65,18 @@ def test_gamestate_roundtrip_motemey_deck():
 
 def test_gamestate_roundtrip_peek_used():
     """to_dict() -> from_dict() preserva peek_used_this_turn"""
-    original = GameState(
+    original = make_game_state(
         round=1,
         players={
-            PlayerId("P1"): PlayerState(
-                player_id=PlayerId("P1"),
-                sanity=3,
-                room=RoomId("F1_P")
-            ),
-            PlayerId("P2"): PlayerState(
-                player_id=PlayerId("P2"),
-                sanity=5,
-                room=RoomId("F2_P")
-            )
+            "P1": {"room": "F1_P", "sanity": 3},
+            "P2": {"room": "F2_P", "sanity": 5},
         },
-        rooms={},
-        peek_used_this_turn={
-            PlayerId("P1"): True,
-            PlayerId("P2"): False
-        }
+        rooms=["F1_P", "F2_P"],
     )
+    original.peek_used_this_turn = {
+        PlayerId("P1"): True,
+        PlayerId("P2"): False,
+    }
 
     data = original.to_dict()
     restored = GameState.from_dict(data)
@@ -109,25 +87,12 @@ def test_gamestate_roundtrip_peek_used():
 
 def test_gamestate_roundtrip_armory_storage():
     """to_dict() -> from_dict() preserva armory_storage"""
-    original = GameState(
+    original = make_game_state(
         round=1,
-        players={
-            PlayerId("P1"): PlayerState(
-                player_id=PlayerId("P1"),
-                sanity=3,
-                room=RoomId("F1_R1")
-            )
-        },
-        rooms={
-            RoomId("F1_R1"): RoomState(
-                room_id=RoomId("F1_R1"),
-                deck=DeckState(cards=[])
-            )
-        },
-        armory_storage={
-            RoomId("F1_R1"): ["COMPASS", "BLUNT"]
-        }
+        players={"P1": {"room": "F1_R1", "sanity": 3}},
+        rooms={"F1_R1": {"cards": []}},
     )
+    original.armory_storage = {RoomId("F1_R1"): ["COMPASS", "BLUNT"]}
 
     data = original.to_dict()
     restored = GameState.from_dict(data)
@@ -138,29 +103,21 @@ def test_gamestate_roundtrip_armory_storage():
 
 def test_roomstate_roundtrip_special_fields():
     """to_dict() -> from_dict() preserva campos especiales de RoomState"""
-    rooms = {
-        RoomId("F2_R3"): RoomState(
-            room_id=RoomId("F2_R3"),
-            deck=DeckState(cards=[CardId("KEY")]),
-            revealed=2,
-            special_card_id="CAMARA_LETAL",
-            special_revealed=True,
-            special_destroyed=False,
-            special_activation_count=1
-        ),
-    }
-
-    original = GameState(
+    original = make_game_state(
         round=5,
-        players={
-            PlayerId("P1"): PlayerState(
-                player_id=PlayerId("P1"),
-                sanity=3,
-                room=RoomId("F2_R3")
-            )
+        players={"P1": {"room": "F2_R3", "sanity": 3}},
+        rooms={
+            "F2_R3": {
+                "cards": ["KEY"],
+                "special_card_id": "CAMARA_LETAL",
+                "special_revealed": True,
+                "special_destroyed": False,
+            }
         },
-        rooms=rooms
     )
+    room = original.rooms[RoomId("F2_R3")]
+    room.revealed = 2
+    room.special_activation_count = 1
 
     data = original.to_dict()
     restored = GameState.from_dict(data)
@@ -174,38 +131,36 @@ def test_roomstate_roundtrip_special_fields():
 
 def test_gamestate_roundtrip_comprehensive():
     """Roundtrip comprehensivo con todos los campos nuevos"""
-    original = GameState(
+    original = make_game_state(
         round=20,
         players={
-            PlayerId("P1"): PlayerState(
-                player_id=PlayerId("P1"),
-                sanity=3,
-                room=RoomId("F1_R2"),
-                keys=3,
-                objects=["TREASURE_RING", "VIAL"]
-            )
+            "P1": {
+                "room": "F1_R2",
+                "sanity": 3,
+                "keys": 3,
+                "objects": ["TREASURE_RING", "VIAL"],
+            }
         },
         rooms={
-            RoomId("F1_R2"): RoomState(
-                room_id=RoomId("F1_R2"),
-                deck=DeckState(cards=[CardId("KEY")], top=0),
-                revealed=1,
-                special_card_id="PEEK",
-                special_revealed=True,
-                special_destroyed=False,
-                special_activation_count=2
-            )
+            "F1_R2": {
+                "cards": ["KEY"],
+                "special_card_id": "PEEK",
+                "special_revealed": True,
+                "special_destroyed": False,
+            }
         },
-        motemey_deck=DeckState(
-            cards=[CardId("COMPASS"), CardId("VIAL")],
-            top=1
-        ),
-        motemey_event_active=False,
-        peek_used_this_turn={PlayerId("P1"): True},
-        armory_storage={RoomId("F1_R2"): ["BLUNT"]},
         king_floor=3,
-        seed=123
     )
+    room = original.rooms[RoomId("F1_R2")]
+    room.revealed = 1
+    room.special_activation_count = 2
+    motemey_deck = make_room("F1_R2", cards=["COMPASS", "VIAL"]).deck
+    motemey_deck.top = 1
+    original.motemey_deck = motemey_deck
+    original.motemey_event_active = False
+    original.peek_used_this_turn = {PlayerId("P1"): True}
+    original.armory_storage = {RoomId("F1_R2"): ["BLUNT"]}
+    original.seed = 123
 
     data = original.to_dict()
     restored = GameState.from_dict(data)
@@ -237,3 +192,5 @@ def test_gamestate_roundtrip_comprehensive():
     p = restored.players[PlayerId("P1")]
     assert p.keys == 3
     assert "TREASURE_RING" in p.objects
+
+

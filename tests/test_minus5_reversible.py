@@ -1,5 +1,5 @@
 from engine.config import Config
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId
 from engine.board import corridor_id
 from engine.actions import Action, ActionType
@@ -11,20 +11,20 @@ def test_minus5_is_reversible_and_only_limits_while_at_minus5():
     # Evita daño extra por presencia del Rey
     cfg = Config(KING_PRESENCE_START_ROUND=99)
 
-    rooms = {
-        corridor_id(1): RoomState(room_id=corridor_id(1), deck=DeckState(cards=[])),
-        corridor_id(2): RoomState(room_id=corridor_id(2), deck=DeckState(cards=[])),
-        corridor_id(3): RoomState(room_id=corridor_id(3), deck=DeckState(cards=[])),
-    }
+    rooms = [
+        str(corridor_id(1)),
+        str(corridor_id(2)),
+        str(corridor_id(3)),
+    ]
 
     # Dos jugadores para evitar derrota automática por "todos en -5"
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=-4, room=corridor_id(3)),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(1)),
+        "P1": {"room": str(corridor_id(3)), "sanity": -4},
+        "P2": {"room": str(corridor_id(1)), "sanity": 3},
     }
 
     # Importante: forzamos que en la próxima ronda empiece P1 (si no, P1 no podría actuar legalmente)
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
@@ -48,7 +48,7 @@ def test_minus5_is_reversible_and_only_limits_while_at_minus5():
     # CANON Fix #G: No reduced actions at -5. Base actions 2.
     assert s2.remaining_actions[PlayerId("P1")] == 2
 
-    # P1 medita: -5 -> -4, debe salir del estado -5
+    # P1 medita en pasillo: -5 -> -3 (cura 2), debe salir del estado -5
     s3 = step(s2, Action(actor="P1", type=ActionType.MEDITATE, data={}), rng, cfg)
-    assert s3.players[PlayerId("P1")].sanity == -4
+    assert s3.players[PlayerId("P1")].sanity == -3
     assert s3.players[PlayerId("P1")].at_minus5 is False

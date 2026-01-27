@@ -1,8 +1,8 @@
-from engine.state import GameState, PlayerState, RoomState, DeckState, BoxState
-from engine.types import PlayerId, RoomId
+from engine.state import BoxState, DeckState
+from engine.state_factory import make_game_state
 from engine.transition import step
 from engine.actions import Action, ActionType
-from engine.board import canonical_room_ids, room_id, rotate_boxes_intra_floor, rotate_boxes
+from engine.board import canonical_room_ids, room_id
 from engine.rng import RNG
 
 def test_king_d6_1_activates_intra_floor_rotation():
@@ -11,23 +11,23 @@ def test_king_d6_1_activates_intra_floor_rotation():
     rooms = {}
     boxes = {}
     box_at_room = {}
-    
+
     # Init simple mapping: Box_R<id> at Room <id>
     for rid in canonical_room_ids():
-        rooms[rid] = RoomState(room_id=rid, deck=DeckState([]))
+        rooms[str(rid)] = {}
         bid = str(rid)
         boxes[bid] = BoxState(box_id=bid, deck=DeckState([]))
         box_at_room[rid] = bid
-        
-    s = GameState(
+
+    s = make_game_state(
         round=1,
         players={},
         rooms=rooms,
-        boxes=boxes,
-        box_at_room=box_at_room,
         phase="KING",
-        king_floor=1
+        king_floor=1,
     )
+    s.boxes = boxes
+    s.box_at_room = box_at_room
     
     # Mock RNG to force d6=1
     # We need to know how many RNG calls happen before d6 logic.
@@ -137,20 +137,20 @@ def test_king_d6_other_activates_global_rotation():
     boxes = {}
     box_at_room = {}
     for rid in canonical_room_ids():
-        rooms[rid] = RoomState(room_id=rid, deck=DeckState([]))
+        rooms[str(rid)] = {}
         bid = str(rid)
         boxes[bid] = BoxState(box_id=bid, deck=DeckState([]))
         box_at_room[rid] = bid
-        
-    s = GameState(
+
+    s = make_game_state(
         round=1,
         players={},
         rooms=rooms,
-        boxes=boxes,
-        box_at_room=box_at_room,
         phase="KING",
-        king_floor=1
+        king_floor=1,
     )
+    s.boxes = boxes
+    s.box_at_room = box_at_room
     
     # Find seed for d6=2 (or anything != 1)
     target_d6 = 2

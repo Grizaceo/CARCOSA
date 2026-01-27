@@ -8,25 +8,18 @@ Verifica que validate_special_rooms_invariants detecta violaciones:
 """
 
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state, make_room
 from engine.types import PlayerId, RoomId
 from engine.setup import validate_special_rooms_invariants
 
 
-def make_base_state() -> GameState:
+def make_base_state():
     """Setup mínimo para tests."""
-    return GameState(
+    return make_game_state(
         round=1,
-        players={
-            PlayerId("P1"): PlayerState(
-                player_id=PlayerId("P1"),
-                sanity=5,
-                room=RoomId("F1_P")
-            )
-        },
-        rooms={}
+        players={"P1": {"room": "F1_P", "sanity": 5}},
+        rooms={},
     )
-
 
 def test_valid_setup_passes():
     """
@@ -36,17 +29,9 @@ def test_valid_setup_passes():
 
     # Crear habitaciones: 3 pisos x 4 rooms + pasillos
     for f in [1, 2, 3]:
-        s.rooms[RoomId(f"F{f}_P")] = RoomState(
-            room_id=RoomId(f"F{f}_P"),
-            deck=DeckState(cards=[]),
-            special_card_id=None
-        )
+        s.rooms[RoomId(f"F{f}_P")] = make_room(f"F{f}_P")
         for r in [1, 2, 3, 4]:
-            s.rooms[RoomId(f"F{f}_R{r}")] = RoomState(
-                room_id=RoomId(f"F{f}_R{r}"),
-                deck=DeckState(cards=[]),
-                special_card_id=None
-            )
+            s.rooms[RoomId(f"F{f}_R{r}")] = make_room(f"F{f}_R{r}")
 
     # Asignar 1 especial por piso
     s.rooms[RoomId("F1_R2")].special_card_id = "MOTEMEY"
@@ -64,25 +49,14 @@ def test_fail_total_not_3():
     s = make_base_state()
 
     # Solo 2 especiales
-    s.rooms[RoomId("F1_R1")] = RoomState(
-        room_id=RoomId("F1_R1"),
-        deck=DeckState(cards=[]),
-        special_card_id="MOTEMEY"
-    )
-    s.rooms[RoomId("F2_R1")] = RoomState(
-        room_id=RoomId("F2_R1"),
-        deck=DeckState(cards=[]),
-        special_card_id="CAMARA_LETAL"
-    )
+    s.rooms[RoomId("F1_R1")] = make_room("F1_R1", special_card_id="MOTEMEY")
+    s.rooms[RoomId("F2_R1")] = make_room("F2_R1", special_card_id="CAMARA_LETAL")
     # Falta F3
 
     # Completar rooms normales para pasar otros invariantes
     for f in [1, 2, 3]:
         if RoomId(f"F{f}_R1") not in s.rooms:
-            s.rooms[RoomId(f"F{f}_R1")] = RoomState(
-                room_id=RoomId(f"F{f}_R1"),
-                deck=DeckState(cards=[])
-            )
+            s.rooms[RoomId(f"F{f}_R1")] = make_room(f"F{f}_R1")
 
     with pytest.raises(ValueError, match="exactamente 3 habitaciones especiales"):
         validate_special_rooms_invariants(s)
@@ -95,22 +69,10 @@ def test_fail_more_than_one_per_floor():
     s = make_base_state()
 
     # Piso 1: 2 especiales (INVALID)
-    s.rooms[RoomId("F1_R1")] = RoomState(
-        room_id=RoomId("F1_R1"),
-        deck=DeckState(cards=[]),
-        special_card_id="MOTEMEY"
-    )
-    s.rooms[RoomId("F1_R2")] = RoomState(
-        room_id=RoomId("F1_R2"),
-        deck=DeckState(cards=[]),
-        special_card_id="PUERTAS"
-    )
+    s.rooms[RoomId("F1_R1")] = make_room("F1_R1", special_card_id="MOTEMEY")
+    s.rooms[RoomId("F1_R2")] = make_room("F1_R2", special_card_id="PUERTAS")
     # Piso 2: 1 especial
-    s.rooms[RoomId("F2_R1")] = RoomState(
-        room_id=RoomId("F2_R1"),
-        deck=DeckState(cards=[]),
-        special_card_id="CAMARA_LETAL"
-    )
+    s.rooms[RoomId("F2_R1")] = make_room("F2_R1", special_card_id="CAMARA_LETAL")
     # Piso 3: sin especiales (compensar total)
 
     with pytest.raises(ValueError, match="Piso 1 debe tener exactamente 1"):
@@ -124,22 +86,10 @@ def test_fail_special_in_corridor():
     s = make_base_state()
 
     # Piso 1: especial en PASILLO (INVALID)
-    s.rooms[RoomId("F1_P")] = RoomState(
-        room_id=RoomId("F1_P"),
-        deck=DeckState(cards=[]),
-        special_card_id="MOTEMEY"
-    )
+    s.rooms[RoomId("F1_P")] = make_room("F1_P", special_card_id="MOTEMEY")
     # Pisos 2 y 3: especiales válidos
-    s.rooms[RoomId("F2_R1")] = RoomState(
-        room_id=RoomId("F2_R1"),
-        deck=DeckState(cards=[]),
-        special_card_id="CAMARA_LETAL"
-    )
-    s.rooms[RoomId("F3_R1")] = RoomState(
-        room_id=RoomId("F3_R1"),
-        deck=DeckState(cards=[]),
-        special_card_id="PUERTAS"
-    )
+    s.rooms[RoomId("F2_R1")] = make_room("F2_R1", special_card_id="CAMARA_LETAL")
+    s.rooms[RoomId("F3_R1")] = make_room("F3_R1", special_card_id="PUERTAS")
 
     with pytest.raises(ValueError, match="no puede estar en pasillo"):
         validate_special_rooms_invariants(s)
@@ -152,23 +102,11 @@ def test_fail_no_special_on_a_floor():
     s = make_base_state()
 
     # Piso 1: 1 especial
-    s.rooms[RoomId("F1_R1")] = RoomState(
-        room_id=RoomId("F1_R1"),
-        deck=DeckState(cards=[]),
-        special_card_id="MOTEMEY"
-    )
+    s.rooms[RoomId("F1_R1")] = make_room("F1_R1", special_card_id="MOTEMEY")
     # Piso 2: 1 especial
-    s.rooms[RoomId("F2_R1")] = RoomState(
-        room_id=RoomId("F2_R1"),
-        deck=DeckState(cards=[]),
-        special_card_id="CAMARA_LETAL"
-    )
+    s.rooms[RoomId("F2_R1")] = make_room("F2_R1", special_card_id="CAMARA_LETAL")
     # Piso 3: 1 especial
-    s.rooms[RoomId("F3_R1")] = RoomState(
-        room_id=RoomId("F3_R1"),
-        deck=DeckState(cards=[]),
-        special_card_id="PUERTAS"
-    )
+    s.rooms[RoomId("F3_R1")] = make_room("F3_R1", special_card_id="PUERTAS")
 
     # Total 3: pasa invariante 1
     # Pero piso 3 no tiene especial si lo quitamos:

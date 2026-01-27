@@ -2,47 +2,34 @@
 Tests para B5: PEEK (Mirar dos habitaciones)
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId, RoomId, CardId
+from engine.state_factory import make_game_state
+from engine.types import PlayerId, RoomId
 from engine.rng import RNG
 
 
 def setup_peek_state():
-    """Estado con múltiples habitaciones con cartas para usar PEEK."""
+    """Estado básico con múltiples habitaciones con cartas para usar PEEK."""
     rooms = {
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"), 
-            deck=DeckState(cards=[CardId("TRAP_1"), CardId("TRAP_2"), CardId("TRAP_3")])
-        ),
-        RoomId("F1_R2"): RoomState(
-            room_id=RoomId("F1_R2"), 
-            deck=DeckState(cards=[CardId("KEY_1"), CardId("KEY_2")])
-        ),
-        RoomId("F1_R3"): RoomState(
-            room_id=RoomId("F1_R3"), 
-            deck=DeckState(cards=[CardId("OBJECT_1")])
-        ),
+        "F1_R1": {"cards": ["TRAP_1", "TRAP_2", "TRAP_3"]},
+        "F1_R2": {"cards": ["KEY_1", "KEY_2"]},
+        "F1_R3": {"cards": ["OBJECT_1"]},
     }
     players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"), sanity=10, room=RoomId("F1_R1"), 
-            sanity_max=10, keys=0, objects=[]
-        ),
+        "P1": {"room": "F1_R1", "sanity": 10, "sanity_max": 10, "keys": 0, "objects": []},
     }
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
         phase="PLAYER",
         king_floor=3,
         turn_pos=0,
-        remaining_actions={PlayerId("P1"): 2},
-        turn_order=[PlayerId("P1")],
-        peek_used_this_turn={},
-        flags={},
+        remaining_actions={"P1": 2},
+        turn_order=["P1"],
     )
+    s.peek_used_this_turn = {}
+    s.flags = {}
     return s
-
 
 def test_peek_requires_two_different_rooms():
     """

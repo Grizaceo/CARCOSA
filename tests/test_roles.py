@@ -2,8 +2,8 @@
 Tests para el sistema de roles.
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId, RoomId
+from engine.state_factory import make_game_state, make_player
+from engine.types import PlayerId
 from engine.config import Config
 from engine.legality import get_legal_actions
 from engine.actions import ActionType
@@ -14,33 +14,40 @@ from engine.roles import (
 )
 
 
-def create_test_player(role_id: str, room: str = "F1_R1", sanity: int = 5) -> PlayerState:
+def create_test_player(role_id: str, room: str = "F1_R1", sanity: int = 5):
     """Crea un jugador de prueba con rol."""
-    p = PlayerState(
-        player_id=PlayerId("P1"),
+    return make_player(
+        player_id="P1",
+        room=room,
         sanity=sanity,
-        room=RoomId(room),
         sanity_max=10,
+        role_id=role_id,
     )
-    p.role_id = role_id
-    return p
 
 
-def create_test_state(players: dict) -> GameState:
+def create_test_state(players: dict):
     """Crea un estado de juego de prueba."""
-    rooms = {
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[])),
-        RoomId("F1_P"): RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[])),
-        RoomId("F2_R1"): RoomState(room_id=RoomId("F2_R1"), deck=DeckState(cards=[])),
-    }
-    return GameState(
+    rooms = ["F1_R1", "F1_P", "F2_R1"]
+    players_cfg = {}
+    for pid, player in players.items():
+        players_cfg[str(pid)] = {
+            "room": str(player.room),
+            "sanity": player.sanity,
+            "sanity_max": player.sanity_max,
+            "keys": player.keys,
+            "objects": list(player.objects),
+        }
+    s = make_game_state(
         round=1,
-        players=players,
+        players=players_cfg,
         rooms=rooms,
         phase="PLAYER",
         king_floor=3,
-        turn_order=list(players.keys()),
+        turn_order=list(players_cfg.keys()),
     )
+    for pid, player in players.items():
+        s.players[pid] = player
+    return s
 
 
 class TestRoleDefinitions:
@@ -89,21 +96,9 @@ class TestTankBlockMeditation:
     
     def test_tank_blocks_others_meditation(self):
         """Tank bloquea meditación de otros en su habitación"""
-        tank = PlayerState(
-            player_id=PlayerId("TANK"),
-            sanity=5,
-            room=RoomId("F1_R1"),
-            sanity_max=7,
-        )
-        tank.role_id = "TANK"
+        tank = make_player(player_id="TANK", room="F1_R1", sanity=5, sanity_max=7, role_id="TANK")
         
-        other = PlayerState(
-            player_id=PlayerId("OTHER"),
-            sanity=5,
-            room=RoomId("F1_R1"),
-            sanity_max=5,
-        )
-        other.role_id = "HEALER"
+        other = make_player(player_id="OTHER", room="F1_R1", sanity=5, sanity_max=5, role_id="HEALER")
         
         # Test función blocks_meditation
         assert blocks_meditation(tank, other) is True
@@ -125,21 +120,9 @@ class TestTankBlockMeditation:
     
     def test_tank_blocks_others_in_legality(self):
         """get_legal_actions no incluye MEDITATE para otros en habitación del Tank"""
-        tank = PlayerState(
-            player_id=PlayerId("TANK"),
-            sanity=5,
-            room=RoomId("F1_R1"),
-            sanity_max=7,
-        )
-        tank.role_id = "TANK"
+        tank = make_player(player_id="TANK", room="F1_R1", sanity=5, sanity_max=7, role_id="TANK")
         
-        other = PlayerState(
-            player_id=PlayerId("OTHER"),
-            sanity=5,
-            room=RoomId("F1_R1"),
-            sanity_max=5,
-        )
-        other.role_id = "HEALER"
+        other = make_player(player_id="OTHER", room="F1_R1", sanity=5, sanity_max=5, role_id="HEALER")
         
         players = {tank.player_id: tank, other.player_id: other}
         s = create_test_state(players)

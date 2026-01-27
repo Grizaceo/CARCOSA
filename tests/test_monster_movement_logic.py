@@ -1,40 +1,37 @@
 
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, StatusInstance, MonsterState
+from engine.state import MonsterState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
-from engine.actions import Action, ActionType
 from engine.config import Config
 from engine.rng import RNG
-from engine.transition import _monster_phase, _resolve_card_minimal, _move_monsters, step
-from engine.board import floor_of
+from engine.transition import _resolve_card_minimal, _move_monsters
 
 def make_movement_state():
     rooms = {}
     # Create simple F1 map
     for i in range(1, 5):
-        rid = RoomId(f"F1_R{i}")
-        rooms[rid] = RoomState(room_id=rid, deck=DeckState(cards=[]))
-    rooms[RoomId("F1_P")] = RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[]))
-    
+        rooms[f"F1_R{i}"] = {}
+    rooms["F1_P"] = {}
+
     # F2 for teleports
     for i in range(1, 5):
-        rid = RoomId(f"F2_R{i}")
-        rooms[rid] = RoomState(room_id=rid, deck=DeckState(cards=[]))
-    rooms[RoomId("F2_P")] = RoomState(room_id=RoomId("F2_P"), deck=DeckState(cards=[]))
+        rooms[f"F2_R{i}"] = {}
+    rooms["F2_P"] = {}
 
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=5, room=RoomId("F1_R2"), objects=["SWORD"]),
+        "P1": {"room": "F1_R2", "sanity": 5, "objects": ["SWORD"]},
     }
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
         phase="PLAYER",
-        turn_order=[PlayerId("P1")],
-        remaining_actions={PlayerId("P1"): 2},
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
         turn_pos=0,
-        flags={}
     )
+    s.flags = {}
     return s
 
 def test_spider_hunt_logic():

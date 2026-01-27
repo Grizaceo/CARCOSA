@@ -2,7 +2,7 @@
 Tests para REINA HELADA - Bloqueo de movimiento
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, StatusInstance
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId, CardId
 from engine.config import Config
 from engine.transition import step
@@ -11,54 +11,35 @@ from engine.rng import RNG
 from engine.legality import get_legal_actions
 
 
-def setup_state_with_queen() -> GameState:
+def setup_state_with_queen():
     """Estado con mazo que contiene Reina Helada"""
     rooms = {
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"),
-            deck=DeckState(cards=[CardId("MONSTER:REINA_HELADA")])
-        ),
-        RoomId("F1_R2"): RoomState(room_id=RoomId("F1_R2"), deck=DeckState(cards=[])),
-        RoomId("F1_P"): RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[])),
-        RoomId("F2_R1"): RoomState(room_id=RoomId("F2_R1"), deck=DeckState(cards=[])),
-        RoomId("F2_P"): RoomState(room_id=RoomId("F2_P"), deck=DeckState(cards=[])),
+        "F1_R1": {"cards": ["MONSTER:REINA_HELADA"]},
+        "F1_R2": {},
+        "F1_P": {},
+        "F2_R1": {},
+        "F2_P": {},
     }
 
     players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"),
-            sanity=5,
-            room=RoomId("F1_R2"),  # En piso 1, diferente habitación
-            sanity_max=10,
-        ),
-        PlayerId("P2"): PlayerState(
-            player_id=PlayerId("P2"),
-            sanity=5,
-            room=RoomId("F1_R1"),  # En piso 1, misma habitación que la reina
-            sanity_max=10,
-        ),
-        PlayerId("P3"): PlayerState(
-            player_id=PlayerId("P3"),
-            sanity=5,
-            room=RoomId("F2_R1"),  # En piso 2 (no afectado)
-            sanity_max=10,
-        ),
+        "P1": {"room": "F1_R2", "sanity": 5, "sanity_max": 10},
+        "P2": {"room": "F1_R1", "sanity": 5, "sanity_max": 10},
+        "P3": {"room": "F2_R1", "sanity": 5, "sanity_max": 10},
     }
 
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
         phase="PLAYER",
         king_floor=3,
         turn_pos=0,
-        remaining_actions={PlayerId("P1"): 2, PlayerId("P2"): 2, PlayerId("P3"): 2},
-        turn_order=[PlayerId("P1"), PlayerId("P2"), PlayerId("P3")],
-        flags={},
+        remaining_actions={"P1": 2, "P2": 2, "P3": 2},
+        turn_order=["P1", "P2", "P3"],
     )
+    s.flags = {}
 
     return s
-
 
 def test_reina_helada_blocks_movement_on_reveal():
     """Cuando Reina Helada es revelada, los jugadores en ese piso no pueden moverse"""

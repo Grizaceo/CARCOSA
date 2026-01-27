@@ -1,6 +1,6 @@
 
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 from engine.actions import Action, ActionType
 from engine.transition import step
@@ -9,15 +9,14 @@ from engine.rng import RNG
 from engine.objects import OBJECT_CATALOG
 
 def create_base_state():
-    s = GameState(round=1, players={})
-    s.rooms = {RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[]))}
-    s.players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), room=RoomId("F1_R1"), sanity=5, sanity_max=5)
-    }
-    s.king_floor = 1
-    s.turn_order = ["P1"]
-    s.remaining_actions["P1"] = 2
-    return s
+    return make_game_state(
+        players={"P1": {"room": "F1_R1", "sanity": 5, "sanity_max": 5}},
+        rooms=["F1_R1"],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+        phase="PLAYER",
+        king_floor=1,
+    )
 
 def test_attach_tale_logic():
     """Verifica que unir cuentos consume el item e incrementa el contador."""
