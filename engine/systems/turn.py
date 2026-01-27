@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from engine.board import floor_of
 from engine.effects.states_canonical import has_status
+from engine.systems.status import apply_end_of_turn_status_effects
 from engine.state import GameState
 
 
 def advance_turn_or_king(state: GameState) -> None:
+    # End of current player's turn logic (before switching)
+    apply_end_of_turn_status_effects(state)
+
     order = state.turn_order
     if not order:
         state.phase = "KING"

@@ -9,9 +9,13 @@ from engine.systems.sanity import heal_player
 from engine.types import PlayerId
 
 StatusEndOfRoundHandler = Callable[[GameState, PlayerId], None]
+StatusEndOfTurnHandler = Callable[[GameState, PlayerId], None]
 
 # Registry for end-of-round status effects (resolved by status_id)
 STATUS_END_OF_ROUND_HANDLERS: Dict[str, StatusEndOfRoundHandler] = {}
+
+# Registry for end-of-turn status effects
+STATUS_END_OF_TURN_HANDLERS: Dict[str, StatusEndOfTurnHandler] = {}
 
 
 def register_status_end_of_round(status_id: str) -> Callable[[StatusEndOfRoundHandler], StatusEndOfRoundHandler]:
@@ -22,8 +26,23 @@ def register_status_end_of_round(status_id: str) -> Callable[[StatusEndOfRoundHa
     return decorator
 
 
+def register_status_end_of_turn(status_id: str) -> Callable[[StatusEndOfTurnHandler], StatusEndOfTurnHandler]:
+    def decorator(fn: StatusEndOfTurnHandler) -> StatusEndOfTurnHandler:
+        STATUS_END_OF_TURN_HANDLERS[status_id] = fn
+        return fn
+
+    return decorator
+
+
 def apply_end_of_round_status_effects(state: GameState) -> None:
     for status_id, handler in STATUS_END_OF_ROUND_HANDLERS.items():
+        for pid, p in state.players.items():
+            if has_status(p, status_id):
+                handler(state, pid)
+
+
+def apply_end_of_turn_status_effects(state: GameState) -> None:
+    for status_id, handler in STATUS_END_OF_TURN_HANDLERS.items():
         for pid, p in state.players.items():
             if has_status(p, status_id):
                 handler(state, pid)
@@ -47,7 +66,7 @@ def _status_cursed(state: GameState, pid: PlayerId) -> None:
             other.sanity -= 1
 
 
-@register_status_end_of_round("SANIDAD")
+@register_status_end_of_turn("SANIDAD")
 def _status_sanity(state: GameState, pid: PlayerId) -> None:
     p = state.players[pid]
     heal_player(p, 1)
@@ -55,6 +74,9 @@ def _status_sanity(state: GameState, pid: PlayerId) -> None:
 
 __all__ = [
     "STATUS_END_OF_ROUND_HANDLERS",
+    "STATUS_END_OF_TURN_HANDLERS",
     "register_status_end_of_round",
+    "register_status_end_of_turn",
     "apply_end_of_round_status_effects",
+    "apply_end_of_turn_status_effects",
 ]

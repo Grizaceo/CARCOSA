@@ -224,15 +224,22 @@ def test_maldito_duration_decrements():
 
 # ==================== SANIDAD Tests ====================
 
+from engine.systems.status import apply_end_of_turn_status_effects
+
+# ... other imports ...
+
 def test_sanidad_recovers_sanity():
-    """SANIDAD recupera +1 cordura al final de ronda"""
+    """SANIDAD recupera +1 cordura al final de ronda (Turn in fact)"""
     s = setup_state_test()
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="SANIDAD", remaining_rounds=2))
     initial_sanity = s.players[PlayerId("P1")].sanity
     cfg = Config()
     rng = RNG(1)
 
-    # Ejecutar KING_ENDROUND
+    # Simular efectos
+    # 1. End of Turn (Sanidad +1)
+    apply_end_of_turn_status_effects(s)
+    # 2. King Phase (House Loss -1)
     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
     s = step(s, action, rng, cfg)
 
@@ -242,13 +249,13 @@ def test_sanidad_recovers_sanity():
 
 
 def test_sanidad_duration_decrements():
-    """SANIDAD decrementa duración correctamente"""
+    """SANIDAD decrementa duración correctamente (End of Round)"""
     s = setup_state_test()
     s.players[PlayerId("P1")].statuses.append(StatusInstance(status_id="SANIDAD", remaining_rounds=1))
     cfg = Config()
     rng = RNG(1)
 
-    # Ejecutar KING_ENDROUND
+    # Ejecutar KING_ENDROUND (maneja decremento)
     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
     s = step(s, action, rng, cfg)
 
@@ -267,7 +274,9 @@ def test_sanidad_multiple_players():
     cfg = Config()
     rng = RNG(1)
 
-    # Ejecutar KING_ENDROUND
+    # Simular efectos
+    apply_end_of_turn_status_effects(s)
+
     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
     s = step(s, action, rng, cfg)
 
@@ -290,7 +299,9 @@ def test_sanidad_with_envenenado_interaction():
     cfg = Config()
     rng = RNG(1)
 
-    # Ejecutar KING_ENDROUND
+    # Simular efectos
+    apply_end_of_turn_status_effects(s)
+
     action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
     s = step(s, action, rng, cfg)
 
