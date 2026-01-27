@@ -29,6 +29,8 @@ NOTA: Las LLAVES son entidad separada (slot propio por rol de personaje)
 
 from dataclasses import dataclass
 from typing import Optional
+
+from engine.handlers.objects import get_object_use_handler, register_object_use
 from engine.state import GameState, PlayerState
 from engine.types import PlayerId
 
@@ -115,17 +117,12 @@ def use_object(s: GameState, pid: PlayerId, object_id: str, cfg, rng) -> bool:
     if obj_def is None:
         return False
 
-    # Aplicar efecto según tipo
-    if object_id == "COMPASS":
-        _use_compass(s, pid, cfg)
-    elif object_id == "VIAL":
-        _use_vial(s, pid, cfg)
-    elif object_id == "BLUNT":
-        _use_blunt(s, pid, cfg)
-    elif object_id == "TREASURE_STAIRS":
-        _use_treasure_stairs(s, pid, cfg)
+    # Aplicar efecto segun tipo
+    handler = get_object_use_handler(object_id)
+    if handler is not None:
+        handler(s, pid, cfg, rng)
     # Nota: TREASURE_RING tiene efecto pasivo, no se "usa"
-    # ... más objetos ...
+    # ... mas objetos ...
 
     # Consumir si tiene usos limitados
     if obj_def.uses is not None:
@@ -182,6 +179,26 @@ def _use_treasure_stairs(s: GameState, pid: PlayerId, cfg) -> None:
     s.flags[f"TEMP_STAIRS_{p.room}"] = s.round  # Válida solo esta ronda
 
     # Decrementar usos (manejado automáticamente por el sistema en use_object)
+
+
+@register_object_use("COMPASS")
+def _handle_object_compass(s: GameState, pid: PlayerId, cfg, rng) -> None:
+    _use_compass(s, pid, cfg)
+
+
+@register_object_use("VIAL")
+def _handle_object_vial(s: GameState, pid: PlayerId, cfg, rng) -> None:
+    _use_vial(s, pid, cfg)
+
+
+@register_object_use("BLUNT")
+def _handle_object_blunt(s: GameState, pid: PlayerId, cfg, rng) -> None:
+    _use_blunt(s, pid, cfg)
+
+
+@register_object_use("TREASURE_STAIRS")
+def _handle_object_treasure_stairs(s: GameState, pid: PlayerId, cfg, rng) -> None:
+    _use_treasure_stairs(s, pid, cfg)
 
 
 def has_treasure_ring(p: PlayerState) -> bool:
