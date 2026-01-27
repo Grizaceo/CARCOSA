@@ -183,7 +183,19 @@ print()
 
 all_issues_by_type = {}
 
-for run_file in sorted(glob.glob('runs/run_seed*.jsonl'))[:5]:  # Primeras 5
+def _find_run_files(limit=5):
+    # Prefer current runs/ (recursive) then fall back to historics
+    candidates = []
+    candidates.extend(glob.glob('runs/**/*.jsonl', recursive=True))
+    if not candidates:
+        candidates.extend(glob.glob('docs/historics/runs/**/*.jsonl', recursive=True))
+    # Newest first
+    candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    return candidates[:limit]
+
+import os
+
+for run_file in _find_run_files(limit=5):
     filename = run_file.split('/')[-1]
     result = analyze_run(run_file)
     

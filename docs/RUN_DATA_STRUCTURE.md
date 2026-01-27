@@ -10,7 +10,7 @@ El proyecto CARCOSA contiene una **infraestructura completa de registro y análi
 
 ### Ubicación
 ```
-/home/gris/CARCOSA/runs/
+CARCOSA/runs/
 ```
 
 ### Contenido
@@ -40,6 +40,13 @@ runs/
 ├── run_seed5_20260112_151708.jsonl  (65 KB, 65 pasos)
 └── run_seed5_20260112_151819.jsonl  (65 KB, 65 pasos)
 ```
+
+### Archivo historico
+
+Los resultados antiguos y logs se mueven a:
+- `docs/historics/runs/` (versiones pasadas)
+- `docs/historics/logs/` (logs)
+- `docs/historics/reproduce/` (scripts reproduce_*.py)
 
 ---
 
@@ -409,7 +416,7 @@ tensions = [(r["step"], r["T_post"]) for r in records]
 
 | Aspecto | Detalles |
 |---------|----------|
-| **Ubicación de datos** | `/home/gris/CARCOSA/runs/` |
+| **Ubicación de datos** | `CARCOSA/runs/` |
 | **Formato** | JSONL (una línea = un registro de transición) |
 | **Generador** | `sim.runner.py::run_episode()` |
 | **Registrador** | `sim.metrics.py::transition_record()` |
