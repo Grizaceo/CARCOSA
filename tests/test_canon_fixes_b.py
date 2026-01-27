@@ -84,17 +84,17 @@ def test_monster_phase():
     
     cfg = Config()
     
-    # 1. Normal Attack
+    # 1. No passive damage
     _monster_phase(s, cfg)
-    assert p.sanity == 4  # Took 1 dmg
-    
+    assert p.sanity == 5  # No damage by presence
+
     # 2. Stunned Monster
     m.stunned_remaining_rounds = 1
     _monster_phase(s, cfg)
-    assert p.sanity == 4  # No extra dmg
+    assert p.sanity == 5  # No damage
     assert m.stunned_remaining_rounds == 0  # Decremented
     
-    # 3. Resume Attack
+    # 3. Still no passive damage
     _monster_phase(s, cfg)
-    assert p.sanity == 3  # Took dmg again
+    assert p.sanity == 5  # No damage
 
