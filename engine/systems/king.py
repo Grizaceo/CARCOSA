@@ -1,12 +1,23 @@
 from __future__ import annotations
 
-from engine.board import corridor_id, floor_of, room_from_d4, FLOORS
+from engine.board import corridor_id, floor_of, ruleta_floor, rotate_boxes, rotate_boxes_intra_floor
+from engine.boxes import sync_room_decks_from_boxes
 from engine.config import Config
+from engine.effects.states_canonical import decrement_status_durations
+from engine.objects import is_soulbound
 from engine.rng import RNG
 from engine.rules.sanity import sanity_cap
 from engine.rules.victory_defeat import can_lose_all_minus5, can_lose_keys_destroyed, can_win
-from engine.state import GameState
+from engine.state import GameState, ensure_canonical_rooms
+from engine.systems.finalize import finalize_and_return
+from engine.systems.monsters import monster_phase
+from engine.systems.rooms import update_umbral_flags
+from engine.systems.sacrifice import apply_minus5_transitions
 from engine.systems.sanity import apply_sanity_loss
+from engine.systems.stairs import roll_stairs
+from engine.systems.status import apply_end_of_round_status_effects
+from engine.systems.turn import start_new_round
+from engine.systems.victory import check_defeat
 from engine.types import PlayerId, RoomId
 
 PENDING_SACRIFICE_FLAG = "PENDING_SACRIFICE_CHECK"
@@ -122,12 +133,6 @@ def attract_players_to_floor_except_fk(state: GameState, floor: int, fk_floor: i
         p.room = target
 
 
-def roll_stairs(state: GameState, rng: RNG) -> None:
-    for floor in range(1, FLOORS + 1):
-        roll = rng.randint(1, 4)
-        state.stairs[floor] = room_from_d4(floor, roll)
-
-
 def false_king_check(state: GameState, rng: RNG, cfg: Config) -> None:
     fk_floor = current_false_king_floor(state)
     if fk_floor is None:
@@ -173,5 +178,97 @@ def end_of_round_checks(state: GameState, cfg: Config) -> None:
 
 
 def resolve_king_phase(state: GameState, action, rng: RNG, cfg: Config):
-    from engine import transition
-    return transition._resolve_king_phase(state, action, rng, cfg)
+    # PASO 1: Casa (configurable) a todos
+    for p in state.players.values():
+        apply_sanity_loss(state, p, cfg.HOUSE_LOSS_PER_ROUND, source="HOUSE_LOSS")
+
+    # Verificar Vanish
+    king_active = True
+    if state.king_vanished_turns > 0:
+        state.king_vanished_turns -= 1
+        king_active = False
+
+    if king_active:
+        # PASO 2: Ruleta d4 para determinar nuevo piso (canon P0)
+        d4 = rng.randint(1, 4)
+        rng.last_king_d4 = d4
+        new_floor = ruleta_floor(state.king_floor, d4)
+
+        # Excepcion: si cae en piso del Falso Rey, repetir hasta que sea distinto
+        fk_floor = current_false_king_floor(state)
+        while fk_floor is not None and new_floor == fk_floor:
+            d4 = rng.randint(1, 4)
+            rng.last_king_d4 = d4
+            new_floor = ruleta_floor(state.king_floor, d4)
+            fk_floor = current_false_king_floor(state)
+
+        state.king_floor = new_floor
+
+        # PASO 3: Dano por presencia del Rey (en piso nuevo, despues de llegar)
+        if state.round >= cfg.KING_PRESENCE_START_ROUND:
+            pres = presence_damage_for_round(state.round)
+            for p in state.players.values():
+                if floor_of(p.room) == state.king_floor:
+                    apply_sanity_loss(state, p, pres, source="KING_PRESENCE")
+
+        # PASO 4: Efecto d6 aleatorio
+        d6 = rng.randint(1, 6)
+        rng.last_king_d6 = d6
+        fk_floor = current_false_king_floor(state)
+
+        if d6 == 1:
+            state.flags["king_d6_intra_rotation"] = True
+        elif d6 == 2:
+            for p in state.players.values():
+                if fk_floor is None or floor_of(p.room) != fk_floor:
+                    apply_sanity_loss(state, p, 1, source="KING_D6_2")
+        elif d6 == 3:
+            state.limited_action_floor_next = state.king_floor
+        elif d6 == 4:
+            expel_players_from_floor_except_fk(state, state.king_floor, fk_floor)
+        elif d6 == 5:
+            attract_players_to_floor_except_fk(state, state.king_floor, fk_floor)
+        elif d6 == 6:
+            for p in state.players.values():
+                if fk_floor is None or floor_of(p.room) != fk_floor:
+                    discardable = [obj for obj in p.objects if not is_soulbound(obj)]
+                    if discardable:
+                        p.objects.remove(discardable[-1])
+
+    # PASO 4.4: FASE DE MONSTRUOS (Ataque/Stun)
+    monster_phase(state, cfg)
+
+    # PASO 4.5: Aplicar efectos de estados al final de ronda (antes de tick)
+    apply_end_of_round_status_effects(state)
+
+    # PASO 5: Tick estados (decremento de duraciones)
+    for p in state.players.values():
+        decrement_status_durations(p)
+
+    # Check defeat finally
+    if not state.flags.get(PENDING_SACRIFICE_FLAG):
+        check_defeat(state, cfg)
+
+    # PASO 6: Check del Falso Rey
+    false_king_check(state, rng, cfg)
+
+    update_umbral_flags(state, cfg)
+    apply_minus5_transitions(state, cfg)
+    roll_stairs(state, rng)
+
+    if state.flags.get("king_d6_intra_rotation"):
+        state.box_at_room = rotate_boxes_intra_floor(state.box_at_room)
+        state.flags["king_d6_intra_rotation"] = False
+    else:
+        state.box_at_room = rotate_boxes(state.box_at_room)
+
+    ensure_canonical_rooms(state)
+    sync_room_decks_from_boxes(state)
+
+    end_of_round_checks(state, cfg)
+
+    state.round += 1
+    if not state.game_over:
+        start_new_round(state)
+
+    return finalize_and_return(state, cfg, check_defeat)

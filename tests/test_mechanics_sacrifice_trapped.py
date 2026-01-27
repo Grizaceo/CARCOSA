@@ -1,30 +1,28 @@
 from engine.config import Config
-from engine.state import GameState, PlayerState, RoomState, DeckState, StatusInstance, MonsterState
-from engine.types import PlayerId, RoomId
+from engine.state import StatusInstance, MonsterState
+from engine.types import PlayerId
+from engine.state_factory import make_game_state
 from engine.actions import Action, ActionType
 from engine.rng import RNG
 from engine.transition import step
 
 def setup_basic_state(sanity_p1=3, sanity_p2=3):
-    rooms = {
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[])),
-        RoomId("F1_P"): RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[])), # Pasillo
-    }
+    rooms = ["F1_R1", "F1_P"]
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=sanity_p1, room=RoomId("F1_R1"), sanity_max=5),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=sanity_p2, room=RoomId("F1_R1")),
+        "P1": {"room": "F1_R1", "sanity": sanity_p1, "sanity_max": 5},
+        "P2": {"room": "F1_R1", "sanity": sanity_p2},
     }
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
         phase="PLAYER",
-        king_floor=3, # Far away
+        king_floor=3,  # Far away
         turn_pos=0,
-        remaining_actions={PlayerId("P1"): 2, PlayerId("P2"): 2},
-        turn_order=[PlayerId("P1"), PlayerId("P2")],
-        flags={},
+        remaining_actions={"P1": 2, "P2": 2},
+        turn_order=["P1", "P2"],
     )
+    s.flags = {}
     rng = RNG(42)
     cfg = Config()
     return s, rng, cfg

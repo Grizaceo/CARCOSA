@@ -6,7 +6,7 @@ Tests for P0 Core updates (P0.4a, P0.4b, P0.5 revised).
 """
 
 import pytest
-from engine.state import GameState, PlayerState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId
 from engine.config import Config
 from engine.board import room_id, corridor_id, floor_of
@@ -19,17 +19,13 @@ class TestP04aKeysDestroyedCoherence:
     def test_keys_destroyed_increments_on_minus5_crossing(self):
         """When crossing to -5, keys_destroyed should increase by the destroyed count."""
         cfg = Config()
-        p1 = PlayerState(
-            player_id=PlayerId("p1"),
-            sanity=-4,
-            room=room_id(1, 1),
-            keys=3,
-            at_minus5=False
-        )
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={PlayerId("p1"): p1}
+            players={"p1": {"room": str(room_id(1, 1)), "sanity": -4, "keys": 3}},
+            rooms=[str(room_id(1, 1))],
         )
+        p1 = s.players[PlayerId("p1")]
+        p1.at_minus5 = False
         
         # Apply transition: player crosses from -4 to -5
         p1.sanity = -5
@@ -46,18 +42,14 @@ class TestP04aKeysDestroyedCoherence:
     def test_keys_destroyed_no_repeat_on_second_tick_at_minus5(self):
         """Second tick at -5 should NOT repeat key destruction."""
         cfg = Config()
-        p1 = PlayerState(
-            player_id=PlayerId("p1"),
-            sanity=-5,
-            room=room_id(1, 1),
-            keys=0,
-            at_minus5=True  # Already marked as at -5
-        )
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={PlayerId("p1"): p1},
-            keys_destroyed=3  # Already destroyed 3 keys on previous crossing
+            players={"p1": {"room": str(room_id(1, 1)), "sanity": -5, "keys": 0}},
+            rooms=[str(room_id(1, 1))],
         )
+        p1 = s.players[PlayerId("p1")]
+        p1.at_minus5 = True  # Already marked as at -5
+        s.keys_destroyed = 3  # Already destroyed 3 keys on previous crossing
         
         # Apply transition again (already at -5)
         _apply_minus5_transitions(s, cfg)
@@ -68,24 +60,18 @@ class TestP04aKeysDestroyedCoherence:
     def test_multiple_players_keys_destroyed_sum(self):
         """When multiple players cross to -5, all keys should be counted."""
         cfg = Config()
-        p1 = PlayerState(
-            player_id=PlayerId("p1"),
-            sanity=-4,
-            room=room_id(1, 1),
-            keys=2,
-            at_minus5=False
-        )
-        p2 = PlayerState(
-            player_id=PlayerId("p2"),
-            sanity=-3,  # Start at -3, only p1 crosses to -5 first
-            room=room_id(1, 2),
-            keys=1,
-            at_minus5=False
-        )
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={PlayerId("p1"): p1, PlayerId("p2"): p2}
+            players={
+                "p1": {"room": str(room_id(1, 1)), "sanity": -4, "keys": 2},
+                "p2": {"room": str(room_id(1, 2)), "sanity": -3, "keys": 1},
+            },
+            rooms=[str(room_id(1, 1)), str(room_id(1, 2))],
         )
+        p1 = s.players[PlayerId("p1")]
+        p2 = s.players[PlayerId("p2")]
+        p1.at_minus5 = False
+        p2.at_minus5 = False
         
         # p1 crosses to -5
         p1.sanity = -5
@@ -106,15 +92,16 @@ class TestP04bAttractWithFalseKing:
     def test_attract_all_without_false_king(self):
         """Without crown holder, all players go to corridor."""
         cfg = Config()
-        p1 = PlayerState(player_id=PlayerId("p1"), sanity=5, room=room_id(1, 1))
-        p2 = PlayerState(player_id=PlayerId("p2"), sanity=5, room=room_id(2, 2))
-        p3 = PlayerState(player_id=PlayerId("p3"), sanity=5, room=room_id(3, 3))
-        
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={PlayerId("p1"): p1, PlayerId("p2"): p2, PlayerId("p3"): p3},
-            false_king_floor=None  # No false king
+            players={
+                "p1": {"room": str(room_id(1, 1)), "sanity": 5},
+                "p2": {"room": str(room_id(2, 2)), "sanity": 5},
+                "p3": {"room": str(room_id(3, 3)), "sanity": 5},
+            },
+            rooms=[str(room_id(1, 1)), str(room_id(2, 2)), str(room_id(3, 3))],
         )
+        s.false_king_floor = None  # No false king
         
         # Attract to floor 2
         _attract_players_to_floor(s, 2)
@@ -127,16 +114,17 @@ class TestP04bAttractWithFalseKing:
     def test_attract_excludes_false_king_floor(self):
         """Players on crown holder floor should NOT move."""
         cfg = Config()
-        p1 = PlayerState(player_id=PlayerId("p1"), sanity=5, room=room_id(1, 1))
-        p2 = PlayerState(player_id=PlayerId("p2"), sanity=5, room=room_id(2, 2))
-        p3 = PlayerState(player_id=PlayerId("p3"), sanity=5, room=room_id(3, 3))
-        
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={PlayerId("p1"): p1, PlayerId("p2"): p2, PlayerId("p3"): p3},
-            flags={"CROWN_YELLOW": True, "CROWN_HOLDER": "p2"}
+            players={
+                "p1": {"room": str(room_id(1, 1)), "sanity": 5},
+                "p2": {"room": str(room_id(2, 2)), "sanity": 5},
+                "p3": {"room": str(room_id(3, 3)), "sanity": 5},
+            },
+            rooms=[str(room_id(1, 1)), str(room_id(2, 2)), str(room_id(3, 3))],
         )
-        p2.soulbound_items.append("CROWN")
+        s.flags = {"CROWN_YELLOW": True, "CROWN_HOLDER": "p2"}
+        s.players[PlayerId("p2")].soulbound_items.append("CROWN")
         
         # Attract to floor 1
         _attract_players_to_floor(s, 1)
@@ -152,15 +140,16 @@ class TestP04bAttractWithFalseKing:
     def test_attract_false_king_different_floor(self):
         """Attract to crown holder floor: only players NOT on it move."""
         cfg = Config()
-        p1 = PlayerState(player_id=PlayerId("p1"), sanity=5, room=room_id(1, 1))
-        p2 = PlayerState(player_id=PlayerId("p2"), sanity=5, room=room_id(2, 2))
-        
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={PlayerId("p1"): p1, PlayerId("p2"): p2},
-            flags={"CROWN_YELLOW": True, "CROWN_HOLDER": "p2"}
+            players={
+                "p1": {"room": str(room_id(1, 1)), "sanity": 5},
+                "p2": {"room": str(room_id(2, 2)), "sanity": 5},
+            },
+            rooms=[str(room_id(1, 1)), str(room_id(2, 2))],
         )
-        p2.soulbound_items.append("CROWN")
+        s.flags = {"CROWN_YELLOW": True, "CROWN_HOLDER": "p2"}
+        s.players[PlayerId("p2")].soulbound_items.append("CROWN")
         
         # Attract TO floor 2 (where crown holder is)
         _attract_players_to_floor(s, 2)

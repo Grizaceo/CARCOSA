@@ -1,19 +1,19 @@
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId, RoomId
+from engine.state_factory import make_game_state
+from engine.types import PlayerId
 from engine.config import Config
-from engine.transition import _check_defeat, apply_sanity_loss, _end_of_round_checks
+from engine.transition import _check_defeat, apply_sanity_loss
+from engine.systems.king import end_of_round_checks
 
 def test_detailed_sanity_loss_outcome():
     """Verify that sanity loss outcomes include the tracking info."""
     cfg = Config()
     
     # 1. Setup simple state
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=-5, room=RoomId("F1_R1"))
-    s = GameState(
+    s = make_game_state(
         round=1,
-        players={PlayerId("P1"): p1},
-        remaining_actions={PlayerId("P1"): 2}
+        players={"P1": {"room": "F1_R1", "sanity": -5}},
+        remaining_actions={"P1": 2},
     )
     
     # Simulate applying fatal damage with a source
@@ -40,10 +40,10 @@ def test_keys_destroyed_outcome():
     """Verify detailed key loss outcome."""
     cfg = Config(KEYS_LOSE_THRESHOLD=3, KEYS_TOTAL=6)
     
-    s = GameState(
+    s = make_game_state(
         round=1,
-        players={PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=RoomId("F1_R1"))},
-        remaining_actions={PlayerId("P1"): 2}
+        players={"P1": {"room": "F1_R1", "sanity": 3}},
+        remaining_actions={"P1": 2},
     )
     
     # Destroy 4 keys -> remaining 2 (below threshold 3)
@@ -56,15 +56,11 @@ def test_keys_destroyed_outcome():
 def test_end_round_delegation():
     """Verify _end_of_round_checks delegates correctly."""
     cfg = Config()
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=-5, room=RoomId("F1_R1"))
-    s = GameState(
-        round=1, 
-        players={PlayerId("P1"): p1},
-        flags={"last_sanity_loss_event": "KING -> P1"} # Mock manually if needed
-    )
+    s = make_game_state(round=1, players={"P1": {"room": "F1_R1", "sanity": -5}})
+    s.flags = {"last_sanity_loss_event": "KING -> P1"}  # Mock manually if needed
     s.last_sanity_loss_event = "KING -> P1"
     
-    _end_of_round_checks(s, cfg)
+    end_of_round_checks(s, cfg)
     
     assert s.game_over
     assert s.outcome == "LOSE_ALL_MINUS5 (KING -> P1)"

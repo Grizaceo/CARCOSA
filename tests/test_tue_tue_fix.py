@@ -1,13 +1,11 @@
 import pytest
-from engine.state import GameState, RoomState, MonsterState, PlayerState, DeckState
-from engine.types import RoomId, PlayerId, CardId
+from engine.state_factory import make_game_state
+from engine.types import PlayerId, CardId
 from engine.transition import _resolve_card_minimal
 from engine.config import Config
 
 def create_simple_state():
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=5, room=RoomId("F1_R1"))
-    s = GameState(round=1, players={PlayerId("P1"): p1})
-    s.rooms[RoomId("F1_R1")] = RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[]))
+    s = make_game_state(round=1, players={"P1": {"room": "F1_R1", "sanity": 5}}, rooms=["F1_R1"])
     return s
 
 def test_tue_tue_omen_should_not_spawn_monster():

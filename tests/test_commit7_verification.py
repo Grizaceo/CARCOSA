@@ -1,7 +1,8 @@
-from engine.state import GameState, PlayerState, DeckState, RoomState
+from engine.state import DeckState
+from engine.state_factory import make_game_state, make_room
 from engine.transition import step, _check_defeat
 from engine.actions import Action, ActionType
-from engine.types import PlayerId, CardId, RoomId
+from engine.types import PlayerId, CardId
 from engine.config import Config
 from engine.board import corridor_id, room_id
 
@@ -10,12 +11,10 @@ def test_motemey_rejected_card_goes_bottom():
     deck = DeckState(cards=[CardId("C1"), CardId("C2"), CardId("C3")])
     # Setup Motemey room
     rid = room_id(1, 1)
-    rooms = {}
-    rooms[rid] = RoomState(room_id=rid, deck=DeckState([]), special_card_id="MOTEMEY", special_revealed=True)
-    
-    s = GameState(round=1, players={PlayerId("P1"): PlayerState(PlayerId("P1"), sanity=5, room=rid)},
-                  rooms=rooms,
-                  motemey_deck=deck)
+    rooms = {str(rid): {"special_card_id": "MOTEMEY", "special_revealed": True}}
+
+    s = make_game_state(round=1, players={"P1": {"room": str(rid), "sanity": 5}}, rooms=rooms)
+    s.motemey_deck = deck
     s.pending_motemey_choice = {
         "P1": [CardId("C1"), CardId("C2")] # C1, C2 drawn. Top should be 2.
     }
@@ -62,8 +61,7 @@ def test_lethal_chamber_revealed_increases_key_pool():
     Caso Camara: KEYS_TOTAL = 7.
     Keys destroyed = 3. Available = 4. -> NO DERROTA.
     """
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=5, room=corridor_id(1))
-    s = GameState(round=1, players={PlayerId("P1"): p1})
+    s = make_game_state(players={"P1": {"room": str(corridor_id(1)), "sanity": 5}}, rooms=[str(corridor_id(1))])
     s.keys_destroyed = 3
     cfg = Config()
     
@@ -74,7 +72,7 @@ def test_lethal_chamber_revealed_increases_key_pool():
     # Caso 2: Cámara letal revelada
     # Setup room
     rid = room_id(1, 1)
-    s.rooms[rid] = RoomState(room_id=rid, deck=DeckState([]), special_card_id="CAMARA_LETAL", special_revealed=True)
+    s.rooms[rid] = make_room(str(rid), special_card_id="CAMARA_LETAL", special_revealed=True)
     
     # Debe ser False (Victoria/Derrota check returns True if GAME OVER)
     # If defeat condition met -> True.

@@ -1,6 +1,7 @@
 import pytest
 from engine.board import room_id, corridor_id, neighbors, floor_of
-from engine.types import RoomId
+from engine.state_factory import make_game_state
+from engine.types import RoomId, PlayerId
 
 class TestP01Adjacencies:
     def test_r1_connects_to_r2(self):
@@ -43,19 +44,15 @@ class TestP03StairsReroll:
     
     def test_stairs_in_valid_range_after_reroll(self):
         """After reroll, each floor has stairs in R1..R4."""
-        from engine.state import GameState
         from engine.config import Config
         from engine.rng import RNG
         from engine.transition import _roll_stairs
-        from engine.types import PlayerId, RoomId
+        from engine.types import RoomId
         from engine.board import floor_of, room_id as board_room_id
         
         # Create a minimal state
-        s = GameState(
-            round=1,
-            players={PlayerId("p1"): None},
-            stairs={}
-        )
+        s = make_game_state(round=1, players={}, rooms={})
+        s.stairs = {}
         rng = RNG(seed=42)
         
         # Roll stairs
@@ -73,18 +70,13 @@ class TestP03StairsReroll:
     
     def test_stairs_reroll_deterministic_with_seed(self):
         """Same seed -> same stair positions."""
-        from engine.state import GameState
         from engine.rng import RNG
         from engine.transition import _roll_stairs
-        from engine.types import PlayerId
         
         # Two separate runs with same seed
         def get_stairs(seed):
-            s = GameState(
-                round=1,
-                players={PlayerId("p1"): None},
-                stairs={}
-            )
+            s = make_game_state(round=1, players={}, rooms={})
+            s.stairs = {}
             rng = RNG(seed=seed)
             _roll_stairs(s, rng)
             return s.stairs
@@ -96,18 +88,13 @@ class TestP03StairsReroll:
     
     def test_stairs_reroll_different_with_different_seed(self):
         """Different seed -> likely different stair positions."""
-        from engine.state import GameState
         from engine.rng import RNG
         from engine.transition import _roll_stairs
-        from engine.types import PlayerId
         
         # Two runs with different seeds
         def get_stairs(seed):
-            s = GameState(
-                round=1,
-                players={PlayerId("p1"): None},
-                stairs={}
-            )
+            s = make_game_state(round=1, players={}, rooms={})
+            s.stairs = {}
             rng = RNG(seed=seed)
             _roll_stairs(s, rng)
             return s.stairs
@@ -157,28 +144,19 @@ class TestP02ExpelFromFloor:
     
     def test_expel_f1_to_f2_stair(self):
         """Players on F1 expelled to F2 stair room."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId, RoomId
         from engine.transition import _expel_players_from_floor
         from engine.board import room_id, floor_of
         
         # Create state with F2 stair at R3
-        s = GameState(
+        s = make_game_state(
             round=1,
             players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=5,
-                    room=room_id(1, 1)  # F1_R1
-                ),
-                PlayerId("p2"): PlayerState(
-                    player_id=PlayerId("p2"),
-                    sanity=5,
-                    room=room_id(1, 2)  # F1_R2
-                )
+                "p1": {"room": str(room_id(1, 1)), "sanity": 5},
+                "p2": {"room": str(room_id(1, 2)), "sanity": 5},
             },
-            stairs={1: room_id(1, 1), 2: room_id(2, 3), 3: room_id(3, 1)}
+            rooms=[str(room_id(1, 1)), str(room_id(1, 2)), str(room_id(2, 3))],
         )
+        s.stairs = {1: room_id(1, 1), 2: room_id(2, 3), 3: room_id(3, 1)}
         
         # Expel from F1
         _expel_players_from_floor(s, 1)
@@ -191,22 +169,15 @@ class TestP02ExpelFromFloor:
     
     def test_expel_f2_to_f1_stair(self):
         """Players on F2 expelled to F1 stair room."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId, RoomId
         from engine.transition import _expel_players_from_floor
         from engine.board import room_id, floor_of
         
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=5,
-                    room=room_id(2, 2)  # F2_R2
-                )
-            },
-            stairs={1: room_id(1, 2), 2: room_id(2, 1), 3: room_id(3, 1)}
+            players={"p1": {"room": str(room_id(2, 2)), "sanity": 5}},
+            rooms=[str(room_id(2, 2)), str(room_id(1, 2))],
         )
+        s.stairs = {1: room_id(1, 2), 2: room_id(2, 1), 3: room_id(3, 1)}
         
         # Expel from F2
         _expel_players_from_floor(s, 2)
@@ -217,22 +188,15 @@ class TestP02ExpelFromFloor:
     
     def test_expel_f3_to_f2_stair(self):
         """Players on F3 expelled to F2 stair room."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId, RoomId
         from engine.transition import _expel_players_from_floor
         from engine.board import room_id, floor_of
         
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=5,
-                    room=room_id(3, 4)  # F3_R4
-                )
-            },
-            stairs={1: room_id(1, 1), 2: room_id(2, 4), 3: room_id(3, 1)}
+            players={"p1": {"room": str(room_id(3, 4)), "sanity": 5}},
+            rooms=[str(room_id(3, 4)), str(room_id(2, 4))],
         )
+        s.stairs = {1: room_id(1, 1), 2: room_id(2, 4), 3: room_id(3, 1)}
         
         # Expel from F3
         _expel_players_from_floor(s, 3)
@@ -243,27 +207,18 @@ class TestP02ExpelFromFloor:
     
     def test_expel_only_from_target_floor(self):
         """Only players on target floor are expelled."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId, RoomId
         from engine.transition import _expel_players_from_floor
         from engine.board import room_id, floor_of
         
-        s = GameState(
+        s = make_game_state(
             round=1,
             players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=5,
-                    room=room_id(1, 1)  # F1
-                ),
-                PlayerId("p2"): PlayerState(
-                    player_id=PlayerId("p2"),
-                    sanity=5,
-                    room=room_id(2, 2)  # F2
-                )
+                "p1": {"room": str(room_id(1, 1)), "sanity": 5},
+                "p2": {"room": str(room_id(2, 2)), "sanity": 5},
             },
-            stairs={1: room_id(1, 1), 2: room_id(2, 3), 3: room_id(3, 1)}
+            rooms=[str(room_id(1, 1)), str(room_id(2, 2)), str(room_id(2, 3))],
         )
+        s.stairs = {1: room_id(1, 1), 2: room_id(2, 3), 3: room_id(3, 1)}
         
         # Expel from F1
         _expel_players_from_floor(s, 1)
@@ -279,25 +234,17 @@ class TestP04MinusFiveEvent:
     
     def test_crossing_to_minus5_destroys_keys(self):
         """Keys destroyed when crossing to -5."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId
         from engine.config import Config
         from engine.transition import _apply_minus5_transitions, _apply_minus5_consequences
         from engine.board import room_id
         
         cfg = Config()
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=-4,  # Will cross to -5
-                    room=room_id(1, 1),
-                    keys=3,
-                    at_minus5=False
-                )
-            }
+            players={"p1": {"room": str(room_id(1, 1)), "sanity": -4, "keys": 3}},
+            rooms=[str(room_id(1, 1))],
         )
+        s.players[PlayerId("p1")].at_minus5 = False
         
         # Sanity drops to -5
         s.players[PlayerId("p1")].sanity = -5
@@ -312,25 +259,17 @@ class TestP04MinusFiveEvent:
     
     def test_crossing_to_minus5_destroys_objects(self):
         """Objects destroyed when crossing to -5."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId
         from engine.config import Config
         from engine.transition import _apply_minus5_transitions, _apply_minus5_consequences
         from engine.board import room_id
         
         cfg = Config()
-        s = GameState(
+        s = make_game_state(
             round=1,
-            players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=-5,
-                    room=room_id(1, 1),
-                    objects=["item1", "item2"],
-                    at_minus5=False
-                )
-            }
+            players={"p1": {"room": str(room_id(1, 1)), "sanity": -5, "objects": ["item1", "item2"]}},
+            rooms=[str(room_id(1, 1))],
         )
+        s.players[PlayerId("p1")].at_minus5 = False
         
         # Apply transition
         _apply_minus5_transitions(s, cfg)
@@ -341,36 +280,23 @@ class TestP04MinusFiveEvent:
     
     def test_crossing_to_minus5_others_lose_sanity(self):
         """Other players lose 1 sanity when someone crosses to -5."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId
         from engine.config import Config
         from engine.transition import _apply_minus5_transitions, _apply_minus5_consequences
         from engine.board import room_id
         
         cfg = Config()
-        s = GameState(
+        s = make_game_state(
             round=1,
             players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=-5,
-                    room=room_id(1, 1),
-                    at_minus5=False
-                ),
-                PlayerId("p2"): PlayerState(
-                    player_id=PlayerId("p2"),
-                    sanity=5,
-                    room=room_id(2, 2),
-                    at_minus5=False
-                ),
-                PlayerId("p3"): PlayerState(
-                    player_id=PlayerId("p3"),
-                    sanity=4,
-                    room=room_id(3, 1),
-                    at_minus5=False
-                )
-            }
+                "p1": {"room": str(room_id(1, 1)), "sanity": -5},
+                "p2": {"room": str(room_id(2, 2)), "sanity": 5},
+                "p3": {"room": str(room_id(3, 1)), "sanity": 4},
+            },
+            rooms=[str(room_id(1, 1)), str(room_id(2, 2)), str(room_id(3, 1))],
         )
+        s.players[PlayerId("p1")].at_minus5 = False
+        s.players[PlayerId("p2")].at_minus5 = False
+        s.players[PlayerId("p3")].at_minus5 = False
         
         # Apply transition (sets flag)
         _apply_minus5_transitions(s, cfg)
@@ -383,33 +309,22 @@ class TestP04MinusFiveEvent:
     
     def test_minus5_event_only_fires_once(self):
         """Event fires only once when crossing; doesn't repeat on subsequent ticks."""
-        from engine.state import GameState, PlayerState
-        from engine.types import PlayerId
         from engine.config import Config
         from engine.transition import _apply_minus5_transitions, _apply_minus5_consequences
         from engine.board import room_id
         
         cfg = Config()
         p2_initial_sanity = 5
-        s = GameState(
+        s = make_game_state(
             round=1,
             players={
-                PlayerId("p1"): PlayerState(
-                    player_id=PlayerId("p1"),
-                    sanity=-5,
-                    room=room_id(1, 1),
-                    keys=0,
-                    objects=[],
-                    at_minus5=False
-                ),
-                PlayerId("p2"): PlayerState(
-                    player_id=PlayerId("p2"),
-                    sanity=p2_initial_sanity,
-                    room=room_id(2, 2),
-                    at_minus5=False
-                )
-            }
+                "p1": {"room": str(room_id(1, 1)), "sanity": -5, "keys": 0, "objects": []},
+                "p2": {"room": str(room_id(2, 2)), "sanity": p2_initial_sanity},
+            },
+            rooms=[str(room_id(1, 1)), str(room_id(2, 2))],
         )
+        s.players[PlayerId("p1")].at_minus5 = False
+        s.players[PlayerId("p2")].at_minus5 = False
         
         # First call: event fires
         _apply_minus5_transitions(s, cfg)

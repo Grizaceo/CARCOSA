@@ -1,15 +1,20 @@
 from engine.config import Config
-from engine.state import GameState, PlayerState, MonsterState, StatusInstance
+from engine.state import MonsterState, StatusInstance
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 from engine.tension import tension_T
 
 
 def _base_state():
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=RoomId("F1_R1")),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=RoomId("F1_R2")),
+        "P1": {"room": "F1_R1", "sanity": 3},
+        "P2": {"room": "F1_R2", "sanity": 3},
     }
-    return GameState(round=0, players=players, monsters=[], flags={}, seed=1)
+    s = make_game_state(round=0, players=players, rooms=["F1_R1", "F1_R2"])
+    s.monsters = []
+    s.flags = {}
+    s.seed = 1
+    return s
 
 
 def test_tension_bounds():

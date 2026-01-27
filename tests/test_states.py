@@ -2,7 +2,8 @@
 Tests para estados canónicos (FASE 3)
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, StatusInstance
+from engine.state import StatusInstance
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 from engine.actions import Action, ActionType
 from engine.config import Config
@@ -12,47 +13,13 @@ from engine.rng import RNG
 
 def setup_state_test():
     """Estado básico para tests de estados."""
-    rooms = {
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"),
-            deck=DeckState(cards=[])
-        ),
-        RoomId("F1_R2"): RoomState(
-            room_id=RoomId("F1_R2"),
-            deck=DeckState(cards=[])
-        ),
-        RoomId("F2_R1"): RoomState(
-            room_id=RoomId("F2_R1"),
-            deck=DeckState(cards=[])
-        ),
-    }
+    rooms = ["F1_R1", "F1_R2", "F2_R1"]
     players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"),
-            sanity=5,
-            room=RoomId("F1_R1"),
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
-        PlayerId("P2"): PlayerState(
-            player_id=PlayerId("P2"),
-            sanity=7,
-            room=RoomId("F1_R2"),
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
-        PlayerId("P3"): PlayerState(
-            player_id=PlayerId("P3"),
-            sanity=6,
-            room=RoomId("F2_R1"),
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
+        "P1": {"room": "F1_R1", "sanity": 5, "sanity_max": 10, "keys": 0, "objects": []},
+        "P2": {"room": "F1_R2", "sanity": 7, "sanity_max": 10, "keys": 0, "objects": []},
+        "P3": {"room": "F2_R1", "sanity": 6, "sanity_max": 10, "keys": 0, "objects": []},
     }
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
@@ -60,9 +27,9 @@ def setup_state_test():
         king_floor=3,
         turn_pos=0,
         remaining_actions={},
-        turn_order=[PlayerId("P1"), PlayerId("P2"), PlayerId("P3")],
-        flags={},
+        turn_order=["P1", "P2", "P3"],
     )
+    s.flags = {}
     return s
 
 

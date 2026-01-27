@@ -2,7 +2,8 @@
 Tests para funciones de utilidad de eventos (FASE 0.2)
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, StatusInstance
+from engine.state import StatusInstance
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 from engine.effects.event_utils import (
     swap_positions,
@@ -18,49 +19,22 @@ from engine.effects.event_utils import (
 
 def setup_basic_state():
     """Estado básico con 2 jugadores para tests."""
-    rooms = {
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"),
-            deck=DeckState(cards=[])
-        ),
-        RoomId("F1_R2"): RoomState(
-            room_id=RoomId("F1_R2"),
-            deck=DeckState(cards=[])
-        ),
-        RoomId("F2_R1"): RoomState(
-            room_id=RoomId("F2_R1"),
-            deck=DeckState(cards=[])
-        ),
-    }
+    rooms = ["F1_R1", "F1_R2", "F2_R1"]
     players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"),
-            sanity=5,
-            room=RoomId("F1_R1"),
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
-        PlayerId("P2"): PlayerState(
-            player_id=PlayerId("P2"),
-            sanity=3,
-            room=RoomId("F1_R2"),
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
+        "P1": {"room": "F1_R1", "sanity": 5, "sanity_max": 10, "keys": 0, "objects": []},
+        "P2": {"room": "F1_R2", "sanity": 3, "sanity_max": 10, "keys": 0, "objects": []},
     }
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
         phase="PLAYER",
         king_floor=3,
         turn_pos=0,
-        remaining_actions={PlayerId("P1"): 2},
-        turn_order=[PlayerId("P1"), PlayerId("P2")],
-        flags={},
+        remaining_actions={"P1": 2},
+        turn_order=["P1", "P2"],
     )
+    s.flags = {}
     return s
 
 

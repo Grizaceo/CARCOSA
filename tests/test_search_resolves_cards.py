@@ -5,7 +5,7 @@ Regresión: asegurar que _resolve_card_minimal no vuelva a un estado placeholder
 from engine.actions import Action, ActionType
 from engine.config import Config
 from engine.rng import RNG
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId, CardId
 from engine.board import corridor_id
 from engine.transition import step
@@ -17,27 +17,26 @@ def test_search_can_find_key():
     
     # Setup: sala con KEY al inicio del mazo
     rooms = {
-        corridor_id(1): RoomState(room_id=corridor_id(1), deck=DeckState(cards=[])),
-        corridor_id(2): RoomState(room_id=corridor_id(2), deck=DeckState(cards=[])),
-        corridor_id(3): RoomState(room_id=corridor_id(3), deck=DeckState(cards=[])),
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"),
-            deck=DeckState(cards=[
-                CardId("KEY"),
-                CardId("EVENT:X"),
-                CardId("MONSTER:SPIDER"),
-            ])
-        ),
+        str(corridor_id(1)): {},
+        str(corridor_id(2)): {},
+        str(corridor_id(3)): {},
+        "F1_R1": {"cards": ["KEY", "EVENT:X", "MONSTER:SPIDER"]},
     }
     
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=RoomId("F1_R1"), keys=0),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(2), keys=0),
+        "P1": {"room": "F1_R1", "sanity": 3, "keys": 0},
+        "P2": {"room": str(corridor_id(2)), "sanity": 3, "keys": 0},
     }
     
-    state = GameState(round=1, players=players, rooms=rooms, phase="PLAYER", king_floor=1)
-    state.turn_order = [PlayerId("P1"), PlayerId("P2")]
-    state.remaining_actions = {PlayerId("P1"): 2, PlayerId("P2"): 2}
+    state = make_game_state(
+        round=1,
+        players=players,
+        rooms=rooms,
+        phase="PLAYER",
+        king_floor=1,
+        turn_order=["P1", "P2"],
+        remaining_actions={"P1": 2, "P2": 2},
+    )
     
     # P1 executes SEARCH
     action = Action(actor="P1", type=ActionType.SEARCH, data={})
@@ -56,26 +55,26 @@ def test_search_reveals_and_resolves_state():
     cfg = Config(KING_PRESENCE_START_ROUND=999)
     
     rooms = {
-        corridor_id(1): RoomState(room_id=corridor_id(1), deck=DeckState(cards=[])),
-        corridor_id(2): RoomState(room_id=corridor_id(2), deck=DeckState(cards=[])),
-        corridor_id(3): RoomState(room_id=corridor_id(3), deck=DeckState(cards=[])),
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"),
-            deck=DeckState(cards=[
-                CardId("STATE:STUN"),
-                CardId("EVENT:X"),
-            ])
-        ),
+        str(corridor_id(1)): {},
+        str(corridor_id(2)): {},
+        str(corridor_id(3)): {},
+        "F1_R1": {"cards": ["STATE:STUN", "EVENT:X"]},
     }
     
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=RoomId("F1_R1"), keys=0),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(2), keys=0),
+        "P1": {"room": "F1_R1", "sanity": 3, "keys": 0},
+        "P2": {"room": str(corridor_id(2)), "sanity": 3, "keys": 0},
     }
     
-    state = GameState(round=1, players=players, rooms=rooms, phase="PLAYER", king_floor=1)
-    state.turn_order = [PlayerId("P1"), PlayerId("P2")]
-    state.remaining_actions = {PlayerId("P1"): 2, PlayerId("P2"): 2}
+    state = make_game_state(
+        round=1,
+        players=players,
+        rooms=rooms,
+        phase="PLAYER",
+        king_floor=1,
+        turn_order=["P1", "P2"],
+        remaining_actions={"P1": 2, "P2": 2},
+    )
     
     # P1 executes SEARCH
     action = Action(actor="P1", type=ActionType.SEARCH, data={})
@@ -92,26 +91,26 @@ def test_move_reveals_and_resolves_monster():
     cfg = Config(MAX_MONSTERS_ON_BOARD=8, KING_PRESENCE_START_ROUND=999)
     
     rooms = {
-        corridor_id(1): RoomState(room_id=corridor_id(1), deck=DeckState(cards=[])),
-        corridor_id(2): RoomState(room_id=corridor_id(2), deck=DeckState(cards=[])),
-        corridor_id(3): RoomState(room_id=corridor_id(3), deck=DeckState(cards=[])),
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"),
-            deck=DeckState(cards=[
-                CardId("MONSTER:SPIDER"),
-                CardId("EVENT:X"),
-            ])
-        ),
+        str(corridor_id(1)): {},
+        str(corridor_id(2)): {},
+        str(corridor_id(3)): {},
+        "F1_R1": {"cards": ["MONSTER:SPIDER", "EVENT:X"]},
     }
     
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(1), keys=0),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(2), keys=0),
+        "P1": {"room": str(corridor_id(1)), "sanity": 3, "keys": 0},
+        "P2": {"room": str(corridor_id(2)), "sanity": 3, "keys": 0},
     }
     
-    state = GameState(round=1, players=players, rooms=rooms, phase="PLAYER", king_floor=1, monsters=[])
-    state.turn_order = [PlayerId("P1"), PlayerId("P2")]
-    state.remaining_actions = {PlayerId("P1"): 2, PlayerId("P2"): 2}
+    state = make_game_state(
+        round=1,
+        players=players,
+        rooms=rooms,
+        phase="PLAYER",
+        king_floor=1,
+        turn_order=["P1", "P2"],
+        remaining_actions={"P1": 2, "P2": 2},
+    )
     
     # P1 executes MOVE to F1_R1
     action = Action(actor="P1", type=ActionType.MOVE, data={"to": "F1_R1"})
@@ -128,23 +127,26 @@ def test_no_duplicate_keys_beyond_pool():
     cfg = Config(KEYS_TOTAL=2, KING_PRESENCE_START_ROUND=999)
     
     rooms = {
-        corridor_id(1): RoomState(room_id=corridor_id(1), deck=DeckState(cards=[])),
-        corridor_id(2): RoomState(room_id=corridor_id(2), deck=DeckState(cards=[])),
-        corridor_id(3): RoomState(room_id=corridor_id(3), deck=DeckState(cards=[])),
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"),
-            deck=DeckState(cards=[CardId("KEY"), CardId("KEY"), CardId("KEY")])
-        ),
+        str(corridor_id(1)): {},
+        str(corridor_id(2)): {},
+        str(corridor_id(3)): {},
+        "F1_R1": {"cards": ["KEY", "KEY", "KEY"]},
     }
     
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=RoomId("F1_R1"), keys=0),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(2), keys=0),
+        "P1": {"room": "F1_R1", "sanity": 3, "keys": 0},
+        "P2": {"room": str(corridor_id(2)), "sanity": 3, "keys": 0},
     }
     
-    state = GameState(round=1, players=players, rooms=rooms, phase="PLAYER", king_floor=1)
-    state.turn_order = [PlayerId("P1"), PlayerId("P2")]
-    state.remaining_actions = {PlayerId("P1"): 2, PlayerId("P2"): 2}
+    state = make_game_state(
+        round=1,
+        players=players,
+        rooms=rooms,
+        phase="PLAYER",
+        king_floor=1,
+        turn_order=["P1", "P2"],
+        remaining_actions={"P1": 2, "P2": 2},
+    )
     
     # P1 búsqueda 3 veces
     rng = RNG(1)

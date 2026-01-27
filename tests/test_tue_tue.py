@@ -1,4 +1,4 @@
-from engine.state import GameState, PlayerState
+from engine.state_factory import make_game_state
 from engine.transition import _resolve_card_minimal
 from engine.types import PlayerId, CardId
 from engine.config import Config
@@ -12,8 +12,9 @@ def test_tue_tue_revelations():
     3a rev: Fija cordura en -5
     Nunca spawna como monstruo.
     """
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=6, room=corridor_id(1))
-    s = GameState(round=1, players={PlayerId("P1"): p1})
+    room = str(corridor_id(1))
+    s = make_game_state(players={"P1": {"room": room, "sanity": 6}}, rooms=[room])
+    p1 = s.players[PlayerId("P1")]
     cfg = Config()
 
     # Primera revelación
@@ -43,9 +44,10 @@ def test_tue_tue_vanity_interaction():
     """
     from engine.state import StatusInstance
     
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=6, room=corridor_id(1))
+    room = str(corridor_id(1))
+    s = make_game_state(players={"P1": {"room": room, "sanity": 6}}, rooms=[room])
+    p1 = s.players[PlayerId("P1")]
     p1.statuses.append(StatusInstance(status_id="VANIDAD", remaining_rounds=2))
-    s = GameState(round=1, players={PlayerId("P1"): p1})
     cfg = Config()
 
     # 1a rev: -1 base + 1 vanidad = -2

@@ -4,8 +4,8 @@ Tests para FASE 4: Tesoros
 - Escaleras (TREASURE_STAIRS): 3 usos, coloca escalera temporal
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId, RoomId
+from engine.state_factory import make_game_state
+from engine.types import PlayerId
 from engine.objects import (
     has_treasure_ring,
     get_max_keys_capacity,
@@ -16,25 +16,14 @@ from engine.objects import (
 from engine.config import Config
 
 
-def setup_basic_state() -> GameState:
+def setup_basic_state():
     """Estado básico con 1 jugador"""
-    rooms = {
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[])),
-        RoomId("F1_P"): RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[])),
-    }
-
+    rooms = ["F1_R1", "F1_P"]
     players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"),
-            sanity=5,
-            room=RoomId("F1_R1"),
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
+        "P1": {"room": "F1_R1", "sanity": 5, "sanity_max": 10, "keys": 0, "objects": []},
     }
 
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
@@ -42,12 +31,11 @@ def setup_basic_state() -> GameState:
         king_floor=3,
         turn_pos=0,
         remaining_actions={},
-        turn_order=[PlayerId("P1")],
-        flags={},
+        turn_order=["P1"],
     )
+    s.flags = {}
 
     return s
-
 
 # ===== TREASURE_RING (Llavero) Tests =====
 

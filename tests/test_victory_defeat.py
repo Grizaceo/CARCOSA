@@ -2,44 +2,35 @@
 Tests para condiciones de VICTORIA y DERROTA canónicas.
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 from engine.config import Config
 from engine.transition import _check_victory, _check_defeat
 
 
-def create_base_state(player_rooms: dict, player_keys: dict, player_sanity: dict) -> GameState:
+def create_base_state(player_rooms: dict, player_keys: dict, player_sanity: dict):
     """Helper para crear estados de prueba."""
-    rooms = {
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[])),
-        RoomId("F1_P"): RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[])),
-        RoomId("F2_R1"): RoomState(room_id=RoomId("F2_R1"), deck=DeckState(cards=[])),
-        RoomId("F2_P"): RoomState(room_id=RoomId("F2_P"), deck=DeckState(cards=[])),
-        RoomId("F3_R1"): RoomState(room_id=RoomId("F3_R1"), deck=DeckState(cards=[])),
-        RoomId("F3_P"): RoomState(room_id=RoomId("F3_P"), deck=DeckState(cards=[])),
-    }
-    
+    rooms = ["F1_R1", "F1_P", "F2_R1", "F2_P", "F3_R1", "F3_P"]
     players = {}
     for pid, room in player_rooms.items():
-        players[PlayerId(pid)] = PlayerState(
-            player_id=PlayerId(pid),
-            sanity=player_sanity.get(pid, 5),
-            room=RoomId(room),
-            sanity_max=10,
-            keys=player_keys.get(pid, 0),
-        )
-    
-    return GameState(
-        round=1,
+        players[pid] = {
+            "room": room,
+            "sanity": player_sanity.get(pid, 5),
+            "sanity_max": 10,
+            "keys": player_keys.get(pid, 0),
+        }
+    s = make_game_state(
         players=players,
         rooms=rooms,
+        round=1,
         phase="PLAYER",
         king_floor=3,
-        turn_pos=0,
-        remaining_actions={PlayerId(p): 2 for p in player_rooms},
-        turn_order=[PlayerId(p) for p in player_rooms],
-        flags={},
+        turn_order=list(player_rooms.keys()),
+        remaining_actions={pid: 2 for pid in player_rooms},
     )
+    s.turn_pos = 0
+    s.flags = {}
+    return s
 
 
 # ===== TESTS DE VICTORIA =====

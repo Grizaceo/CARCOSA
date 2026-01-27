@@ -1,6 +1,5 @@
 from engine.config import Config
-from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId
+from engine.state_factory import make_game_state
 from engine.board import corridor_id
 from engine.actions import Action, ActionType
 from engine.rng import RNG
@@ -8,13 +7,14 @@ from engine.transition import step
 
 def test_monsters_are_capped():
     cfg = Config(MAX_MONSTERS_ON_BOARD=8, KING_PRESENCE_START_ROUND=999)
-    rooms = {
-        corridor_id(1): RoomState(room_id=corridor_id(1), deck=DeckState(cards=[])),
-        corridor_id(2): RoomState(room_id=corridor_id(2), deck=DeckState(cards=[])),
-        corridor_id(3): RoomState(room_id=corridor_id(3), deck=DeckState(cards=[])),
-    }
-    players = {PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(2))}
-    s = GameState(round=1, players=players, rooms=rooms, phase="PLAYER", monsters=8, king_floor=1)
+    rooms = [
+        str(corridor_id(1)),
+        str(corridor_id(2)),
+        str(corridor_id(3)),
+    ]
+    players = {"P1": {"room": str(corridor_id(2)), "sanity": 3}}
+    s = make_game_state(round=1, players=players, rooms=rooms, phase="PLAYER", king_floor=1)
+    s.monsters = 8
     rng = RNG(1)
 
     # Fuerza una acción que intente generar monstruo indirectamente (si tu motor lo hace por SEARCH/MOVE con cartas).
