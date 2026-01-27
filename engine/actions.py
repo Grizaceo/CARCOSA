@@ -50,12 +50,16 @@ class ActionType(str, Enum):
 
     # FASE 4: Libro Chambers + Cuentos
     USE_ATTACH_TALE = "USE_ATTACH_TALE"
-    USE_READ_YELLOW_SIGN = "USE_READ_YELLOW_SIGN" # Posible uso futuro
+    USE_READ_YELLOW_SIGN = "USE_READ_YELLOW_SIGN"  # Placeholder: reservado para mecÃ¡nica futura
 
     # FASE 1: Acciones de roles
     USE_HEALER_HEAL = "USE_HEALER_HEAL"  # Healer: -1 propia → +2 otros + estado
     USE_BLUNT = "USE_BLUNT"  # Usar contundente (Brawler gratis)
     USE_PORTABLE_STAIRS = "USE_PORTABLE_STAIRS"  # Escalera portátil: ±1 piso
+
+    # Hallway Peek (Room -> Hallway)
+    PEEK_ROOM_DECK = "PEEK_ROOM_DECK"
+    SKIP_PEEK = "SKIP_PEEK"
 
 
 

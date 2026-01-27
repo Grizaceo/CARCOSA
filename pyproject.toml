@@ -16,3 +16,4 @@ packages = ["engine", "engine.effects", "sim"]
 pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "-p no:cacheprovider"

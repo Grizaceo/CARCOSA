@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional
 
 from engine.actions import Action, ActionType
-from engine.board import corridor_id, floor_of, ruleta_floor, rotate_boxes, rotate_boxes_intra_floor, get_next_move_to_targets, get_next_move_away_from_targets
+from engine.board import corridor_id, floor_of, ruleta_floor, rotate_boxes, rotate_boxes_intra_floor, get_next_move_to_targets, get_next_move_away_from_targets, is_corridor
 from engine.boxes import active_deck_for_room, sync_room_decks_from_boxes
 from engine.config import Config
 from engine.legality import get_legal_actions
@@ -160,6 +160,8 @@ def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[i
         ActionType.USE_ARMORY_DROP,
         ActionType.USE_ARMORY_TAKE,
         ActionType.DISCARD_SANIDAD,
+        ActionType.PEEK_ROOM_DECK,
+        ActionType.SKIP_PEEK,
     }
     
     if action_type in free_action_types:
@@ -622,12 +624,20 @@ def _resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None
                 _on_monster_enters_room(s, spawn_pos)
 
         elif omen_id == "TUE_TUE":
-            if is_early:
-                s.monsters.append(MonsterState(monster_id="MONSTER:TUE_TUE", room=spawn_pos))
-                _on_monster_enters_room(s, spawn_pos)
+            # CANON Fix: TUE_TUE nunca spawna como monstruo (ficha).
+            # El OMEN cuenta como una revelación (o simplemente activa el efecto).
+            # Asumimos que actúa igual que revelar una carta de MONSTER:TUE_TUE.
+            
+            # Reutilizamos la lógica de revelación progresiva
+            s.tue_tue_revelations += 1
+            rev = s.tue_tue_revelations
+            
+            if rev == 1:
+                apply_sanity_loss(s, p, 1, source="TUE_TUE_OMEN_1")
+            elif rev == 2:
+                apply_sanity_loss(s, p, 2, source="TUE_TUE_OMEN_2")
             else:
-                # Cordura = 0
-                p.sanity = 0
+                p.sanity = -5
 
         # Omen se consume (no vuelve al mazo, se asume 'discarded' fuera de juego o bottom)
         # Eventos vuelven al bottom. Presagios suelen ser únicos o eventos persistentes.
@@ -1454,6 +1464,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
         if action.type == ActionType.MOVE:
             to = RoomId(action.data["to"])
+            from_room = p.room # Capture before update
             previous_floor = floor_of(p.room)
             new_floor = floor_of(to)
             
@@ -1470,11 +1481,16 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             # P1 - FASE 1.5.2: Hook revelación de habitación especial
             # Mecánica de cadena (LIFO): primero se revela la habitación especial, luego la carta del mazo
             _on_player_enters_room(s, pid, to)
-
-            # Revelar primera carta del mazo (regla general)
-            card = _reveal_one(s, to)
-            if card is not None:
-                _resolve_card_minimal(s, pid, card, cfg, rng)
+            
+            # CANON Rule: Hallway Peeking (Room -> Hallway on same floor)
+            # Si aplica, se dispara el flag y NO se revela carta en el pasillo.
+            if not is_corridor(from_room) and is_corridor(to) and previous_floor == new_floor:
+                 s.flags["PENDING_HALLWAY_PEEK"] = str(pid)
+            else:
+                # Revelar primera carta del mazo (regla general)
+                card = _reveal_one(s, to)
+                if card is not None:
+                    _resolve_card_minimal(s, pid, card, cfg, rng)
 
         elif action.type == ActionType.SEARCH:
             card = _reveal_one(s, p.room)
@@ -1483,7 +1499,6 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
         elif action.type == ActionType.MEDITATE:
             # CANON: +1 base, +2 si es pasillo (total +2)
-            from engine.board import is_corridor
             heal = 2 if is_corridor(p.room) else 1
             _heal(p, heal)
 
@@ -1586,6 +1601,30 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             # Evento Motemey no debe persistir
             s.motemey_event_active = False
 
+        # Hallway Peek Actions
+        elif action.type == ActionType.PEEK_ROOM_DECK:
+             target_room = RoomId(action.data["room_id"])
+             # Verificar que es una habitación válida del piso actual
+             if floor_of(target_room) != floor_of(p.room) or is_corridor(target_room):
+                 raise ValueError("Invalid room for peek")
+                 
+             deck = active_deck_for_room(s, target_room)
+             if deck and deck.remaining() > 0:
+                 card = deck.cards[deck.top]
+                 # No revelamos (no incrementamos revealed count ni loopeamos efectos)
+                 # Solo "mirar y devolver".
+                 # El usuario lo verá en el log o UI.
+                 s.action_log.append({"event": "PEEK_RESULT", "room": str(target_room), "card": str(card)})
+             
+             # Clear flag
+             if s.flags.get("PENDING_HALLWAY_PEEK") == str(pid):
+                 del s.flags["PENDING_HALLWAY_PEEK"]
+                 
+        elif action.type == ActionType.SKIP_PEEK:
+             # Just clear flag
+             if s.flags.get("PENDING_HALLWAY_PEEK") == str(pid):
+                 del s.flags["PENDING_HALLWAY_PEEK"]
+
         # CORRECCIÓN D: Motemey - Sistema de elección de 2 pasos
         elif action.type == ActionType.USE_MOTEMEY_BUY_START:
             # Paso 1: Cobra -2 cordura, extrae 2 cartas, guarda en pending_choice
@@ -1684,7 +1723,6 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             room_b = RoomId(action.data.get("room_b", ""))
             
             # Obtener carta top de cada habitación (sin extraer)
-            from engine.boxes import active_deck_for_room
             deck_a = active_deck_for_room(s, room_a)
             deck_b = active_deck_for_room(s, room_b)
             
@@ -2013,17 +2051,9 @@ def _monster_phase(s: GameState, cfg: Config) -> None:
         if m.stunned_remaining_rounds > 0:
             m.stunned_remaining_rounds -= 1
         else:
-            # Ataca a todos los jugadores en su habitación
-            # CANON: 1 daño de cordura
-            for p in s.players.values():
-                if p.room == m.room:
-                    # Excepción: TUE_TUE y otros no atacan pasivamente, solo on reveal. 
-                    # Pero el usuario no lo especificó para fin de ronda.
-                    # Asumimos que TUE-TUE es inerte físicamente (solo reveal).
-                    # Araña, Duende, Viejo son físicos.
-                    mid = m.monster_id
-                    if "TUE_TUE" not in mid:
-                        apply_sanity_loss(s, p, 1, source=f"MONSTER_ATTACK_{mid}")
+            # CANON: Los monstruos NO hacen daño pasivo por estar en la misma habitación.
+            # Solo aplican sus habilidades específicas en sus hooks.
+            pass
 
 
 def _move_monsters(s: GameState, cfg: Config) -> None:

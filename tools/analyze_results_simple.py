@@ -7,25 +7,29 @@ from collections import Counter
 import statistics
 
 def analyze_runs():
-    # Find latest directory
+    # Find latest versioned directory (current or historic)
     versions = []
-    for pattern in ("runs_v*", "runs/runs_v*", "runs_archive/runs_v*"):
+    for pattern in ("runs/runs_v*", "docs/historics/runs/runs_v*"):
         versions.extend(glob.glob(pattern))
     
     # Sort by modification time (newest first)
     versions.sort(key=os.path.getmtime, reverse=True)
     
-    if not versions:
-        print("No run directories found.")
-        return
-
-    version_dir = versions[0]
-    print(f"Analyzing directory: {version_dir}")
+    jsonl_files = []
+    if versions:
+        version_dir = versions[0]
+        print(f"Analyzing directory: {version_dir}")
+        jsonl_files = glob.glob(os.path.join(version_dir, "*.jsonl"))
+    else:
+        # Fallback: analyze jsonl files directly under runs/
+        jsonl_files = glob.glob(os.path.join("runs", "*.jsonl"))
+        if not jsonl_files:
+            print("No run directories or jsonl files found.")
+            return
+        print("Analyzing runs/*.jsonl files")
 
     outcomes = Counter()
     rounds = []
-    
-    jsonl_files = glob.glob(os.path.join(version_dir, "*.jsonl"))
     print(f"Found {len(jsonl_files)} run files.")
     
     for fpath in jsonl_files:

@@ -104,6 +104,24 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         else:
             return []
 
+    # Hallway Peek Pending (Check before other actions)
+    if state.flags.get("PENDING_HALLWAY_PEEK") == actor:
+        acts = []
+        p = state.players[PlayerId(actor)]
+        current_floor = floor_of(p.room)
+        
+        # Add PEEK action for each room on this floor
+        for i in range(1, 5):
+            rid = RoomId(f"F{current_floor}_R{i}")
+            if rid in state.rooms:
+                 deck = active_deck_for_room(state, rid)
+                 if deck and deck.remaining() > 0:
+                     acts.append(Action(actor=actor, type=ActionType.PEEK_ROOM_DECK, data={"room_id": str(rid)}))
+        
+        # Always allow SKIP
+        acts.append(Action(actor=actor, type=ActionType.SKIP_PEEK, data={}))
+        return acts
+
     # Motemey pending choice: solo CHOOSE es legal
     if state.pending_motemey_choice and actor in state.pending_motemey_choice:
         acts = [
@@ -198,6 +216,8 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             # Paso 1: Iniciar compra (requiere sanidad >= 2)
             if p.sanity >= 2 and state.motemey_deck.remaining() >= 2:
                 acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_START, data={}))
+                # Legacy one-step buy (compatibilidad con clientes antiguos)
+                acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY, data={}))
 
             # SELL: requiere tener al menos un objeto (siempre disponible)
             if p.objects:
@@ -205,7 +225,6 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                     if not is_soulbound(item):
                         acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_SELL, data={"item_name": item}))
 
-        # ===== B4: PUERTAS AMARILLO =====
         # ===== B4: PUERTAS AMARILLO =====
         # Disponible si actor está en habitación PUERTAS y existe al menos otro jugador
         # Usar normalización o ID canónico
@@ -234,8 +253,6 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         # ===== B6: ARMERÍA =====
         # Disponible si actor está en habitación ARMERÍA y armería no está destruida
-        # ===== B6: ARMERÍA =====
-        # Disponible si actor está en habitación ARMERÍA y armería no está destruida
         room_type = _get_special_room_type(state, p.room)
         is_in_armory = room_type in ("ARMERY", "ARMERIA")
         # La destrucción ya está manejada por special_destroyed en _get_special_room_type
@@ -259,6 +276,20 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             # TAKE: si hay ítems en almacenamiento
             if current_storage_count > 0:
                 acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_TAKE, data={}))
+
+        # ===== OBJETOS (contundente / escaleras portÃ¡tiles) =====
+        # Contundente: solo si hay monstruo en la sala
+        if "BLUNT" in p.objects:
+            if any(m.room == p.room for m in state.monsters):
+                acts.append(Action(actor=str(pid), type=ActionType.USE_BLUNT, data={}))
+
+        # Escalera portÃ¡til: moverse +/-1 piso (respeta bloqueo de movimiento)
+        if "PORTABLE_STAIRS" in p.objects and movement_allowed:
+            f = floor_of(p.room)
+            if f > 1:
+                acts.append(Action(actor=str(pid), type=ActionType.USE_PORTABLE_STAIRS, data={"direction": "DOWN"}))
+            if f < 3:
+                acts.append(Action(actor=str(pid), type=ActionType.USE_PORTABLE_STAIRS, data={"direction": "UP"}))
 
         # ===== B3: CÁMARA LETAL =====
         # P1 - FASE 1.5.4: Ritual para obtener 7ª llave
@@ -331,7 +362,6 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                     acts.append(Action(actor=str(pid), type=ActionType.USE_ATTACH_TALE, data={"tale_id": obj}))
 
         acts.append(Action(actor=str(pid), type=ActionType.END_TURN, data={}))
-        return acts
         return acts
 
     if state.phase == "KING":
