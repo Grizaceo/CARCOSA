@@ -2,7 +2,7 @@ from engine.actions import Action, ActionType
 from engine.board import corridor_id, room_id
 from engine.config import Config
 from engine.rng import RNG
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state
 from engine.transition import _resolve_card_minimal, step
 from engine.types import CardId, PlayerId
 
@@ -27,16 +27,19 @@ class FixedRNG:
 
 def _make_rooms():
     return {
-        corridor_id(1): RoomState(room_id=corridor_id(1), deck=DeckState(cards=[])),
-        corridor_id(2): RoomState(room_id=corridor_id(2), deck=DeckState(cards=[])),
-        corridor_id(3): RoomState(room_id=corridor_id(3), deck=DeckState(cards=[])),
-        room_id(1, 1): RoomState(room_id=room_id(1, 1), deck=DeckState(cards=[CardId("EVENT:X")])),
+        str(corridor_id(1)): {},
+        str(corridor_id(2)): {},
+        str(corridor_id(3)): {},
+        str(room_id(1, 1)): {"cards": ["EVENT:X"]},
     }
 
 
 def test_crown_is_soulbound_not_object():
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=3, room=room_id(1, 1))
-    s = GameState(round=1, players={PlayerId("P1"): p1})
+    s = make_game_state(
+        round=1,
+        players={"P1": {"room": str(room_id(1, 1)), "sanity": 3}},
+        rooms=[str(room_id(1, 1))],
+    )
 
     _resolve_card_minimal(s, PlayerId("P1"), CardId("CROWN"), Config())
 
@@ -49,11 +52,16 @@ def test_d6_discard_ignores_soulbound():
     """d6=6 descarta objetos pero NO soulbound items."""
     cfg = Config()
     # Jugador en piso 2 para evitar inmunidad FK (king_floor=1, false_king_floor distinto)
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(2))
-    p1.soulbound_items.append("CROWN")
-    p1.objects = []
     rooms = _make_rooms()
-    s = GameState(round=1, players={PlayerId("P1"): p1}, rooms=rooms, phase="KING", king_floor=1)
+    s = make_game_state(
+        round=1,
+        players={"P1": {"room": str(corridor_id(2)), "sanity": 3}},
+        rooms=rooms,
+        phase="KING",
+        king_floor=1,
+    )
+    s.players[PlayerId("P1")].soulbound_items.append("CROWN")
+    s.players[PlayerId("P1")].objects = []
     s.false_king_floor = 3  # FK en piso diferente para evitar inmunidad
 
     rng = FixedRNG([1, 6, 1, 1, 1, 1, 1, 1, 1, 1])
@@ -62,10 +70,14 @@ def test_d6_discard_ignores_soulbound():
     assert "CROWN" in s2.players[PlayerId("P1")].soulbound_items
 
     # Segunda parte: con objeto normal
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(2))
-    p1.soulbound_items.append("GENERIC_SOULBOUND")
-    p1.objects = ["OBJ"]
-    s = GameState(round=1, players={PlayerId("P1"): p1}, rooms=rooms, phase="KING", king_floor=1)
+    s = make_game_state(
+        round=1,
+        players={"P1": {"room": str(corridor_id(2)), "sanity": 3, "objects": ["OBJ"]}},
+        rooms=rooms,
+        phase="KING",
+        king_floor=1,
+    )
+    s.players[PlayerId("P1")].soulbound_items.append("GENERIC_SOULBOUND")
     s.false_king_floor = 3  # FK en piso diferente
 
     rng = FixedRNG([1, 6, 1, 1, 1, 1, 1, 1, 1, 1])

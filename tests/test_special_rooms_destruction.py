@@ -5,7 +5,6 @@ import pytest
 from sim.runner import make_smoke_state
 from engine.config import Config
 from engine.types import PlayerId, RoomId, CardId
-from engine.state import GameState, PlayerState, RoomState, DeckState
 from engine.transition import _resolve_card_minimal
 from engine.rng import RNG
 

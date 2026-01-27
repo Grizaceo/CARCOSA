@@ -1,26 +1,19 @@
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, BoxState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 from engine.actions import Action, ActionType
 from engine.transition import step, _start_new_round
 from engine.rng import RNG
 
 def create_base_state():
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=5, room=RoomId("F1_R1"), role_id="SCOUT")
-    rooms = {
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[])),
-        RoomId("F1_P"): RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[])),
-        RoomId("F1_R2"): RoomState(room_id=RoomId("F1_R2"), deck=DeckState(cards=[])),
-    }
-    s = GameState(
-        round=1,
-        players={PlayerId("P1"): p1},
-        rooms=rooms,
-        turn_order=[PlayerId("P1")],
-        remaining_actions={PlayerId("P1"): 2},  # Base 2
-        phase="PLAYER"
+    return make_game_state(
+        players={"P1": {"room": "F1_R1", "sanity": 5, "role_id": "SCOUT"}},
+        rooms=["F1_R1", "F1_P", "F1_R2"],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+        phase="PLAYER",
+        king_floor=1,
     )
-    return s
 
 def test_scout_actions_limit_non_move():
     """Verify separate limit: 2 searches allowed, but free move logic doesn't add generic action."""

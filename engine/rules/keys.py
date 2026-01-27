@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from engine.config import Config
 from engine.state import GameState
+from engine.setup import normalize_room_type
 
 
 def get_base_keys_total(cfg: Config) -> int:
@@ -14,6 +15,6 @@ def get_effective_keys_total(state: GameState, cfg: Config) -> int:
     """
     base = get_base_keys_total(cfg)
     for room in state.rooms.values():
-        if room.special_card_id == "CAMARA_LETAL" and room.special_revealed:
+        if normalize_room_type(room.special_card_id or "") == "CAMARA_LETAL" and room.special_revealed:
             return base + 1
     return base

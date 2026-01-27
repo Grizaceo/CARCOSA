@@ -3,6 +3,7 @@ from __future__ import annotations
 from engine.board import corridor_id, floor_of
 from engine.effects.event_utils import add_status
 from engine.rng import RNG
+from engine.setup import normalize_room_type
 from engine.state import GameState, MonsterState, StatusInstance
 from engine.systems.rooms import on_player_enters_room
 from engine.systems.sanity import apply_sanity_loss
@@ -29,11 +30,12 @@ def on_monster_enters_room(state: GameState, room: RoomId) -> None:
 
         room_state.special_destroyed = True
 
-        if room_state.special_card_id in ("ARMERY", "ARMERIA"):
+        room_type = normalize_room_type(room_state.special_card_id or "")
+        if room_type == "ARMERIA":
             if room in state.armory_storage:
                 state.armory_storage[room] = []
 
-        if room_state.special_card_id in ("ARMERY", "ARMERIA"):
+        if room_type == "ARMERIA":
             state.flags[f"ARMORY_DESTROYED_{room}"] = True
 
 

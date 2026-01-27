@@ -1,6 +1,7 @@
 
 import unittest
-from engine.state import GameState, PlayerState, PlayerId, RoomId, RoomState
+from engine.state_factory import make_game_state
+from engine.types import PlayerId, RoomId
 from engine.transition import step, _apply_status_effects_end_of_round, _false_king_check
 from engine.actions import Action, ActionType
 from engine.objects import OBJECT_CATALOG
@@ -22,41 +23,37 @@ class TestPhase6(unittest.TestCase):
     def setUp(self):
         self.cfg = Config()
         self.rng = MockRNG()
-        self.state = GameState(round=1, players={})
-        self.state.players = {
-            "P1": PlayerState(player_id="P1", sanity=5, sanity_max=5, room=RoomId("F1_R1"), role_id="EXPLORER"),
-            "P2": PlayerState(player_id="P2", sanity=5, sanity_max=5, room=RoomId("F1_R2"), role_id="EXPLORER")
+        rooms = [f"F{f}_R{r}" for f in range(1, 4) for r in range(1, 5)]
+        rooms += ["F1_P", "F2_P", "F3_P"]
+        players = {
+            "P1": {"room": "F1_R1", "sanity": 5, "sanity_max": 5, "role_id": "EXPLORER"},
+            "P2": {"room": "F1_R2", "sanity": 5, "sanity_max": 5, "role_id": "EXPLORER"},
         }
-        self.state.rooms = {
-            RoomId(f"F{f}_R{r}"): RoomState(room_id=RoomId(f"F{f}_R{r}"), deck=[]) for f in range(1, 4) for r in range(1, 5)
-        }
-        self.state.rooms[RoomId("F1_P")] = RoomState(room_id=RoomId("F1_P"), deck=[])
-        self.state.rooms[RoomId("F2_P")] = RoomState(room_id=RoomId("F2_P"), deck=[])
-        self.state.rooms[RoomId("F3_P")] = RoomState(room_id=RoomId("F3_P"), deck=[])
-        
+        self.state = make_game_state(round=1, players=players, rooms=rooms)
+
         # Setup initial boxes
         self.state.box_at_room = {
-            RoomId(f"F{f}_R{r}"): f"BOX_{f}_{r}" for f in range(1, 4) for r in range(1, 4+1)
+            RoomId(f"F{f}_R{r}"): f"BOX_{f}_{r}" for f in range(1, 4) for r in range(1, 5)
         }
-        self.state.remaining_actions["P1"] = 2
-        self.state.remaining_actions["P2"] = 2
+        self.state.remaining_actions[PlayerId("P1")] = 2
+        self.state.remaining_actions[PlayerId("P2")] = 2
 
     def test_status_maldito(self):
         # P1 has MALDITO, P2 is on same floor
         from engine.effects.event_utils import add_status
-        add_status(self.state.players["P1"], "MALDITO")
+        add_status(self.state.players[PlayerId("P1")], "MALDITO")
         
         # P2 in F1_R2, P1 in F1_R1 (same floor)
-        p2_sanity_before = self.state.players["P2"].sanity
+        p2_sanity_before = self.state.players[PlayerId("P2")].sanity
         
         _apply_status_effects_end_of_round(self.state)
         
         # P2 should lose 1 sanity
-        self.assertEqual(self.state.players["P2"].sanity, p2_sanity_before - 1)
+        self.assertEqual(self.state.players[PlayerId("P2")].sanity, p2_sanity_before - 1)
 
     def test_status_sanidad(self):
         from engine.effects.event_utils import add_status
-        p = self.state.players["P1"]
+        p = self.state.players[PlayerId("P1")]
         p.sanity = 2
         add_status(p, "SANIDAD")
         
@@ -71,14 +68,14 @@ class TestPhase6(unittest.TestCase):
         self.state.false_king_floor = 1
         self.state.false_king_round_appeared = 1
         self.state.round = 2 # 1 round since appearance
-        self.state.players["P1"].room = RoomId("F2_R1") # Holder safe
+        self.state.players[PlayerId("P1")].room = RoomId("F2_R1") # Holder safe
         
         # P2 in False King floor (F1)
-        self.state.players["P2"].room = RoomId("F1_R1")
+        self.state.players[PlayerId("P2")].room = RoomId("F1_R1")
         
         # Formula: threshold = sanity_max(5) + 1 + rounds(1) = 7
         # Total = d6 + sanity
-        p1 = self.state.players["P1"]
+        p1 = self.state.players[PlayerId("P1")]
         p1.objects.append("CROWN") # Asegurar que tiene la corona para _sync_crown_holder
         p1.sanity = 5
         p1.room = RoomId("F1_R2") # Holder en F1 (donde está P2) para que FK esté en F1
@@ -87,18 +84,18 @@ class TestPhase6(unittest.TestCase):
         self.rng.randint_vals = [1] 
         # _presence_damage_for_round(2) should be 1
         
-        p2_sanity_before = self.state.players["P2"].sanity
+        p2_sanity_before = self.state.players[PlayerId("P2")].sanity
         _false_king_check(self.state, self.rng, self.cfg)
         
         # Verify damage applied
-        self.assertEqual(self.state.players["P2"].sanity, p2_sanity_before - 1)
+        self.assertEqual(self.state.players[PlayerId("P2")].sanity, p2_sanity_before - 1)
         
         # Test Case: Total > Threshold
         # d6=6, Total = 6 + 5 = 11. 11 > 7 -> No Damage
         self.rng.randint_vals = [6]
-        p2_sanity_before = self.state.players["P2"].sanity
+        p2_sanity_before = self.state.players[PlayerId("P2")].sanity
         _false_king_check(self.state, self.rng, self.cfg)
-        self.assertEqual(self.state.players["P2"].sanity, p2_sanity_before)
+        self.assertEqual(self.state.players[PlayerId("P2")].sanity, p2_sanity_before)
 
     def test_king_d6_intra_floor_rotation(self):
         # Setup King Phase, d6=1

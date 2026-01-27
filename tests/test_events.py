@@ -1,11 +1,7 @@
 
 import pytest
-from engine.state import GameState, PlayerState
-from engine.types import PlayerId, RoomId
-from engine.actions import Action
-from engine.transition import step
-from engine.config import Config
-from engine.rng import RNG
+from engine.state_factory import make_game_state
+from engine.types import PlayerId
 # Asumimos que existe un mecanismo para resolver cartas, pero como es interno,
 # probaremos simulando la extracción de un evento si es posible, 
 # o mejor: verificamos si add_status funciona, ya que los eventos solo llaman a add_status.
@@ -14,10 +10,8 @@ from engine.effects.states_canonical import has_status
 
 def test_apply_status_event():
     # Test directo de la utilidad de eventos
-    s = GameState(round=1, players={
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), room=RoomId("F1_R1"), sanity=5)
-    })
-    p = s.players["P1"]
+    s = make_game_state(players={"P1": {"room": "F1_R1", "sanity": 5}}, rooms=["F1_R1"])
+    p = s.players[PlayerId("P1")]
     
     # Simular evento MALDITO
     add_status(p, "MALDITO")

@@ -9,6 +9,7 @@ from engine.types import PlayerId, RoomId
 from engine.effects.states_canonical import has_status
 from engine.objects import is_soulbound
 from engine.inventory import get_inventory_limits
+from engine.setup import normalize_room_type
 
 
 def _get_special_room_type(state: GameState, room_id: RoomId) -> Optional[str]:
@@ -28,7 +29,7 @@ def _get_special_room_type(state: GameState, room_id: RoomId) -> Optional[str]:
     if (room_state.special_card_id and
         room_state.special_revealed and
         not room_state.special_destroyed):
-        return room_state.special_card_id
+        return normalize_room_type(room_state.special_card_id)
     return None
 
 
@@ -229,7 +230,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         # Disponible si actor está en habitación PUERTAS y existe al menos otro jugador
         # Usar normalización o ID canónico
         room_type = _get_special_room_type(state, p.room)
-        is_in_puertas = room_type in ("PUERTAS", "PUERTAS_AMARILLO")
+        is_in_puertas = room_type == "PUERTAS_AMARILLO"
         other_players = [p2_id for p2_id in state.players if p2_id != pid]
 
         if is_in_puertas and other_players:
@@ -239,7 +240,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         # ===== B5: TABERNA =====
         # CANON: Solo habitaciones (NO pasillos), 2 distintas, 1x turno
         room_type = _get_special_room_type(state, p.room)
-        is_in_taberna = room_type in ("TABERNA", "PEEK")
+        is_in_taberna = room_type == "TABERNA"
         taberna_used = state.taberna_used_this_turn.get(pid, False)
 
         if is_in_taberna and not taberna_used:
@@ -254,7 +255,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         # ===== B6: ARMERÍA =====
         # Disponible si actor está en habitación ARMERÍA y armería no está destruida
         room_type = _get_special_room_type(state, p.room)
-        is_in_armory = room_type in ("ARMERY", "ARMERIA")
+        is_in_armory = room_type == "ARMERIA"
         # La destrucción ya está manejada por special_destroyed en _get_special_room_type
         # pero mantenemos compatibilidad con flag por si acaso
         armory_destroyed = state.flags.get(f"ARMORY_DESTROYED_{p.room}", False)
@@ -301,7 +302,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         # - Habitación no está destruida
         if p.room in state.rooms:
             room_state = state.rooms[p.room]
-            is_camara_letal = (room_state.special_card_id == "CAMARA_LETAL")
+            is_camara_letal = (normalize_room_type(room_state.special_card_id or "") == "CAMARA_LETAL")
             camara_letal_present = state.flags.get("CAMARA_LETAL_PRESENT", False)
             ritual_completed = state.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False)
             room_destroyed = room_state.special_destroyed
@@ -324,7 +325,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         # ===== B1: MONASTERIO DE LOCURA (Capilla) =====
         if p.room in state.rooms:
             room_state = state.rooms[p.room]
-            is_monasterio = (room_state.special_card_id == "MONASTERIO_LOCURA")
+            is_monasterio = (normalize_room_type(room_state.special_card_id or "") == "MONASTERIO_LOCURA")
             room_destroyed = room_state.special_destroyed
             if is_monasterio and not room_destroyed:
                 acts.append(Action(actor=str(pid), type=ActionType.USE_CAPILLA, data={}))
@@ -332,7 +333,7 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         # ===== B7: SALÓN DE BELLEZA =====
         if p.room in state.rooms:
             room_state = state.rooms[p.room]
-            is_salon = (room_state.special_card_id == "SALON_BELLEZA")
+            is_salon = (normalize_room_type(room_state.special_card_id or "") == "SALON_BELLEZA")
             room_destroyed = room_state.special_destroyed
             if is_salon and not room_destroyed:
                 # Si tiene VANIDAD ya no puede usarlo (canon check)

@@ -8,13 +8,18 @@ from engine.board import corridor_id, room_id
 
 def test_sacrifice_interrupt():
     """Verifica que al cruzar a -5 se pausa y pide decisión."""
-    from engine.state import GameState, PlayerState
+    from engine.state_factory import make_game_state
     from engine.transition import step, _apply_minus5_transitions, apply_sanity_loss
     from engine.actions import Action, ActionType
     from engine.legality import get_legal_actions
     
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=-4, sanity_max=5, room=corridor_id(1), keys=2)
-    s = GameState(round=1, players={PlayerId("P1"): p1})
+    s = make_game_state(
+        players={"P1": {"room": str(corridor_id(1)), "sanity": -4, "sanity_max": 5, "keys": 2}},
+        rooms=[str(corridor_id(1))],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+    )
+    p1 = s.players[PlayerId("P1")]
     cfg = Config()
 
     # Trigger -5 transition logic manually (or via damage)
@@ -45,11 +50,16 @@ def test_sacrifice_interrupt():
 def test_trapped_duration():
     """Verifica que TRAPPED dura 3 turnos."""
     from engine.transition import _resolve_card_minimal
-    from engine.state import GameState, PlayerState, StatusInstance
+    from engine.state_factory import make_game_state
     from engine.types import CardId
     
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=5, room=corridor_id(1))
-    s = GameState(round=1, players={PlayerId("P1"): p1})
+    s = make_game_state(
+        players={"P1": {"room": str(corridor_id(1)), "sanity": 5}},
+        rooms=[str(corridor_id(1))],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+    )
+    p1 = s.players[PlayerId("P1")]
     
     # Simulate drawing TRAPPED state
     _resolve_card_minimal(s, PlayerId("P1"), CardId("STATE:TRAPPED"), Config())
@@ -61,9 +71,13 @@ def test_trapped_duration():
 def test_minus5_actions():
     """Verifica que estar en -5 mantiene 2 acciones."""
     from engine.transition import _start_new_round
-    from engine.state import GameState, PlayerState
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=-5, room=corridor_id(1))
-    s = GameState(round=1, players={PlayerId("P1"): p1}, turn_order=[PlayerId("P1")])
+    from engine.state_factory import make_game_state
+    s = make_game_state(
+        players={"P1": {"room": str(corridor_id(1)), "sanity": -5}},
+        rooms=[str(corridor_id(1))],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+    )
     
     _start_new_round(s, Config())
     assert s.remaining_actions[PlayerId("P1")] == 2
@@ -71,13 +85,17 @@ def test_minus5_actions():
 def test_frozen_queen_spawn():
     """Verifica que Reina Helada aparece en el pasillo."""
     from engine.transition import _resolve_card_minimal
-    from engine.state import GameState, PlayerState
+    from engine.state_factory import make_game_state
     from engine.types import CardId
     
     # Player in F1_R1
     rid = room_id(1, 1)
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=5, room=rid)
-    s = GameState(round=1, players={PlayerId("P1"): p1})
+    s = make_game_state(
+        players={"P1": {"room": str(rid), "sanity": 5}},
+        rooms=[str(rid)],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+    )
     
     # Reveal Queen
     _resolve_card_minimal(s, PlayerId("P1"), CardId("MONSTER:REINA_HELADA"), Config())
@@ -88,12 +106,18 @@ def test_frozen_queen_spawn():
 
 def test_salon_belleza_threshold():
     """Verifica Vanidad desde 3er uso (>=3)."""
-    from engine.state import GameState, PlayerState, RoomState, DeckState
+    from engine.state_factory import make_game_state
     from engine.transition import step
     from engine.actions import Action, ActionType
-    p1 = PlayerState(player_id=PlayerId("P1"), sanity=5, room=room_id(1,1))
-    s = GameState(round=1, players={PlayerId("P1"): p1})
-    s.rooms[p1.room] = RoomState(room_id=p1.room, deck=DeckState([]), special_card_id="SALON_BELLEZA", special_revealed=True)
+    rid = room_id(1, 1)
+    s = make_game_state(
+        players={"P1": {"room": str(rid), "sanity": 5}},
+        rooms={str(rid): {"special_card_id": "SALON_BELLEZA", "special_revealed": True}},
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+        phase="PLAYER",
+        king_floor=1,
+    )
     
     # Use 1: Count becomes 1. No status.
     # Use 1: Count becomes 1. No status.
@@ -117,10 +141,10 @@ def test_salon_belleza_threshold():
 
 def test_king_single_action():
     """Verifica que la fase KING solo expone 1 acción."""
-    from engine.state import GameState
+    from engine.state_factory import make_game_state
     from engine.legality import get_legal_actions
     from engine.actions import ActionType
-    s = GameState(round=1, players={}, phase="KING")
+    s = make_game_state(players={}, rooms=[], phase="KING", turn_order=[])
     legal = get_legal_actions(s, "KING")
     assert len(legal) == 1
     assert legal[0].type == ActionType.KING_ENDROUND

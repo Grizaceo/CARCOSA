@@ -14,10 +14,10 @@ from engine.systems.king import (
     attract_players_to_floor as _attract_players_to_floor,
     expel_players_from_floor_except_fk as _expel_players_from_floor_except_fk,
     attract_players_to_floor_except_fk as _attract_players_to_floor_except_fk,
-    roll_stairs as _roll_stairs,
     false_king_check as _false_king_check,
     end_of_round_checks as _end_of_round_checks,
 )
+from engine.systems.stairs import roll_stairs as _roll_stairs
 from engine.systems.monsters import (
     on_monster_enters_room as _on_monster_enters_room,
     monster_phase as _monster_phase,
@@ -32,6 +32,35 @@ from engine.types import PlayerId, RoomId
 from engine.rng import RNG
 from engine.state import GameState
 from engine.config import Config
+from engine.setup import normalize_room_type as _normalize_room_type
+
+
+# Legacy action type aliases (for replay compatibility)
+LEGACY_ACTION_TYPE_ALIASES = {
+    "MOTEMEY_BUY": "USE_MOTEMEY_BUY",
+    "MOTEMEY_BUY_START": "USE_MOTEMEY_BUY_START",
+    "MOTEMEY_BUY_CHOOSE": "USE_MOTEMEY_BUY_CHOOSE",
+    "MOTEMEY_SELL": "USE_MOTEMEY_SELL",
+    "YELLOW_DOORS": "USE_YELLOW_DOORS",
+    "TABERNA_ROOMS": "USE_TABERNA_ROOMS",
+    "ARMORY_DROP": "USE_ARMORY_DROP",
+    "ARMORY_TAKE": "USE_ARMORY_TAKE",
+    "SALON_BELLEZA": "USE_SALON_BELLEZA",
+    "CAPILLA": "USE_CAPILLA",
+    "CAMARA_LETAL": "USE_CAMARA_LETAL_RITUAL",
+    "ATTACH_TALE": "USE_ATTACH_TALE",
+    "PORTABLE_STAIRS": "USE_PORTABLE_STAIRS",
+    "HEALER_HEAL": "USE_HEALER_HEAL",
+    "BLUNT": "USE_BLUNT",
+}
+
+
+def normalize_action_type(action_type: str) -> str:
+    return LEGACY_ACTION_TYPE_ALIASES.get(action_type, action_type)
+
+
+def normalize_room_type(room_type: str) -> str:
+    return _normalize_room_type(room_type)
 
 
 def legacy_reveal_one(state: GameState, room_id: RoomId):

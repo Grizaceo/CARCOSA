@@ -2,8 +2,9 @@
 Tests para B2: MOTEMEY (venta/compra) + B3: Pool de llaves
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, StatusInstance
-from engine.types import PlayerId, RoomId, CardId
+from engine.state import DeckState
+from engine.state_factory import make_game_state
+from engine.types import PlayerId, CardId
 from engine.rng import RNG
 from engine.config import Config
 
@@ -31,26 +32,23 @@ def setup_motemey_deck() -> DeckState:
 
 def setup_basic_state_with_motemey():
     """Estado básico con mazo MOTEMEY preparado."""
-    rooms = {
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[])),
-        RoomId("F1_P"): RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[])),
-    }
+    rooms = ["F1_R1", "F1_P"]
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=10, room=RoomId("F1_R1"), sanity_max=10, keys=0, objects=[]),
+        "P1": {"room": "F1_R1", "sanity": 10, "sanity_max": 10, "keys": 0, "objects": []},
     }
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
         phase="PLAYER",
         king_floor=3,
         turn_pos=0,
-        remaining_actions={PlayerId("P1"): 2},
-        turn_order=[PlayerId("P1")],
-        motemey_deck=setup_motemey_deck(),
-        motemey_event_active=False,
-        flags={},
+        remaining_actions={"P1": 2},
+        turn_order=["P1"],
     )
+    s.motemey_deck = setup_motemey_deck()
+    s.motemey_event_active = False
+    s.flags = {}
     return s
 
 

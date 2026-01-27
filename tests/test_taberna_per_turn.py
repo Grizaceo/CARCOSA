@@ -1,6 +1,6 @@
 
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, StatusInstance
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 from engine.actions import Action, ActionType, Action
 from engine.transition import step, _advance_turn_or_king, _start_new_round
@@ -9,26 +9,21 @@ from engine.rng import RNG
 from engine.legality import get_legal_actions
 
 def make_state():
-    # Setup P1 and P2 in Taberna (F1_R1)
     rooms = {
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[]), special_card_id="TABERNA", special_revealed=True),
-        RoomId("F1_R2"): RoomState(room_id=RoomId("F1_R2"), deck=DeckState(cards=[])),
-        RoomId("F1_R3"): RoomState(room_id=RoomId("F1_R3"), deck=DeckState(cards=[])),
+        "F1_R1": {"special_card_id": "TABERNA", "special_revealed": True},
+        "F1_R2": {},
+        "F1_R3": {},
     }
-    players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=RoomId("F1_R1")),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=RoomId("F1_R1")),
-    }
-    s = GameState(
-        round=1,
-        players=players,
+    s = make_game_state(
+        players={"P1": {"room": "F1_R1", "sanity": 3}, "P2": {"room": "F1_R1", "sanity": 3}},
         rooms=rooms,
+        turn_order=["P1", "P2"],
+        remaining_actions={"P1": 2, "P2": 2},
         phase="PLAYER",
-        turn_order=[PlayerId("P1"), PlayerId("P2")],
-        remaining_actions={PlayerId("P1"): 2, PlayerId("P2"): 2},
-        turn_pos=0, # P1
-        starter_pos=0 # P1 starts R1
+        king_floor=1,
     )
+    s.turn_pos = 0
+    s.starter_pos = 0
     return s
 
 def test_taberna_reset_per_turn():

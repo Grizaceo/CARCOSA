@@ -1,14 +1,14 @@
 from engine.actions import Action, ActionType
 from engine.board import canonical_room_ids, corridor_id, room_id
 from engine.rng import RNG
-from engine.state import GameState, PlayerState
+from engine.state_factory import make_game_state
 from engine.transition import step
 from engine.types import CardId, PlayerId
 
 
 def test_game_state_initializes_canonical_rooms():
-    players = {PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(1))}
-    s = GameState(round=1, players=players, rooms={})
+    players = {"P1": {"room": str(corridor_id(1)), "sanity": 3}}
+    s = make_game_state(round=1, players=players, rooms={})
 
     for rid in canonical_room_ids():
         assert rid in s.rooms

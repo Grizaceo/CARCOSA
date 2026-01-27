@@ -2,7 +2,8 @@
 Tests para sistema de objetos con efectos (FASE 0.3)
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, MonsterState
+from engine.state import MonsterState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 from engine.config import Config
 from engine.objects import use_object, OBJECT_CATALOG
@@ -11,41 +12,21 @@ from engine.rng import RNG
 
 def setup_object_state():
     """Estado básico para tests de objetos."""
-    rooms = {
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"),
-            deck=DeckState(cards=[])
-        ),
-        RoomId("F1_P"): RoomState(
-            room_id=RoomId("F1_P"),
-            deck=DeckState(cards=[])
-        ),
-        RoomId("F2_R1"): RoomState(
-            room_id=RoomId("F2_R1"),
-            deck=DeckState(cards=[])
-        ),
-    }
+    rooms = ["F1_R1", "F1_P", "F2_R1"]
     players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"),
-            sanity=5,
-            room=RoomId("F1_R1"),
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
+        "P1": {"room": "F1_R1", "sanity": 5, "sanity_max": 10, "keys": 0, "objects": []},
     }
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
         phase="PLAYER",
         king_floor=3,
         turn_pos=0,
-        remaining_actions={PlayerId("P1"): 2},
-        turn_order=[PlayerId("P1")],
-        flags={},
+        remaining_actions={"P1": 2},
+        turn_order=["P1"],
     )
+    s.flags = {}
     return s
 
 

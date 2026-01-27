@@ -1,5 +1,5 @@
 from engine.config import Config
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId
 from engine.board import corridor_id
 from engine.actions import Action, ActionType
@@ -14,18 +14,20 @@ def test_win_triggers_on_endround_when_conditions_met():
         KING_PRESENCE_START_ROUND=999,   # aislar test
     )
 
-    rooms = {
-        corridor_id(1): RoomState(room_id=corridor_id(1), deck=DeckState(cards=[])),
-        corridor_id(2): RoomState(room_id=corridor_id(2), deck=DeckState(cards=[])),
-        corridor_id(3): RoomState(room_id=corridor_id(3), deck=DeckState(cards=[])),
-    }
+    rooms = [
+        str(corridor_id(1)),
+        str(corridor_id(2)),
+        str(corridor_id(3)),
+    ]
 
     players = {
-        PlayerId("P1"): PlayerState(player_id=PlayerId("P1"), sanity=3, room=corridor_id(1), keys=2, at_umbral=True),
-        PlayerId("P2"): PlayerState(player_id=PlayerId("P2"), sanity=3, room=corridor_id(1), keys=2, at_umbral=True),
+        "P1": {"room": str(corridor_id(1)), "sanity": 3, "keys": 2},
+        "P2": {"room": str(corridor_id(1)), "sanity": 3, "keys": 2},
     }
 
-    s = GameState(round=5, players=players, rooms=rooms, phase="KING", king_floor=2)
+    s = make_game_state(players=players, rooms=rooms, round=5, phase="KING", king_floor=2)
+    s.players[PlayerId("P1")].at_umbral = True
+    s.players[PlayerId("P2")].at_umbral = True
     rng = RNG(1)
 
     a = Action(actor="KING", type=ActionType.KING_ENDROUND, data={"floor": 2})

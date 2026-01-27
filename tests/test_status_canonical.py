@@ -6,52 +6,23 @@ Tests para FASE 3: Estados Canónicos
 - VANIDAD (bloquea Salón de Belleza, NO meditate)
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState, StatusInstance
-from engine.types import PlayerId, RoomId, CardId
-from engine.config import Config
+from engine.state import StatusInstance
+from engine.state_factory import make_game_state, make_player
+from engine.types import PlayerId, RoomId
 from engine.transition import _apply_status_effects_end_of_round
 
 
-def setup_basic_state() -> GameState:
+def setup_basic_state():
     """Estado básico con 3 jugadores en diferentes pisos"""
-    rooms = {
-        RoomId("F1_R1"): RoomState(room_id=RoomId("F1_R1"), deck=DeckState(cards=[])),
-        RoomId("F1_R2"): RoomState(room_id=RoomId("F1_R2"), deck=DeckState(cards=[])),
-        RoomId("F1_P"): RoomState(room_id=RoomId("F1_P"), deck=DeckState(cards=[])),
-        RoomId("F2_R1"): RoomState(room_id=RoomId("F2_R1"), deck=DeckState(cards=[])),
-        RoomId("F2_P"): RoomState(room_id=RoomId("F2_P"), deck=DeckState(cards=[])),
-        RoomId("F3_R1"): RoomState(room_id=RoomId("F3_R1"), deck=DeckState(cards=[])),
-        RoomId("F3_P"): RoomState(room_id=RoomId("F3_P"), deck=DeckState(cards=[])),
-    }
+    rooms = ["F1_R1", "F1_R2", "F1_P", "F2_R1", "F2_P", "F3_R1", "F3_P"]
 
     players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"),
-            sanity=5,
-            room=RoomId("F1_R1"),
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
-        PlayerId("P2"): PlayerState(
-            player_id=PlayerId("P2"),
-            sanity=5,
-            room=RoomId("F1_R1"),  # Mismo piso y habitación que P1
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
-        PlayerId("P3"): PlayerState(
-            player_id=PlayerId("P3"),
-            sanity=5,
-            room=RoomId("F2_R1"),  # Piso diferente
-            sanity_max=10,
-            keys=0,
-            objects=[]
-        ),
+        "P1": {"room": "F1_R1", "sanity": 5, "sanity_max": 10, "keys": 0, "objects": []},
+        "P2": {"room": "F1_R1", "sanity": 5, "sanity_max": 10, "keys": 0, "objects": []},
+        "P3": {"room": "F2_R1", "sanity": 5, "sanity_max": 10, "keys": 0, "objects": []},
     }
 
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
@@ -59,12 +30,11 @@ def setup_basic_state() -> GameState:
         king_floor=3,
         turn_pos=0,
         remaining_actions={},
-        turn_order=[PlayerId("P1"), PlayerId("P2"), PlayerId("P3")],
-        flags={},
+        turn_order=["P1", "P2", "P3"],
     )
+    s.flags = {}
 
     return s
-
 
 # ===== MALDITO Tests =====
 
@@ -386,16 +356,14 @@ def test_vanidad_only_affects_owner():
 def test_vanidad_blocks_salon_belleza():
     """VANIDAD: Bloquea uso del Salón de Belleza (según canon)"""
     from engine.effects.states_canonical import can_use_special_room
-    from engine.state import PlayerState
-    from engine.types import PlayerId, RoomId
 
-    player = PlayerState(
-        player_id=PlayerId("P1"),
+    player = make_player(
+        player_id="P1",
+        room="F1_R1",
         sanity=5,
-        room=RoomId("F1_R1"),
         sanity_max=10,
         keys=0,
-        objects=[]
+        objects=[],
     )
     
     # Sin VANIDAD: puede usar Salón de Belleza
@@ -409,16 +377,14 @@ def test_vanidad_blocks_salon_belleza():
 def test_vanidad_allows_other_special_rooms():
     """VANIDAD: NO bloquea otras habitaciones especiales"""
     from engine.effects.states_canonical import can_use_special_room
-    from engine.state import PlayerState, StatusInstance
-    from engine.types import PlayerId, RoomId
 
-    player = PlayerState(
-        player_id=PlayerId("P1"),
+    player = make_player(
+        player_id="P1",
+        room="F1_R1",
         sanity=5,
-        room=RoomId("F1_R1"),
         sanity_max=10,
         keys=0,
-        objects=[]
+        objects=[],
     )
     player.statuses.append(StatusInstance(status_id="VANIDAD", remaining_rounds=2))
     

@@ -2,41 +2,31 @@
 Tests para B6: ARMERÍA (almacenar/recuperar objetos)
 """
 import pytest
-from engine.state import GameState, PlayerState, RoomState, DeckState
+from engine.state_factory import make_game_state
 from engine.types import PlayerId, RoomId
 
 
 def setup_armory_state():
     """Estado con habitación de ARMERÍA."""
     rooms = {
-        RoomId("F1_ARMERY"): RoomState(
-            room_id=RoomId("F1_ARMERY"),
-            deck=DeckState(cards=[]),
-            special_card_id="ARMERY"
-        ),
-        RoomId("F1_R1"): RoomState(
-            room_id=RoomId("F1_R1"),
-            deck=DeckState(cards=[])
-        ),
+        "F1_ARMERY": {"special_card_id": "ARMERY"},
+        "F1_R1": {},
     }
     players = {
-        PlayerId("P1"): PlayerState(
-            player_id=PlayerId("P1"), sanity=10, room=RoomId("F1_ARMERY"), 
-            sanity_max=10, keys=0, objects=[]
-        ),
+        "P1": {"room": "F1_ARMERY", "sanity": 10, "sanity_max": 10, "keys": 0, "objects": []},
     }
-    s = GameState(
+    s = make_game_state(
         round=1,
         players=players,
         rooms=rooms,
         phase="PLAYER",
         king_floor=3,
         turn_pos=0,
-        remaining_actions={PlayerId("P1"): 2},
-        turn_order=[PlayerId("P1")],
-        armory_storage={RoomId("F1_ARMERY"): []},
-        flags={},
+        remaining_actions={"P1": 2},
+        turn_order=["P1"],
     )
+    s.armory_storage = {RoomId("F1_ARMERY"): []}
+    s.flags = {}
     return s
 
 
