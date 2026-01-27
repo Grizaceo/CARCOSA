@@ -10,14 +10,14 @@ from engine.rng import RNG
 from engine.state import GameState, StatusInstance, ensure_canonical_rooms
 from engine.types import PlayerId, RoomId, CardId
 from engine.roles import get_scout_actions, brawler_blunt_free
-from engine.objects import use_object, get_max_keys_capacity, is_soulbound, OBJECT_CATALOG
+from engine.objects import use_object, is_soulbound, OBJECT_CATALOG
 from engine.inventory import get_inventory_limits
 from engine.rules.actions_cost import consume_action_cost
-from engine.rules.keys import get_base_keys_total, get_effective_keys_total
+from engine.handlers.special_rooms import handle_special_room_action
 from engine.rules.sanity import sanity_cap
 from engine.rules.sacrifice import available_sacrifice_options
 from engine.rules.victory_defeat import can_win, can_lose_all_minus5, can_lose_keys_destroyed
-from engine.inventory import consume_object, add_object
+from engine.inventory import consume_object
 from engine.systems.sanity import heal_player, apply_sanity_loss
 from engine.systems.player import apply_player_action
 from engine.systems.king import resolve_king_phase
@@ -30,7 +30,6 @@ from engine.compat.legacy import (
     legacy_monster_phase,
     legacy_move_monsters,
     legacy_current_false_king_floor,
-    legacy_sync_crown_holder,
     legacy_presence_damage_for_round,
     legacy_shuffle_all_room_decks,
     legacy_expel_players_from_floor,
@@ -57,9 +56,6 @@ def _sanity_cap(p) -> int:
 def _heal(p, amount: int) -> None:
     heal_player(p, amount)
 
-
-def _get_base_keys_total(cfg) -> int:
-    return get_base_keys_total(cfg)
 
 
 def _available_sacrifice_options(p) -> dict:
@@ -110,9 +106,6 @@ def _apply_sacrifice_choice(s: GameState, pid: PlayerId, cfg, choice: dict) -> N
     p.sanity = 0
     p.at_minus5 = False
 
-
-def _get_effective_keys_total(s, cfg) -> int:
-    return get_effective_keys_total(s, cfg)
 
 
 def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[int] = None) -> int:
@@ -336,38 +329,6 @@ def _apply_status_effects_end_of_round(s: GameState) -> None:
 
 
 
-def _legacy_current_false_king_floor(s) -> Optional[int]:
-    return legacy_current_false_king_floor(s)
-
-
-def _legacy_sync_crown_holder(s) -> None:
-    legacy_sync_crown_holder(s)
-
-
-def _legacy_advance_turn_or_king(s):
-    legacy_advance_turn_or_king(s)
-
-
-def _legacy_resolve_card_minimal(s, pid: PlayerId, card, cfg, rng: Optional[RNG] = None):
-    return _resolve_card_minimal(s, pid, card, cfg, rng)
-
-
-def _legacy_monster_phase(s: GameState, cfg: Config) -> None:
-    _monster_phase(s, cfg)
-
-
-def _legacy_false_king_check(s, rng: RNG, cfg):
-    _false_king_check(s, rng, cfg)
-
-
-def _legacy_roll_stairs(s, rng: RNG):
-    _roll_stairs(s, rng)
-
-
-def _legacy_end_of_round_checks(s, cfg):
-    _end_of_round_checks(s, cfg)
-
-
 def _presence_damage_for_round(round_n: int) -> int:
     return legacy_presence_damage_for_round(round_n)
 
@@ -398,10 +359,6 @@ def _roll_stairs(s, rng: RNG):
 
 def _false_king_check(s, rng: RNG, cfg):
     legacy_false_king_check(s, rng, cfg)
-
-
-def _legacy_end_of_round_checks(s, cfg):
-    legacy_end_of_round_checks(s, cfg)
 
 
 def _advance_turn_or_king(s):
@@ -500,12 +457,12 @@ def _apply_player_action(s: GameState, action: Action, rng: RNG, cfg: Config) ->
             # Revelar primera carta del mazo (regla general)
             card = _reveal_one(s, to)
             if card is not None:
-                _legacy_resolve_card_minimal(s, pid, card, cfg, rng)
+                _resolve_card_minimal(s, pid, card, cfg, rng)
 
     elif action.type == ActionType.SEARCH:
         card = _reveal_one(s, p.room)
         if card is not None:
-            _legacy_resolve_card_minimal(s, pid, card, cfg, rng)
+            _resolve_card_minimal(s, pid, card, cfg, rng)
 
     elif action.type == ActionType.MEDITATE:
         # CANON: +1 base, +2 si es pasillo (total +2)
@@ -573,44 +530,6 @@ def _apply_player_action(s: GameState, action: Action, rng: RNG, cfg: Config) ->
         # Evento Motemey no debe persistir entre turnos
         s.motemey_event_active = False
 
-    # ===== B2: MOTEMEY (buy/sell) =====
-    elif action.type == ActionType.USE_MOTEMEY_BUY:
-        # DEPRECATED: Mantener compatibilidad con código viejo
-        # Compra: -2 sanidad, ofrece 2 cartas, elige 1
-        # Supuesto: no consume acción (es acción de habitación)
-        if p.sanity >= 2:
-            apply_sanity_loss(s, p, 2, source="MOTEMEY_BUY")
-            deck = s.motemey_deck
-            # Ofertar 2 cartas
-            if deck.remaining() >= 2:
-                card1 = deck.cards[deck.top]
-                card2 = deck.cards[deck.top + 1]
-                deck.top += 2
-
-                # Elige la 1ª (data["chosen_index"] = 0 o 1)
-                chosen_idx = int(action.data.get("chosen_index", 0))
-                chosen = card1 if chosen_idx == 0 else card2
-                rejected = card2 if chosen_idx == 0 else card1
-
-                # Elegida al inventario, rechazada al final del mazo
-                chosen_str = str(chosen)
-                if chosen_str == "KEY":
-                    keys_in_hand = sum(pl.keys for pl in s.players.values())
-                    keys_in_game = max(0, _get_base_keys_total(cfg) - s.keys_destroyed)
-                    if keys_in_hand < keys_in_game and p.keys < get_max_keys_capacity(p):
-                        p.keys += 1
-                    else:
-                        # No se puede tomar -> devolver al mazo
-                        deck.put_bottom(chosen)
-                else:
-                    if not add_object(s, pid, chosen_str, discard_choice=action.data.get("discard_choice")):
-                        # No cabe -> devolver al mazo
-                        deck.put_bottom(chosen)
-
-                deck.put_bottom(rejected)
-        # Evento Motemey no debe persistir
-        s.motemey_event_active = False
-
     # Hallway Peek Actions
     elif action.type == ActionType.PEEK_ROOM_DECK:
          target_room = RoomId(action.data["room_id"])
@@ -635,228 +554,9 @@ def _apply_player_action(s: GameState, action: Action, rng: RNG, cfg: Config) ->
          if s.flags.get("PENDING_HALLWAY_PEEK") == str(pid):
              del s.flags["PENDING_HALLWAY_PEEK"]
 
-    # CORRECCIÓN D: Motemey - Sistema de elección de 2 pasos
-    elif action.type == ActionType.USE_MOTEMEY_BUY_START:
-        # Paso 1: Cobra -2 cordura, extrae 2 cartas, guarda en pending_choice
-        apply_sanity_loss(s, p, 2, source="MOTEMEY_BUY")
-        deck = s.motemey_deck
-
-        if deck.remaining() >= 2:
-            card1 = deck.draw_top()
-            card2 = deck.draw_top()
-
-            # Guardar cartas ofertadas en pending_choice
-            if s.pending_motemey_choice is None:
-                s.pending_motemey_choice = {}
-            s.pending_motemey_choice[str(pid)] = [card1, card2]
-
-    elif action.type == ActionType.USE_MOTEMEY_BUY_CHOOSE:
-        # Paso 2: Jugador elige carta (index 0 o 1)
-        if s.pending_motemey_choice and str(pid) in s.pending_motemey_choice:
-            cards = s.pending_motemey_choice[str(pid)]
-            chosen_idx = int(action.data.get("chosen_index", 0))
-
-            if 0 <= chosen_idx < len(cards):
-                chosen = cards[chosen_idx]
-                rejected = cards[1 - chosen_idx]
-
-                # Elegida al inventario
-                chosen_str = str(chosen)
-            
-                if chosen_str == "KEY":
-                    # Logic for Key in Motemey Buy (pool base, no extra por Cámara Letal)
-                    keys_in_hand = sum(pl.keys for pl in s.players.values())
-                    keys_in_game = max(0, _get_base_keys_total(cfg) - s.keys_destroyed)
-                    if keys_in_hand >= keys_in_game:
-                        # No hay llaves disponibles -> devolver al mazo
-                        s.motemey_deck.put_bottom(chosen)
-                    else:
-                        role_limit = get_max_keys_capacity(p)
-                        if p.keys < role_limit:
-                            p.keys += 1
-                        else:
-                            # Full of keys -> devolver al mazo
-                            s.motemey_deck.put_bottom(chosen)
-                else:
-                    # Logic for Objects
-                    # Usar add_object para respetar límites
-                    if not add_object(s, pid, chosen_str, discard_choice=action.data.get("discard_choice")):
-                        # Fallo al agregar. Deberíamos revertir o manejar error.
-                        pass
-
-                # Rechazada vuelve al fondo del mazo de Motemey
-                s.motemey_deck.put_bottom(rejected)
-
-                # Limpiar pending_choice
-                del s.pending_motemey_choice[str(pid)]
-                if len(s.pending_motemey_choice) == 0:
-                    s.pending_motemey_choice = None
-                # Evento Motemey consumido
-                s.motemey_event_active = False
-
-    elif action.type == ActionType.USE_MOTEMEY_SELL:
-        # Venta: objeto normal +1, tesoro +3, clamped a sanity_max
-        item_name = action.data.get("item_name", "")
-        if item_name in p.objects and not is_soulbound(item_name):
-            p.objects.remove(item_name)
-            # Determinar si es tesoro (TREASURE_*) u objeto
-            if str(item_name).startswith("TREASURE"):
-                _heal(p, 3)
-            else:
-                _heal(p, 1)
-            # Evento Motemey consumido
-            s.motemey_event_active = False
-
-    # ===== B4: PUERTAS AMARILLO (teleport) =====
-    elif action.type == ActionType.USE_YELLOW_DOORS:
-        # Teleporta a habitación del objetivo, objetivo pierde -1 sanidad
-        target_id = PlayerId(action.data.get("target_player", ""))
-        if target_id in s.players:
-            target = s.players[target_id]
-            # Actor teleportado a habitación del target
-            p.room = target.room
-            # Target pierde -1 sanidad
-            apply_sanity_loss(s, target, 1, source="YELLOW_DOORS")
-            # Reveal card en la habitación destino (on_enter)
-            card = _reveal_one(s, p.room)
-            if card is not None:
-                _legacy_resolve_card_minimal(s, pid, card, cfg, rng)
-
-    # ===== B5: TABERNA (mirar 2 habitaciones) =====
-    elif action.type == ActionType.USE_TABERNA_ROOMS:
-        # CANON: Pagar 1 cordura, mirar 2 habitaciones, registrar peek
-        apply_sanity_loss(s, p, 1, source="TABERNA")
-        s.taberna_used_this_turn[pid] = True
-    
-        # CANON Fix #7: Registrar peek para determinismo/replay
-        room_a = RoomId(action.data.get("room_a", ""))
-        room_b = RoomId(action.data.get("room_b", ""))
-    
-        # Obtener carta top de cada habitación (sin extraer)
-        deck_a = active_deck_for_room(s, room_a)
-        deck_b = active_deck_for_room(s, room_b)
-    
-        card_a = deck_a.cards[deck_a.top] if deck_a and deck_a.remaining() > 0 else None
-        card_b = deck_b.cards[deck_b.top] if deck_b and deck_b.remaining() > 0 else None
-    
-        # Registrar en state para replay
-        # CANON Fix #C: Serializar last_peek
-        # Note: s.last_peek needs to be added to GameState to be persistent.
-        # For now we set it, ensure GameState has the field.
-        s.last_peek = [{"room": str(room_a), "card": str(card_a)}, {"room": str(room_b), "card": str(card_b)}]
-
-    # ===== B6: ARMERÍA (drop/take) =====
-    elif action.type == ActionType.USE_ARMORY_DROP:
-        # CANON: Dejar objeto o llave en armeria (max 2 items)
-        item_name = action.data.get("item_name", "")
-        item_type = action.data.get("item_type", "object")
-        armory_room = p.room
-    
-        if armory_room not in s.armory_storage:
-            s.armory_storage[armory_room] = []
-    
-        if len(s.armory_storage[armory_room]) < 2:
-            if item_type == "key" and p.keys > 0:
-                p.keys -= 1
-                s.armory_storage[armory_room].append({"type": "key", "value": 1})
-            elif item_type == "object" and item_name in p.objects and not is_soulbound(item_name):
-                p.objects.remove(item_name)
-                s.armory_storage[armory_room].append(item_name)
-    elif action.type == ActionType.USE_ARMORY_TAKE:
-        # CANON: Tomar objeto de armeria
-        armory_room = p.room
-        if armory_room in s.armory_storage and len(s.armory_storage[armory_room]) > 0:
-            item = s.armory_storage[armory_room].pop()
-            if isinstance(item, dict):
-                # Compatibilidad con almacenamiento legacy
-                item_name = item.get("value", "")
-                if item.get("type") == "key":
-                    p.keys += item.get("value", 1)
-                else:
-                    if not add_object(s, pid, item_name, discard_choice=action.data.get("discard_choice")):
-                        s.armory_storage[armory_room].append(item)
-            else:
-                if not add_object(s, pid, item, discard_choice=action.data.get("discard_choice")):
-                    s.armory_storage[armory_room].append(item)
-    elif action.type == ActionType.USE_CAPILLA:
-        # d6 + 2 de sanación
-        d6 = rng.randint(1, 6)
-        heal_amount = d6 + 2
-        _heal(p, heal_amount)
-    
-        # Riesgo: Si d6 es 1, obtiene PARANOIA
-        if d6 == 1:
-            add_status(p, "PARANOIA")
-
-    # ===== B7: SALÓN DE BELLEZA (Vanidad) =====
-    elif action.type == ActionType.USE_SALON_BELLEZA:
-        # Incrementar uso global
-        s.salon_belleza_uses += 1
-    
-        # Efecto base: Protección (Imnunidad a eventos de Amarillo por 1 ronda)
-        # Implementado como flag temporal o estado
-        # Usaremos flag para simplificar
-        s.flags[f"PROTECCION_AMARILLO_{pid}"] = s.round + 1
-    
-        # Cada 3er uso (global): VANIDAD
-        # CANON Fix: Vanidad desde el 3er uso en adelante (>= 3)
-        # User request: "el tercer jugador que activa... y los siguientes... recibiran vanidad"
-        if s.salon_belleza_uses >= 3:
-            add_status(p, "VANIDAD")
-
-    # ===== B3: CÁMARA LETAL (ritual) =====
-    # P1 - FASE 1.5.4: Ritual para obtener 7ª llave
-    elif action.type == ActionType.USE_CAMARA_LETAL_RITUAL:
-        if not s.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False):
-            players_in_room = [
-                p_id for p_id, player in s.players.items()
-                if player.room == p.room
-            ]
-
-            if len(players_in_room) == 2:
-                # Lanzar D6 para determinar costo
-                d6 = rng.randint(1, 6)
-                key_recipient = pid # El actor recibe la llave por defecto
-
-                # Determinar costos según D6
-                costs = [0, 0]
-                if d6 in [1, 2]:
-                    # Un jugador paga 7 (el otro 0). Actor paga 7 por defecto (riesgo)
-                    costs = [7, 0]
-                elif d6 in [3, 4]:
-                    # Reparto fijo: 3 y 4. Actor paga 4 (riesgo)
-                    costs = [4, 3]
-                elif d6 in [5, 6]:
-                    # Reparto libre: suma 7. Reparto equitativo 4, 3 para automatizar
-                    costs = [4, 3]
-            
-                # Aplicar daño
-                # targets: [actor, otro]
-                # Encontrar al otro jugador
-                other_pids = [pid2 for pid2 in players_in_room if pid2 != pid]
-                if other_pids:
-                    other_pid = other_pids[0]
-                    targets = [pid, other_pid]
-                
-                    for i, target_pid in enumerate(targets):
-                        dmg = costs[i]
-                        tp = s.players[target_pid]
-                        if tp.sanity_max is not None:
-                            apply_sanity_loss(s, tp, dmg, source="CAMARA_LETAL")
-                        else:
-                             apply_sanity_loss(s, tp, dmg, source="CAMARA_LETAL")
-
-                    # Éxito del ritual
-                    s.flags["CAMARA_LETAL_RITUAL_COMPLETED"] = True
-                
-                    # Otorgar llave
-                    recipient = s.players[key_recipient]
-                    keys_in_hand = sum(pl.keys for pl in s.players.values())
-                    if keys_in_hand < _get_effective_keys_total(s, cfg) - s.keys_destroyed:
-                         recipient.keys += 1
-                
-                    # Marcar ritual como completado
-                    s.flags["CAMARA_LETAL_D6"] = d6  # Para tracking
+    # Acciones de habitaciones especiales
+    elif handle_special_room_action(s, pid, action, rng, cfg):
+        pass
 
 
 
@@ -912,7 +612,7 @@ def _apply_player_action(s: GameState, action: Action, rng: RNG, cfg: Config) ->
                 _on_player_enters_room(s, pid, p.room)
                 card = _reveal_one(s, p.room)
                 if card is not None:
-                    _legacy_resolve_card_minimal(s, pid, card, cfg, rng)
+                    _resolve_card_minimal(s, pid, card, cfg, rng)
 
     # Descuento de acciones respetando free actions y overrides de roles
     cost_override = None
@@ -937,7 +637,7 @@ def _apply_player_action(s: GameState, action: Action, rng: RNG, cfg: Config) ->
 
     if s.remaining_actions.get(pid, 0) <= 0:
         if action.type == ActionType.END_TURN:
-            _legacy_advance_turn_or_king(s)
+            _advance_turn_or_king(s)
 
     return _finalize_and_return(s, cfg)
 
@@ -965,12 +665,12 @@ def _resolve_king_phase(s: GameState, action: Action, rng: RNG, cfg: Config) -> 
         new_floor = ruleta_floor(s.king_floor, d4)
 
         # Excepción: si cae en piso del Falso Rey, repetir HASTA QUE sea distinto (canon P0)
-        fk_floor = _legacy_current_false_king_floor(s)
+        fk_floor = legacy_current_false_king_floor(s)
         while fk_floor is not None and new_floor == fk_floor:
             d4 = rng.randint(1, 4)
             rng.last_king_d4 = d4
             new_floor = ruleta_floor(s.king_floor, d4)
-            fk_floor = _legacy_current_false_king_floor(s)
+            fk_floor = legacy_current_false_king_floor(s)
     
         s.king_floor = new_floor
 
@@ -985,7 +685,7 @@ def _resolve_king_phase(s: GameState, action: Action, rng: RNG, cfg: Config) -> 
         # CANON: Falso Rey y jugadores en su piso son INMUNES a TODO d6
         d6 = rng.randint(1, 6)
         rng.last_king_d6 = d6  # Track for logging
-        fk_floor = _legacy_current_false_king_floor(s)
+        fk_floor = legacy_current_false_king_floor(s)
     
         if d6 == 1:
             # Rotación intra-floor (variante engine)
@@ -1013,7 +713,7 @@ def _resolve_king_phase(s: GameState, action: Action, rng: RNG, cfg: Config) -> 
 
 
     # PASO 4.4: FASE DE MONSTRUOS (Ataque/Stun)
-    _legacy_monster_phase(s, cfg)
+    _monster_phase(s, cfg)
 
     # PASO 4.5: Aplicar efectos de estados al final de ronda (ANTES de tick)
     _apply_status_effects_end_of_round(s)
@@ -1027,11 +727,11 @@ def _resolve_king_phase(s: GameState, action: Action, rng: RNG, cfg: Config) -> 
         _check_defeat(s, cfg)
 
     # PASO 6: Check del Falso Rey
-    _legacy_false_king_check(s, rng, cfg)
+    _false_king_check(s, rng, cfg)
 
     _update_umbral_flags(s, cfg)
     _apply_minus5_transitions(s, cfg)
-    _legacy_roll_stairs(s, rng)
+    _roll_stairs(s, rng)
     if s.flags.get("king_d6_intra_rotation"):
         s.box_at_room = rotate_boxes_intra_floor(s.box_at_room)
         # Consumir flag
@@ -1041,7 +741,7 @@ def _resolve_king_phase(s: GameState, action: Action, rng: RNG, cfg: Config) -> 
     ensure_canonical_rooms(s)
     sync_room_decks_from_boxes(s)
 
-    _legacy_end_of_round_checks(s, cfg)
+    legacy_end_of_round_checks(s, cfg)
 
     s.round += 1
     if not s.game_over:
