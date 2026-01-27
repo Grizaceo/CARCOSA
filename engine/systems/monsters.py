@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from engine.board import corridor_id, floor_of
-from engine.effects.event_utils import add_status
+from engine.board import floor_of
 from engine.rng import RNG
 from engine.setup import normalize_room_type
-from engine.state import GameState, MonsterState, StatusInstance
-from engine.systems.rooms import on_player_enters_room
+from engine.state import GameState, MonsterState
+from engine.handlers.monsters import apply_monster_post_spawn, apply_monster_reveal, try_monster_spawn
 from engine.systems.sanity import apply_sanity_loss
 from engine.types import PlayerId, RoomId
 
@@ -121,73 +120,21 @@ def spawn_monster_from_card(state: GameState, pid: PlayerId, mid: str, cfg, rng:
     """
     p = state.players[pid]
 
-    if mid == "TUE_TUE":
-        state.tue_tue_revelations += 1
-        rev = state.tue_tue_revelations
-        if rev == 1:
-            apply_sanity_loss(state, p, 1, source="TUE_TUE_1", cfg=cfg)
-        elif rev == 2:
-            apply_sanity_loss(state, p, 2, source="TUE_TUE_2", cfg=cfg)
-        else:
-            p.sanity = -5
+    if try_monster_spawn(state, pid, mid, cfg, rng):
         return True
 
-    if mid == "ARAÑA" or mid == "SPIDER":
-        add_status(p, "TRAPPED", duration=3, metadata={"source_monster_id": mid})
+    apply_monster_reveal(state, pid, mid, cfg, rng)
 
     cap = int(getattr(cfg, "MAX_MONSTERS_ON_BOARD", 0) or 0)
     if cap > 0 and len(state.monsters) >= cap:
         return True
 
     monster_room = p.room
-    state.monsters.append(MonsterState(monster_id=mid, room=monster_room))
+    monster = MonsterState(monster_id=mid, room=monster_room)
+    state.monsters.append(monster)
     on_monster_enters_room(state, monster_room)
 
-    if mid in ("REINA_HELADA", "ICE_QUEEN", "FROZEN_QUEEN"):
-        monster_room = corridor_id(floor_of(p.room))
-        state.monsters[-1].room = monster_room
-
-        monster_floor = floor_of(monster_room)
-        for other_pid, other in state.players.items():
-            if floor_of(other.room) == monster_floor:
-                if other_pid not in state.movement_blocked_players:
-                    state.movement_blocked_players.append(other_pid)
-
-    if "DUENDE" in mid or "GOBLIN" in mid:
-        if p.objects:
-            p.objects = []
-            state.flags[f"GOBLIN_HAS_LOOT_{mid}"] = True
-
-        if rng:
-            current_floor = floor_of(monster_room)
-            floors = [f for f in (1, 2, 3) if f != current_floor]
-            if floors:
-                new_floor = rng.choice(floors)
-                parts = str(monster_room).split("_")
-                if len(parts) >= 2:
-                    suffix = parts[1]
-                    new_room_id = RoomId(f"F{new_floor}_{suffix}")
-                    state.monsters[-1].room = new_room_id
-                    on_monster_enters_room(state, new_room_id)
-
-    if "VIEJO" in mid or "SACK" in mid:
-        p.statuses.append(StatusInstance(status_id="TRAPPED", remaining_rounds=3, metadata={"source_monster_id": mid}))
-        state.flags[f"SACK_HAS_VICTIM_{mid}"] = True
-
-        if rng:
-            current_floor = floor_of(monster_room)
-            floors = [f for f in (1, 2, 3) if f != current_floor]
-            if floors:
-                new_floor = rng.choice(floors)
-                parts = str(monster_room).split("_")
-                if len(parts) >= 2:
-                    suffix = parts[1]
-                    new_room_id = RoomId(f"F{new_floor}_{suffix}")
-                    state.monsters[-1].room = new_room_id
-                    on_monster_enters_room(state, new_room_id)
-
-                    p.room = new_room_id
-                    on_player_enters_room(state, pid, new_room_id)
+    apply_monster_post_spawn(state, pid, monster, cfg, rng)
 
     return True
 
