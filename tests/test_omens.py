@@ -32,46 +32,73 @@ class TestOmens:
         for rid, room in s.rooms.items():
             if room.deck:
                 all_cards.extend(room.deck.cards)
+        
+        setup_canonical_deck(s, rng)
+        
+        total_cards = 0
+        for rid, room in s.rooms.items():
+            if room.deck:
+                total_cards += len(room.deck.cards)
+                
+        assert total_cards == 108, f"Expected 108 cards, got {total_cards}"
+        
+        # Verify specific counts (sample)
+        all_cards = []
+        for rid, room in s.rooms.items():
+            if room.deck:
+                all_cards.extend(room.deck.cards)
                 
         omens = [c for c in all_cards if str(c).startswith("OMEN:")]
         assert len(omens) == 4, f"Expected 4 Omens, got {len(omens)}"
         assert "OMEN:ARAÑA" in omens
         assert "OMEN:DUENDE" in omens
 
-    def test_omen_spider_progression(self):
-        """Test Spider Omen Logic: 0-1 -> Spider, 2+ -> Baby Spider."""
+    class MockRNG:
+        def __init__(self, d6_val=3):
+            self.d6_val = d6_val
+        def randint(self, a, b):
+            return self.d6_val
+        def choice(self, seq):
+            if not seq: return None
+            return seq[0]
+
+    def test_omen_spider_logic(self):
+        """Test Spider Omen Logic: Low Roll -> Spider, High Roll -> Baby Spider."""
         cfg = Config()
-        rng = RNG(seed=1)
-        s = make_game_state(round=1, players={"p1": {"room": "F1_R1", "sanity": 5}}, rooms=["F1_R1"])
+        
+        # Case 1: Low Roll (Failure) -> Big Spider + Skip Turn
+        rng_low = self.MockRNG(d6_val=1) # 1 + 5 = 6 (Wait, threshold 5?)
+        # My implementation: total >= 5 is Check Passed (Success).
+        # So 1 + 5 = 6 -> Passed -> Baby Spider.
+        # To fail (Big Spider), I need < 5.
+        # Sanity 5. Min d6=1. Total 6. Always >= 5 ?
+        # Unless Sanity is low.
+        
+        # Setup low sanity player
+        p_low = {"room": "F1_R1", "sanity": 1} 
+        s = make_game_state(round=1, players={"p1": p_low}, rooms=["F1_R1"])
         s.rooms[RoomId("F1_R1")] = make_room("F1_R1")
         
-        # 1st Omen: ARAÑA
-        # Should spawn SPIDER
-        _resolve_card_minimal(s, PlayerId("p1"), "OMEN:ARAÑA", cfg, rng)
+        # 1 + 1 = 2 < 5 -> Fail -> Big Spider
+        _resolve_card_minimal(s, PlayerId("p1"), "OMEN:ARAÑA", cfg, rng_low)
         
-        # Check monster count
         assert len(s.monsters) == 1
-        assert "SPIDER" in s.monsters[0].monster_id
+        assert "MONSTER:SPIDER" in s.monsters[0].monster_id
         assert "BABY" not in s.monsters[0].monster_id
+        assert s.flags.get("SKIP_TURN_p1") is True
         
-        # Check flag
-        assert s.flags["OMEN_REVEALED_COUNT_ARAÑA"] == 1
+        # Case 2: High Roll (Success) -> Baby Spider + Stun
+        rng_high = self.MockRNG(d6_val=6) # 6 + 5 = 11 >= 5 -> Pass
+        s2 = make_game_state(round=1, players={"p1": {"room": "F1_R1", "sanity": 5}}, rooms=["F1_R1"])
+        s2.rooms[RoomId("F1_R1")] = make_room("F1_R1")
         
-        # 2nd Omen: ARAÑA (Simulate finding another one)
-        # Should spawn SPIDER? No, rule says if ALREADY EXISTS, discard.
-        # So effectively nothing happens (no new monster).
-        _resolve_card_minimal(s, PlayerId("p1"), "OMEN:ARAÑA", cfg, rng)
-        assert len(s.monsters) == 1 # Still 1
-        assert s.flags["OMEN_REVEALED_COUNT_ARAÑA"] == 2
+        _resolve_card_minimal(s2, PlayerId("p1"), "OMEN:ARAÑA", cfg, rng_high)
         
-        # 3rd Omen: ARAÑA (Count 3, so index 2+)
-        # Should spawn BABY SPIDER
-        _resolve_card_minimal(s, PlayerId("p1"), "OMEN:ARAÑA", cfg, rng)
-        assert len(s.monsters) == 2
-        
-        # Identify second monster
-        m2 = s.monsters[1]
-        assert "BABY_SPIDER" in m2.monster_id
+        assert len(s2.monsters) == 1
+        assert "BABY_SPIDER" in s2.monsters[0].monster_id
+        p1_state = s2.players[PlayerId("p1")]
+        assert any(st.status_id == "STUN" for st in p1_state.statuses)
+
 
     def test_baby_spider_stun_death(self):
         """Baby Spider dies if stunned (e.g. by BLUNT)."""
@@ -114,22 +141,29 @@ class TestOmens:
         _start_new_round(s, cfg)
         assert s.remaining_actions[PlayerId("p1")] == 2, "Should be 2 if servant is on other floor"
 
-    def test_omen_duende_progression(self):
-        """Duende: 0-1 -> Spawn, 2+ -> Lose Object."""
+    def test_omen_duende_logic(self):
+        """Duende: Check Pass -> Spawn, Check Fail -> Lose Object."""
         cfg = Config()
-        rng = RNG(seed=1)
+        
+        # Case 1: Pass (High) -> Spawn
+        rng_high = self.MockRNG(d6_val=6)
         s = make_game_state(round=1, players={"p1": {"room": "F1_R1", "sanity": 5, "objects": ["COMPASS"]}}, rooms=["F1_R1"])
         s.rooms[RoomId("F1_R1")] = make_room("F1_R1")
-        p1 = s.players[PlayerId("p1")]
         
-        # 1st: Spawn
-        _resolve_card_minimal(s, PlayerId("p1"), "OMEN:DUENDE", cfg, rng)
+        _resolve_card_minimal(s, PlayerId("p1"), "OMEN:DUENDE", cfg, rng_high)
+        
         assert len(s.monsters) == 1
         assert "DUENDE" in s.monsters[0].monster_id
+        assert "COMPASS" in s.players[PlayerId("p1")].objects # Not stolen
         
-        # 3rd (Skip 2nd for brevity, assume count=3 triggers 2+)
-        s.flags["OMEN_REVEALED_COUNT_DUENDE"] = 2 # Pretend 2 already seen (so next is 3rd)
-        _resolve_card_minimal(s, PlayerId("p1"), "OMEN:DUENDE", cfg, rng)
+        # Case 2: Fail (Low) -> Lose Object
+        rng_low = self.MockRNG(d6_val=1)
+        s2 = make_game_state(round=1, players={"p1": {"room": "F1_R1", "sanity": 1, "objects": ["COMPASS"]}}, rooms=["F1_R1"])
+        s2.rooms[RoomId("F1_R1")] = make_room("F1_R1")
         
-        # Should lose object
-        assert len(p1.objects) == 0, "Should have lost COMPASS"
+        _resolve_card_minimal(s2, PlayerId("p1"), "OMEN:DUENDE", cfg, rng_low)
+        
+        # check_passed = False -> else branch -> pop object
+        assert len(s2.monsters) == 0 # No spawn (if not exists logic only in true branch? Check impl)
+        # Impl: if check_passed: spawn. else: pop.
+        assert len(s2.players[PlayerId("p1")].objects) == 0

@@ -7,6 +7,7 @@ from engine.state import GameState, MonsterState
 from engine.handlers.monsters import apply_monster_post_spawn, apply_monster_reveal, try_monster_spawn
 from engine.handlers.omens import get_omen_handler
 from engine.types import PlayerId, RoomId
+from engine.effects.event_utils import add_status
 
 
 def on_monster_enters_room(state: GameState, room: RoomId) -> None:
@@ -76,6 +77,11 @@ def move_monsters(state: GameState, cfg) -> None:
             if next_room != m.room:
                 m.room = next_room
                 on_monster_enters_room(state, next_room)
+                
+                # CANON: Spider traps player if it moves into their room
+                for pid, p in state.players.items():
+                    if p.room == m.room:
+                         add_status(p, "TRAPPED", duration=3, metadata={"source_monster_id": mid})
 
         elif "DUENDE" in mid or "GOBLIN" in mid:
             has_loot = state.flags.get(f"GOBLIN_HAS_LOOT_{mid}", False)
@@ -146,7 +152,20 @@ def handle_omen_reveal(state: GameState, pid: PlayerId, omen_id: str, rng: RNG |
     flag_name = f"OMEN_REVEALED_COUNT_{omen_id}"
     count = state.flags.get(flag_name, 0)
     state.flags[flag_name] = count + 1
-    is_early = count < 2
+
+    # CANON 4.0: Presagios usan D6 + Cordura (SUPUESTO: Threshold 5)
+    # Success (True) = Minor effect / Baby monster
+    # Failure (False) = Major effect / Big monster
+    check_passed = False
+    if rng:
+        d6 = rng.randint(1, 6)
+        # TUE_TUE has specific logic, handled in its own handler or here?
+        # Presagios uses generic check.
+        p_sanity = state.players[pid].sanity
+        total = d6 + p_sanity
+        check_passed = total >= 5  # SUPUESTO
+    
+    # We pass check_passed as the boolean argument (formerly is_early)
 
     def find_spawn_room(start_room):
         occupied = {pl.room for pl in state.players.values()}
@@ -185,6 +204,6 @@ def handle_omen_reveal(state: GameState, pid: PlayerId, omen_id: str, rng: RNG |
 
     handler = get_omen_handler(omen_id)
     if handler is not None:
-        return handler(state, pid, omen_id, spawn_pos, is_early, rng)
+        return handler(state, pid, omen_id, spawn_pos, check_passed, rng)
 
     return False

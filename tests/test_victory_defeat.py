@@ -36,7 +36,7 @@ def create_base_state(player_rooms: dict, player_keys: dict, player_sanity: dict
 # ===== TESTS DE VICTORIA =====
 
 class TestVictoryCondition:
-    """Tests para condición de victoria: todos en F2_P + >=4 llaves"""
+    """Tests para condición de victoria: todos en F1_P + >=4 llaves"""
     
     def test_victory_all_in_f2p_with_4_keys(self):
         """Victoria cuando todos en F2_P y tienen 4+ llaves"""

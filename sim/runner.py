@@ -100,19 +100,29 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     rng = RNG(seed)
 
     # 1. Start with initial players (setup requires GameState which requires players/rooms)
-    # CANON 4-Player Roles Config
-    # P1: SCOUT (Move +1)
-    # P2: HIGH_ROLLER (Events)
-    # P3: TANK (Capacity/Stam)
-    # P4: BRAWLER (Combat)
-    from engine.roles import get_sanity_max, get_starting_items
-    
-    p_defs = [
-        ("P1", "SCOUT"),
-        ("P2", "HIGH_ROLLER"),
-        ("P3", "TANK"),
-        ("P4", "BRAWLER")
-    ]
+    # CANON 4-Player Roles Config (FIXED por defecto)
+    from engine.roles import get_sanity_max, get_starting_items, draw_roles
+
+    p_ids = ["P1", "P2", "P3", "P4"]
+    role_mode = getattr(cfg, "ROLE_DRAW_MODE", "FIXED") or "FIXED"
+    role_mode = str(role_mode).upper()
+    role_pool = list(getattr(cfg, "ROLE_POOL", []) or [])
+
+    if role_mode == "FIXED":
+        # P1: SCOUT (Move +1)
+        # P2: HIGH_ROLLER (Events)
+        # P3: TANK (Capacity/Stam)
+        # P4: BRAWLER (Combat)
+        p_defs = [
+            ("P1", "SCOUT"),
+            ("P2", "HIGH_ROLLER"),
+            ("P3", "TANK"),
+            ("P4", "BRAWLER"),
+        ]
+        roles_assigned = {pid: role for pid, role in p_defs}
+    else:
+        roles_assigned = draw_roles(p_ids, role_mode, role_pool, rng)
+        p_defs = [(pid, roles_assigned[pid]) for pid in p_ids]
     
     players = {}
     corridors = [corridor_id(1), corridor_id(2), corridor_id(1), corridor_id(2)] # Split start
@@ -134,6 +144,7 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     # 2. Create GameState with empty rooms initially (but valid dict)
     rooms: Dict[RoomId, RoomState] = {}
     state = GameState(round=1, players=players, rooms=rooms, seed=seed, king_floor=1)
+    state.roles_assigned = roles_assigned
 
     # 3. Setup Canonical Special Rooms & Motemey Deck
     # This populates state.rooms (via special rooms) and state.motemey_deck
@@ -354,6 +365,10 @@ def run_episode(
         out_path = f"runs/run_{policy_name}_seed{seed}_{ts}.jsonl"
 
     write_jsonl(out_path, records)
+    role_draw_mode = getattr(cfg, "ROLE_DRAW_MODE", "FIXED")
+    role_pool = list(getattr(cfg, "ROLE_POOL", []) or [])
+    roles_assigned = state.roles_assigned or {str(pid): p.role_id for pid, p in state.players.items()}
+
     summary = {
         "policy": policy_name,
         "seed": seed,
@@ -363,6 +378,9 @@ def run_episode(
         "outcome": state.outcome,
         "keys_destroyed_total": state.keys_destroyed,
         "keys_in_hand": sum(p.keys for p in state.players.values()),
+        "role_draw_mode": role_draw_mode,
+        "role_pool": role_pool,
+        "roles_assigned": roles_assigned,
         **episode_stats,
     }
     summary_path = out_path.replace(".jsonl", "_summary.json")
@@ -385,13 +403,27 @@ def main():
     
     # MCTS Args
     ap.add_argument("--mcts-rollouts", type=int, default=100)
+    # Role draw args
+    ap.add_argument("--role-draw-mode", type=str, default=None,
+                    choices=["FIXED", "RANDOM_UNIQUE", "RANDOM_WITH_REPLACEMENT"],
+                    help="Role draw mode for player setup")
+    ap.add_argument("--role-pool", type=str, default=None,
+                    help="Comma-separated role ids for draw pool (e.g., HEALER,TANK,SCOUT)")
     
     args = ap.parse_args()
     
-    # Inject MCTS params into Config via constructor
-    cfg = Config(
-        MCTS_ROLLOUTS=args.mcts_rollouts
-    )
+    role_pool = None
+    if args.role_pool:
+        role_pool = [r.strip() for r in args.role_pool.split(",") if r.strip()]
+
+    cfg_kwargs = {"MCTS_ROLLOUTS": args.mcts_rollouts}
+    if args.role_draw_mode:
+        cfg_kwargs["ROLE_DRAW_MODE"] = args.role_draw_mode
+    if role_pool is not None:
+        cfg_kwargs["ROLE_POOL"] = tuple(role_pool)
+
+    # Inject params into Config via constructor
+    cfg = Config(**cfg_kwargs)
     
     run_episode(
         max_steps=args.max_steps, 

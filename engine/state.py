@@ -131,6 +131,8 @@ def ensure_canonical_rooms(state: "GameState") -> None:
 class GameState:
     round: int
     players: Dict[PlayerId, PlayerState]
+    # Roles asignados por jugador (registro de setup)
+    roles_assigned: Dict[str, str] = field(default_factory=dict)
 
     monsters: List[MonsterState] = field(default_factory=list)
     rooms: Dict[RoomId, RoomState] = field(default_factory=dict)
@@ -278,6 +280,9 @@ class GameState:
                 object_slots_penalty=pdata.get("object_slots_penalty", 0),
             )
 
+        roles_assigned_data = d.get("roles_assigned", {})
+        roles_assigned = {str(k): str(v) for k, v in roles_assigned_data.items()}
+
         monsters = [MonsterState(monster_id=m["monster_id"], room=RoomId(m["room"])) for m in d.get("monsters", [])]
 
         rooms: Dict[RoomId, RoomState] = {}
@@ -345,6 +350,7 @@ class GameState:
         return GameState(
             round=int(d["round"]),
             players=players,
+            roles_assigned=roles_assigned,
             monsters=monsters,
             rooms=rooms,
             boxes=boxes,

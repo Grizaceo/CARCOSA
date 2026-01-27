@@ -89,6 +89,13 @@ def transition_record(
     cfg: Config,
     step_idx: int,
 ) -> Dict[str, Any]:
+    roles_assigned = None
+    if step_idx == 0:
+        if getattr(state, "roles_assigned", None):
+            roles_assigned = {str(k): str(v) for k, v in state.roles_assigned.items()}
+        else:
+            roles_assigned = {str(pid): p.role_id for pid, p in state.players.items()}
+
     f0 = compute_features(state, cfg)
     f1 = compute_features(next_state, cfg)
     T0 = tension_T(state, cfg, features=f0)
@@ -130,6 +137,8 @@ def transition_record(
         # FULL REPLAY STATE
         "full_state": state.to_dict()
     }
+    if roles_assigned is not None:
+        rec["roles_assigned"] = roles_assigned
     return rec
 
 

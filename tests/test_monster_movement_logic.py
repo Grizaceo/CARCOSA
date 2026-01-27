@@ -107,7 +107,7 @@ def test_sack_spawn_trap_teleport_carry():
     
     class MockRNG(RNG):
          def choice(self, seq):
-            if 2 in seq: return 2
+            if not seq: return None
             return seq[0]
 
     _resolve_card_minimal(s, PlayerId("P1"), "MONSTER:SACK_1", Config(), MockRNG(0))
@@ -116,10 +116,15 @@ def test_sack_spawn_trap_teleport_carry():
     assert any(st.status_id == "TRAPPED" for st in p1.statuses), "Player should be TRAPPED"
     assert s.flags.get("SACK_HAS_VICTIM_SACK_1") is True
     
-    # 2. Teleport BOTH to F2_R1
+    # 2. Teleport BOTH to NEAREST Empty Room
+    # Start: F1_R1.
     sack = s.monsters[0]
-    assert sack.room == RoomId("F2_R1"), "Sack Man should teleport to F2"
-    assert p1.room == RoomId("F2_R1"), "Player should be carried to F2 with Sack Man"
+    
+    from engine.board import floor_of
+    assert floor_of(sack.room) == 1, f"Sack Man should stay on F1 (nearest empty), got {sack.room}"
+    assert sack.room != RoomId("F1_R1"), "Sack Man must move from spawn room"
+    
+    assert p1.room == sack.room, f"Player should be carried to {sack.room} with Sack Man"
 
 def test_monster_destruction_armory():
     s = make_movement_state()

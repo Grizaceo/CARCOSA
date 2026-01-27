@@ -121,14 +121,29 @@ def _post_spawn_frozen_queen(state: GameState, pid: PlayerId, monster: MonsterSt
     _post_spawn_reina_helada(state, pid, monster, cfg, rng)
 
 
+@register_monster_reveal("BABY_SPIDER")
+def _reveal_baby_spider(state: GameState, pid: PlayerId, monster_id: str, cfg: Config, rng: Optional[RNG]) -> None:
+    add_status(state.players[pid], "STUN", duration=1, metadata={"source_monster_id": monster_id})
+
+
 @register_monster_post_spawn("DUENDE", contains=True)
 def _post_spawn_goblin(state: GameState, pid: PlayerId, monster: MonsterState, cfg: Config, rng: Optional[RNG]) -> None:
     p = state.players[pid]
-    if p.objects:
+    # Steal Objects AND Keys
+    loot_objects = list(p.objects)
+    loot_keys = p.keys
+    
+    if loot_objects or loot_keys > 0:
+        state.flags[f"GOBLIN_LOOT_OBJECTS_{monster.monster_id}"] = loot_objects
+        state.flags[f"GOBLIN_LOOT_KEYS_{monster.monster_id}"] = loot_keys
+        
         p.objects = []
+        p.keys = 0
         state.flags[f"GOBLIN_HAS_LOOT_{monster.monster_id}"] = True
 
     if rng:
+        # Move away? Or just standard spawn logic?
+        # Preserving existing logic: Move to random other floor
         current_floor = floor_of(monster.room)
         floors = [f for f in (1, 2, 3) if f != current_floor]
         if floors:
@@ -153,21 +168,55 @@ def _post_spawn_sack(state: GameState, pid: PlayerId, monster: MonsterState, cfg
     p.statuses.append(StatusInstance(status_id="TRAPPED", remaining_rounds=3, metadata={"source_monster_id": monster.monster_id}))
     state.flags[f"SACK_HAS_VICTIM_{monster.monster_id}"] = True
 
-    if rng:
-        current_floor = floor_of(monster.room)
-        floors = [f for f in (1, 2, 3) if f != current_floor]
-        if floors:
-            new_floor = rng.choice(floors)
-            parts = str(monster.room).split("_")
-            if len(parts) >= 2:
-                suffix = parts[1]
-                new_room_id = RoomId(f"F{new_floor}_{suffix}")
-                monster.room = new_room_id
-                from engine.systems.monsters import on_monster_enters_room
-                on_monster_enters_room(state, new_room_id)
+    # CANON: Teleport to NEAREST room without players.
+    occupied_rooms = {pl.room for pl in state.players.values()}
+    start_room = monster.room
+    
+    # Simple BFS/Expansion to find nearest empty room
+    def get_neighbors(r: RoomId) -> List[RoomId]:
+         # Rudimentary adjacency based on ID F{f}_R{r} / F{f}_P
+         # Assuming full connectivity within floor via Hallway?
+         # Or just iterate all rooms and sort by 'distance'.
+         # Since graph isn't easily available here without imports, we'll iterate all rooms.
+         # Distance metric: Same floor < Adjacent Floor < Far Floor.
+         return [] 
 
-                p.room = new_room_id
-                on_player_enters_room(state, pid, new_room_id)
+    # Fallback to simple iteration over all canonical rooms, sorted by "distance"
+    from engine.board import canonical_room_ids, floor_of
+    
+    def dist(r1, r2):
+        f1, f2 = floor_of(r1), floor_of(r2)
+        return abs(f1 - f2) # Simplified distance (floor diff)
+        # We could refine same-floor distance if needed, but floor diff is main factor.
+        
+    candidates = [r for r in canonical_room_ids() if r not in occupied_rooms and r != start_room]
+    
+    if candidates:
+        # Sort by distance (stable sort prefer lower floors? or just closest)
+        # We want minimun distance.
+        candidates.sort(key=lambda r: dist(start_room, r))
+        
+        # Pick the first one (closest)
+        # If multiple closest, maybe random? RNG is available.
+        # Let's verify if we need randomness for ties.
+        closest_dist = dist(start_room, candidates[0])
+        best_candidates = [r for r in candidates if dist(start_room, r) == closest_dist]
+        
+        target_room = best_candidates[0]
+        if rng and len(best_candidates) > 1:
+            target_room = rng.choice(best_candidates)
+            
+        monster.room = target_room
+        from engine.systems.monsters import on_monster_enters_room
+        on_monster_enters_room(state, target_room)
+        
+        # SACK specific: Monster AND Player teleport together?
+        # Code says: "teleports to the nearest room without players"
+        # And "Code teleporta a otro piso aleatorio" (Previous).
+        # "Viejo del Saco logic": He kidnaps the player.
+        # So Player `p` also moves to `target_room`.
+        p.room = target_room
+        on_player_enters_room(state, pid, target_room)
 
 
 @register_monster_post_spawn("SACK", contains=True)

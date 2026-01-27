@@ -89,9 +89,10 @@ tools/            # Development utilities
   validate/        # Validation scripts
 
 docs/             # Canon documentation
-  Carcosa_Libro_Tecnico_CANON.md           # Canon (primary source of truth)
+  Carcosa_Canon_Actualizado_PnP_v0_4.pdf   # Canon vigente (print & play, base de comparación)
+  Carcosa_Libro_Tecnico_CANON.md           # Resumen operativo (derivado, revisar con canon vigente)
   Carcosa_Libro_Tecnico_CANON_LEGACY.pdf   # Legacy PDF reference
-  Carcosa_Canon_P0_extracted.md            # P0 canonical rules (supporting)
+  Carcosa_Canon_P0_extracted.md            # P0 canonical rules (supporting, legacy)
 ```
 
 ## Running Simulations
@@ -288,6 +289,7 @@ All tests are **deterministic**, use **fixed seeds**, and **no warnings**.
 
 ## Official Documentation
 For the canonical source of truth regarding game rules, refer to:
+- [docs/Carcosa_Canon_Actualizado_PnP_v0_4.pdf](docs/Carcosa_Canon_Actualizado_PnP_v0_4.pdf)
 - [docs/Carcosa_Libro_Tecnico_CANON.md](docs/Carcosa_Libro_Tecnico_CANON.md)
 
 ## Development Utilities
