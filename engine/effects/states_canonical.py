@@ -402,6 +402,10 @@ def get_available_actions(player, base_actions: int = 2) -> int:
     if has_status(player, "ACCION_REDUCIDA"):
         actions = 1
     
+    # STUN: 0 acciones
+    if has_status(player, "STUN"):
+        actions = 0
+
     # TRAPPED: 0 acciones (a menos que escape)
     if has_status(player, "TRAPPED"):
         actions = 0

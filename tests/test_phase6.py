@@ -53,11 +53,12 @@ class TestPhase6(unittest.TestCase):
 
     def test_status_sanidad(self):
         from engine.effects.event_utils import add_status
+        from engine.systems.status import apply_end_of_turn_status_effects
         p = self.state.players[PlayerId("P1")]
         p.sanity = 2
         add_status(p, "SANIDAD")
         
-        _apply_status_effects_end_of_round(self.state)
+        apply_end_of_turn_status_effects(self.state)
         
         # Should gain 1 sanity
         self.assertEqual(p.sanity, 3)
