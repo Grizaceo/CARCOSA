@@ -36,7 +36,8 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
         if previous_floor != new_floor and getattr(p, "role_id", "") == "SCOUT":
             d6 = rng.randint(1, 6)
             if d6 + p.sanity < 3:
-                s.flags[f"SKIP_TURN_{pid}"] = True
+                # Canon: STUN if total < 3
+                add_status(p, "STUN", duration=1)
 
         transition._on_player_enters_room(s, pid, to)
 

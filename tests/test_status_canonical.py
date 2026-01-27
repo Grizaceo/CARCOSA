@@ -10,6 +10,7 @@ from engine.state import StatusInstance
 from engine.state_factory import make_game_state, make_player
 from engine.types import PlayerId, RoomId
 from engine.transition import _apply_status_effects_end_of_round
+from engine.systems.status import apply_end_of_turn_status_effects
 
 
 def setup_basic_state():
@@ -50,7 +51,7 @@ def test_maldito_affects_same_floor():
     sanity_p2_before = s.players[PlayerId("P2")].sanity
     sanity_p3_before = s.players[PlayerId("P3")].sanity
 
-    # Aplicar efectos de estados
+    # Aplicar efectos de estados (End of Round)
     _apply_status_effects_end_of_round(s)
 
     # P2 (mismo piso) debe perder 1 cordura
@@ -106,7 +107,7 @@ def test_maldito_multiple_cursed_players():
 # ===== SANIDAD Tests =====
 
 def test_sanidad_heals_1_sanity():
-    """SANIDAD: El jugador recupera 1 cordura"""
+    """SANIDAD: El jugador recupera 1 cordura (End of Turn)"""
     s = setup_basic_state()
 
     # P1 tiene SANIDAD
@@ -116,8 +117,8 @@ def test_sanidad_heals_1_sanity():
 
     sanity_before = s.players[PlayerId("P1")].sanity
 
-    # Aplicar efectos de estados
-    _apply_status_effects_end_of_round(s)
+    # Aplicar efectos de estados (End of Turn)
+    apply_end_of_turn_status_effects(s)
 
     # P1 debe recuperar 1 cordura
     assert s.players[PlayerId("P1")].sanity == sanity_before + 1
@@ -134,8 +135,8 @@ def test_sanidad_only_affects_owner():
 
     sanity_p2_before = s.players[PlayerId("P2")].sanity
 
-    # Aplicar efectos de estados
-    _apply_status_effects_end_of_round(s)
+    # Aplicar efectos de estados (End of Turn)
+    apply_end_of_turn_status_effects(s)
 
     # P2 NO debe ser afectado
     assert s.players[PlayerId("P2")].sanity == sanity_p2_before
@@ -156,7 +157,8 @@ def test_multiple_statuses_same_player():
     sanity_p1_before = s.players[PlayerId("P1")].sanity
     sanity_p2_before = s.players[PlayerId("P2")].sanity
 
-    # Aplicar efectos de estados
+    # Aplicar efectos de estados (Ambos: Turn y Round)
+    apply_end_of_turn_status_effects(s)
     _apply_status_effects_end_of_round(s)
 
     # P1 recupera 1 por SANIDAD
@@ -178,11 +180,14 @@ def test_sanidad_and_maldito_net_zero_for_owner():
         StatusInstance(status_id="MALDITO", remaining_rounds=2)
     )
 
-    # Aplicar efectos
+    # Aplicar efectos (Turn + Round)
+    apply_end_of_turn_status_effects(s)
     _apply_status_effects_end_of_round(s)
 
     # P1 gana 1 (SANIDAD), P2 pierde 1 (MALDITO de P1)
+    # 5 base + 1 = 6
     assert s.players[PlayerId("P1")].sanity == 6
+    # 5 base - 1 = 4
     assert s.players[PlayerId("P2")].sanity == 4
 
 
