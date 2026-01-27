@@ -91,24 +91,61 @@ def _use_vial(s: GameState, pid: PlayerId, cfg) -> None:
 def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
     """
     CORRECCIÓN B: Objeto Contundente aturde monstruo en la habitación por 2 turnos.
-
-    - Busca monstruo en misma habitación que el jugador
-    - Aplica STUN de 2 turnos (excepto Rey de Amarillo, que es inmune)
-    - Se consume al usarse (1 uso)
+    Actualizado para Canon 4.0:
+    - Ice Servant: Muere.
+    - Goblin: Drop loot.
+    - Bogeyman: Free victim.
     """
     p = s.players[pid]
     for monster in s.monsters:
         if monster.room == p.room:
-            # BABY_SPIDER: Stun = Muerte
-            if "BABY_SPIDER" in monster.monster_id:
+            mid = monster.monster_id
+            
+            # BABY_SPIDER: Stun = Die? 
+            if "BABY_SPIDER" in mid:
                   s.monsters.remove(monster)
-                  # Log kill? flag?
-                  # s.flags[f"KILLED_{monster.monster_id}"] = True
                   break
 
+            # ICE_SERVANT: "si se stunea se retira del tablero"
+            if "ICE_SERVANT" in mid or "REINA_HELADA" in mid:
+                if "ICE_SERVANT" in mid:
+                    s.monsters.remove(monster)
+                    break
+            
             # Rey de Amarillo es inmune al STUN
-            if "YELLOW_KING" not in monster.monster_id and "KING" not in monster.monster_id:
+            if "YELLOW_KING" not in mid and "KING" not in mid:
                 monster.stunned_remaining_rounds = max(monster.stunned_remaining_rounds, 2)
+                
+                # GOBLIN: Drop Loot
+                if "DUENDE" in mid or "GOBLIN" in mid:
+                    loot_objects = s.flags.get(f"GOBLIN_LOOT_OBJECTS_{mid}")
+                    loot_keys = s.flags.get(f"GOBLIN_LOOT_KEYS_{mid}", 0)
+                    
+                    if loot_objects:
+                        p.objects.extend(loot_objects)
+                        del s.flags[f"GOBLIN_LOOT_OBJECTS_{mid}"]
+
+                    if loot_keys > 0:
+                        p.keys += loot_keys
+                        del s.flags[f"GOBLIN_LOOT_KEYS_{mid}"]
+                        
+                    s.flags[f"GOBLIN_HAS_LOOT_{mid}"] = False
+                    
+                # BOGEYMAN: Release Victim
+                if "VIEJO" in mid or "SACK" in mid:
+                    for target_pid, target_p in s.players.items():
+                        new_statuses = []
+                        released = False
+                        for st in target_p.statuses:
+                            if st.status_id == "TRAPPED" and st.metadata.get("source_monster_id") == mid:
+                                released = True
+                            else:
+                                new_statuses.append(st)
+                        target_p.statuses = new_statuses
+                        
+                        if released:
+                            s.flags[f"SACK_HAS_VICTIM_{mid}"] = False
+
             break
 
 

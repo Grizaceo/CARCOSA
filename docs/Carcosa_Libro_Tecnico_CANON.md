@@ -1,5 +1,8 @@
 # Carcosa Libro Tecnico - Canon (Resumen Operativo)
 
+**Canon vigente:** `docs/Carcosa_Canon_Actualizado_PnP_v0_4.pdf` (print & play, base de comparación).  
+Este resumen es operativo y puede requerir ajustes para reflejar el canon vigente.
+
 ## Manifestacion del Rey (ruleta)
 - La manifestacion del Rey se resuelve con ruleta d4=1..4.
 - La funcion ruleta actual es correcta; no se asigna piso directo por d4.
