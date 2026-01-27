@@ -2,21 +2,10 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
+from engine.catalogs.roles import ROLE_INVENTORY_LIMITS
 from engine.objects import OBJECT_CATALOG, get_max_keys_capacity, is_soulbound
 from engine.state import GameState, PlayerState
 from engine.types import PlayerId
-
-# Inventory limits per role: {role_id: (key_slots, object_slots)}
-ROLE_INVENTORY_LIMITS = {
-    "HEALER": (1, 2),
-    "TANK": (1, 3),
-    "HIGH_ROLLER": (2, 2),
-    "SCOUT": (1, 1),
-    "BRAWLER": (1, 2),
-    "PSYCHIC": (1, 2),
-    "DEFAULT": (1, 2),
-}
-
 
 def get_inventory_limits(player: PlayerState) -> Tuple[int, int]:
     """
