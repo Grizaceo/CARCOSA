@@ -5,7 +5,7 @@ from engine.rng import RNG
 from engine.setup import normalize_room_type
 from engine.state import GameState, MonsterState
 from engine.handlers.monsters import apply_monster_post_spawn, apply_monster_reveal, try_monster_spawn
-from engine.systems.sanity import apply_sanity_loss
+from engine.handlers.omens import get_omen_handler
 from engine.types import PlayerId, RoomId
 
 
@@ -183,51 +183,8 @@ def handle_omen_reveal(state: GameState, pid: PlayerId, omen_id: str, rng: RNG |
 
     spawn_pos = find_spawn_room(state.players[pid].room)
 
-    if omen_id == "ARAÑA":
-        if is_early:
-            exists = any("SPIDER" in m.monster_id or "ARAÑA" in m.monster_id for m in state.monsters)
-            if not exists:
-                state.monsters.append(MonsterState(monster_id="MONSTER:SPIDER", room=spawn_pos))
-                on_monster_enters_room(state, spawn_pos)
-        else:
-            state.monsters.append(MonsterState(monster_id="MONSTER:BABY_SPIDER", room=spawn_pos))
-            on_monster_enters_room(state, spawn_pos)
-        return True
-
-    if omen_id == "DUENDE":
-        if is_early:
-            exists = any("DUENDE" in m.monster_id for m in state.monsters)
-            if not exists:
-                state.monsters.append(MonsterState(monster_id="MONSTER:DUENDE", room=spawn_pos))
-                on_monster_enters_room(state, spawn_pos)
-        else:
-            p = state.players[pid]
-            if p.objects:
-                p.objects.pop()
-        return True
-
-    if omen_id == "REINA_HELADA":
-        if is_early:
-            exists = any("REINA_HELADA" in m.monster_id for m in state.monsters)
-            if not exists:
-                c_id = RoomId(f"F{floor_of(spawn_pos)}_P")
-                state.monsters.append(MonsterState(monster_id="MONSTER:REINA_HELADA", room=c_id))
-                on_monster_enters_room(state, c_id)
-        else:
-            state.monsters.append(MonsterState(monster_id="MONSTER:ICE_SERVANT", room=spawn_pos))
-            on_monster_enters_room(state, spawn_pos)
-        return True
-
-    if omen_id == "TUE_TUE":
-        p = state.players[pid]
-        state.tue_tue_revelations += 1
-        rev = state.tue_tue_revelations
-        if rev == 1:
-            apply_sanity_loss(state, p, 1, source="TUE_TUE_1")
-        elif rev == 2:
-            apply_sanity_loss(state, p, 2, source="TUE_TUE_2")
-        else:
-            p.sanity = -5
-        return True
+    handler = get_omen_handler(omen_id)
+    if handler is not None:
+        return handler(state, pid, omen_id, spawn_pos, is_early, rng)
 
     return False
