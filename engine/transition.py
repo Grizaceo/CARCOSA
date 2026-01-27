@@ -10,8 +10,13 @@ from engine.rng import RNG
 from engine.state import GameState, StatusInstance, ensure_canonical_rooms
 from engine.types import PlayerId, RoomId, CardId
 from engine.roles import get_scout_actions, brawler_blunt_free
-from engine.objects import use_object, get_effective_sanity_max, get_max_keys_capacity, is_soulbound, OBJECT_CATALOG
+from engine.objects import use_object, get_max_keys_capacity, is_soulbound, OBJECT_CATALOG
 from engine.inventory import get_inventory_limits
+from engine.rules.actions_cost import consume_action_cost
+from engine.rules.keys import get_base_keys_total, get_effective_keys_total
+from engine.rules.sanity import sanity_cap
+from engine.rules.sacrifice import available_sacrifice_options
+from engine.rules.victory_defeat import can_win, can_lose_all_minus5, can_lose_keys_destroyed
 from engine.inventory import consume_object, add_object
 from engine.effects.states_canonical import has_status, decrement_status_durations, remove_all_statuses
 from engine.effects.event_utils import add_status
@@ -21,7 +26,7 @@ PENDING_SACRIFICE_FLAG = "PENDING_SACRIFICE_CHECK"
 
 
 def _sanity_cap(p) -> int:
-    return get_effective_sanity_max(p)
+    return sanity_cap(p)
 
 
 def _heal(p, amount: int) -> None:
@@ -29,22 +34,11 @@ def _heal(p, amount: int) -> None:
 
 
 def _get_base_keys_total(cfg) -> int:
-    # Base: 5 en mazos + 1 en Motemey
-    return int(getattr(cfg, "KEYS_TOTAL", 6))
+    return get_base_keys_total(cfg)
 
 
 def _available_sacrifice_options(p) -> dict:
-    # Opciones de sacrificio disponibles
-    obj_options = [obj for obj in p.objects if not is_soulbound(obj)]
-    can_reduce_sanity = (p.sanity_max is not None and p.sanity_max > -1)
-    _, current_slots = get_inventory_limits(p)
-    can_reduce_object_slots = current_slots > 0
-    return {
-        "object_options": obj_options,
-        "can_reduce_sanity": can_reduce_sanity,
-        "can_reduce_object_slots": can_reduce_object_slots,
-        "current_object_slots": current_slots,
-    }
+    return available_sacrifice_options(p)
 
 
 def _apply_sacrifice_choice(s: GameState, pid: PlayerId, cfg, choice: dict) -> None:
@@ -120,74 +114,11 @@ def apply_sanity_loss(s, player, amount: int, cfg: Config = None, source: str = 
 
 
 def _get_effective_keys_total(s, cfg) -> int:
-    """
-    Retorna el total de llaves en juego (pool).
-    Base: 6 (5 en mazos + 1 en Motemey).
-    Si Cámara Letal está revelada: +1 (solo obtenible vía ritual).
-    """
-    base = _get_base_keys_total(cfg)
-    # Buscar si existe cámara letal revelada
-    for room in s.rooms.values():
-        if room.special_card_id == "CAMARA_LETAL" and room.special_revealed:
-            return base + 1
-    return base
+    return get_effective_keys_total(s, cfg)
 
 
 def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[int] = None) -> int:
-    """
-    Determina el costo de acción de un ActionType.
-    
-    Respeta:
-    - Acciones de movimiento/búsqueda/meditación: costo 1
-    - Acciones de habitación especial (Motemey, Peek, Armería): costo 0
-    - Puertas Amarillas: costo 1
-    - SACRIFICE, ESCAPE_TRAPPED: costo 1
-    - cost_override: si se pasa, prevalece (para excepciones como DPS)
-    
-    Returns:
-        int: Número de acciones a descontar (0 o 1 usualmente)
-    """
-    if cost_override is not None:
-        return cost_override
-    
-    # Acciones que NO consumen acción
-    free_action_types = {
-        ActionType.USE_MOTEMEY_BUY,
-        ActionType.USE_MOTEMEY_SELL,
-        ActionType.USE_MOTEMEY_BUY_START,
-        ActionType.USE_MOTEMEY_BUY_CHOOSE,
-        ActionType.USE_TABERNA_ROOMS,
-        ActionType.USE_ARMORY_DROP,
-        ActionType.USE_ARMORY_TAKE,
-        ActionType.DISCARD_SANIDAD,
-        ActionType.PEEK_ROOM_DECK,
-        ActionType.SKIP_PEEK,
-    }
-    
-    if action_type in free_action_types:
-        return 0
-    
-    # Acciones que consumen 1
-    paid_action_types = {
-        ActionType.MOVE,
-        ActionType.SEARCH,
-        ActionType.MEDITATE,
-        ActionType.SACRIFICE,
-        ActionType.ESCAPE_TRAPPED,
-        ActionType.USE_YELLOW_DOORS,
-        ActionType.USE_HEALER_HEAL,
-        ActionType.USE_BLUNT,
-        ActionType.USE_PORTABLE_STAIRS,
-        ActionType.USE_CAMARA_LETAL_RITUAL,
-        ActionType.USE_CAPILLA,
-        ActionType.USE_SALON_BELLEZA,
-    }
-    
-    if action_type in paid_action_types:
-        return 1
-    
-    # Default: no consume
-    return 0
+    return consume_action_cost(action_type, cost_override)
 
 
 def _clamp_all_sanity(s, cfg):
@@ -224,22 +155,10 @@ def _check_victory(s, cfg) -> bool:
     
     Se verifica al final de cada ronda.
     """
-    if s.game_over:
+    if not can_win(s, cfg):
         return False
-    
-    # Verificar que todos estén en UMBRAL_NODE
-    all_in_umbral = all(
-        str(p.room) == str(cfg.UMBRAL_NODE) for p in s.players.values()
-    )
-    if not all_in_umbral:
-        return False
-    
-    # Contar llaves colectivas
-    total_keys = sum(p.keys for p in s.players.values())
-    if total_keys < int(cfg.KEYS_TO_WIN):
-        return False
-    
-    # ¡Victoria!
+
+    # Victoria!
     s.game_over = True
     s.outcome = "WIN"
     return True
@@ -251,31 +170,20 @@ def _check_defeat(s, cfg) -> bool:
     1. Todos los jugadores en -5 cordura
     2. Solo quedan <= 3 llaves en juego
     """
-    if s.game_over:
-        return False
-    
-    # Condición 1: Todos en -5
-    all_at_minus5 = all(
-        p.sanity <= cfg.S_LOSS for p in s.players.values()
-    )
-    if all_at_minus5:
+    # Condicion 1: Todos en -5
+    if can_lose_all_minus5(s, cfg):
         s.game_over = True
         source = s.last_sanity_loss_event or "UNKNOWN"
         s.outcome = f"LOSE_ALL_MINUS5 ({source})"
         return True
-    
-    # Condición 2: <= KEYS_LOSE_THRESHOLD llaves en juego
+
+    # Condicion 2: <= KEYS_LOSE_THRESHOLD llaves en juego
     # Solo aplica si se han destruido llaves (keys_destroyed > 0)
-    if s.keys_destroyed > 0:
-        keys_total = _get_effective_keys_total(s, cfg)
-        keys_threshold = getattr(cfg, "KEYS_LOSE_THRESHOLD", 3)
-        keys_available = keys_total - s.keys_destroyed
-        
-        if keys_available <= keys_threshold:
-            s.game_over = True
-            s.outcome = "LOSE_KEYS_DESTROYED"
-            return True
-    
+    if can_lose_keys_destroyed(s, cfg):
+        s.game_over = True
+        s.outcome = "LOSE_KEYS_DESTROYED"
+        return True
+
     return False
 
 
