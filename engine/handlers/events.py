@@ -5,11 +5,11 @@ from typing import Callable, Dict
 from engine.board import floor_of
 from engine.boxes import active_deck_for_room
 from engine.config import Config
-from engine.effects.event_utils import add_status, remove_all_statuses, swap_positions, get_player_by_turn_offset
+from engine.effects.event_utils import add_status, remove_all_statuses, get_player_by_turn_offset
 from engine.inventory import add_object
 from engine.rng import RNG
 from engine.state import GameState
-from engine.systems.rooms import on_player_enters_room
+from engine.systems.rooms import enter_room_and_reveal
 from engine.systems.sanity import apply_sanity_loss, heal_player
 from engine.types import PlayerId, RoomId, CardId
 
@@ -124,8 +124,10 @@ def _event_comida_servida(s: GameState, pid: PlayerId, total: int, cfg: Config, 
         other_pids = [pid2 for pid2 in s.players if pid2 != pid]
         if other_pids:
             target_pid = rng.choice(other_pids)
-            s.players[target_pid].room = p.room
-            on_player_enters_room(s, target_pid, p.room)
+            target_player = s.players[target_pid]
+            from_room = target_player.room
+            target_player.room = p.room
+            enter_room_and_reveal(s, target_pid, p.room, from_room=from_room, cfg=cfg, rng=rng)
 
             heal_player(p, 2)
             target = s.players[target_pid]
@@ -161,7 +163,13 @@ def _event_cambia_caras(s: GameState, pid: PlayerId, total: int, cfg: Config, rn
 
     offset = 1 if total <= 3 else -1
     target_pid = get_player_by_turn_offset(s, pid, offset)
-    swap_positions(s, pid, target_pid)
+    p = s.players[pid]
+    target = s.players[target_pid]
+    from_room_p = p.room
+    from_room_t = target.room
+    p.room, target.room = target.room, p.room
+    enter_room_and_reveal(s, pid, p.room, from_room=from_room_p, cfg=cfg, rng=rng)
+    enter_room_and_reveal(s, target_pid, target.room, from_room=from_room_t, cfg=cfg, rng=rng)
 
 
 def _event_furia_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
@@ -200,6 +208,7 @@ def _event_ascensor(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: R
     4-6: Subir 2 pisos (F1->F3->F2->F1)
     """
     p = s.players[pid]
+    from_room = p.room
     current_floor = floor_of(p.room)
     suffix = str(p.room).split("_")[1]
 
@@ -209,12 +218,12 @@ def _event_ascensor(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: R
         new_floor = (current_floor % 3) + 1
         new_rid = RoomId(f"F{new_floor}_{suffix}")
         p.room = new_rid
-        on_player_enters_room(s, pid, new_rid)
+        enter_room_and_reveal(s, pid, new_rid, from_room=from_room, cfg=cfg, rng=rng)
     else:
         new_floor = ((current_floor + 1) % 3) + 1
         new_rid = RoomId(f"F{new_floor}_{suffix}")
         p.room = new_rid
-        on_player_enters_room(s, pid, new_rid)
+        enter_room_and_reveal(s, pid, new_rid, from_room=from_room, cfg=cfg, rng=rng)
 
 
 def _event_trampilla(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
@@ -225,6 +234,7 @@ def _event_trampilla(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: 
     4-6: Baja 1 piso (= Subir 2)
     """
     p = s.players[pid]
+    from_room = p.room
     current_floor = floor_of(p.room)
     suffix = str(p.room).split("_")[1]
 
@@ -234,13 +244,13 @@ def _event_trampilla(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: 
         new_floor = (current_floor % 3) + 1
         new_rid = RoomId(f"F{new_floor}_{suffix}")
         p.room = new_rid
-        on_player_enters_room(s, pid, new_rid)
+        enter_room_and_reveal(s, pid, new_rid, from_room=from_room, cfg=cfg, rng=rng)
     else:
         vals = {1: 3, 2: 1, 3: 2}
         new_floor = vals[current_floor]
         new_rid = RoomId(f"F{new_floor}_{suffix}")
         p.room = new_rid
-        on_player_enters_room(s, pid, new_rid)
+        enter_room_and_reveal(s, pid, new_rid, from_room=from_room, cfg=cfg, rng=rng)
 
 
 def _event_motemey_trigger(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:

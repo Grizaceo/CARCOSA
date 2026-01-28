@@ -1,0 +1,7 @@
+﻿{
+  "meditate_critical": -4,
+  "move_for_better_delta": 1,
+  "search_local_min_remaining": 2,
+  "vial_margin": 2,
+  "endgame_force_umbral": true
+}

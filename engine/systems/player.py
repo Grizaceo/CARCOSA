@@ -13,7 +13,7 @@ from engine.objects import is_soulbound, use_object
 from engine.roles import brawler_blunt_free
 from engine.rng import RNG
 from engine.state import GameState
-from engine.systems.rooms import handle_hallway_peek_action, update_umbral_flags
+from engine.systems.rooms import enter_room_and_reveal, handle_hallway_peek_action, update_umbral_flags
 from engine.systems.sacrifice import apply_sacrifice_choice, apply_minus5_transitions
 from engine.systems.sanity import apply_sanity_loss, heal_player
 from engine.types import PlayerId, RoomId
@@ -65,14 +65,7 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
         # Si entra a piso con Sirviente de hielo, limitar acciones
         _cap_actions_for_ice_servant(s, pid)
 
-        transition._on_player_enters_room(s, pid, to)
-
-        if not is_corridor(from_room) and is_corridor(to) and previous_floor == new_floor:
-            s.flags["PENDING_HALLWAY_PEEK"] = str(pid)
-        else:
-            card = transition._reveal_one(s, to)
-            if card is not None:
-                transition._resolve_card_minimal(s, pid, card, cfg, rng)
+        enter_room_and_reveal(s, pid, to, from_room=from_room, cfg=cfg, rng=rng)
 
     elif action.type == ActionType.SEARCH:
         card = transition._reveal_one(s, p.room)
@@ -160,11 +153,9 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
 
         if 1 <= target <= 3:
             if transition.consume_object(s, pid, "PORTABLE_STAIRS"):
+                from_room = p.room
                 p.room = corridor_id(target)
-                transition._on_player_enters_room(s, pid, p.room)
-                card = transition._reveal_one(s, p.room)
-                if card is not None:
-                    transition._resolve_card_minimal(s, pid, card, cfg, rng)
+                enter_room_and_reveal(s, pid, p.room, from_room=from_room, cfg=cfg, rng=rng)
 
     cost_override: Optional[int] = None
     if action.type == ActionType.USE_BLUNT:
