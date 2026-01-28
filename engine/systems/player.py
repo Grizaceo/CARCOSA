@@ -6,6 +6,7 @@ from engine.actions import Action, ActionType
 from engine.board import corridor_id, floor_of, is_corridor
 from engine.config import Config
 from engine.effects.states_canonical import remove_all_statuses
+from engine.entities import normalize_monster_id
 from engine.effects.event_utils import add_status
 from engine.handlers.special_rooms import handle_special_room_action
 from engine.objects import is_soulbound, use_object
@@ -18,12 +19,34 @@ from engine.systems.sanity import apply_sanity_loss, heal_player
 from engine.types import PlayerId, RoomId
 
 
+def _floor_has_ice_servant(state: GameState, floor: int) -> bool:
+    try:
+        monsters_iter = iter(state.monsters)
+    except TypeError:
+        return False
+    for monster in monsters_iter:
+        if monster.stunned_remaining_rounds > 0:
+            continue
+        if normalize_monster_id(monster.monster_id) == "ICE_SERVANT":
+            if floor_of(monster.room) == floor:
+                return True
+    return False
+
+
+def _cap_actions_for_ice_servant(state: GameState, pid: PlayerId) -> None:
+    if _floor_has_ice_servant(state, floor_of(state.players[pid].room)):
+        state.remaining_actions[pid] = min(state.remaining_actions.get(pid, 0), 1)
+
+
 def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config) -> GameState:
     from engine import transition
 
     s = state
     pid = PlayerId(action.actor)
     p = s.players[pid]
+
+    # Efecto inmediato: Sirviente de hielo limita acciones en el piso
+    _cap_actions_for_ice_servant(s, pid)
 
     if action.type == ActionType.MOVE:
         to = RoomId(action.data["to"])
@@ -38,6 +61,9 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
             if d6 + p.sanity < 3:
                 # Canon: STUN if total < 3
                 add_status(p, "STUN", duration=1)
+
+        # Si entra a piso con Sirviente de hielo, limitar acciones
+        _cap_actions_for_ice_servant(s, pid)
 
         transition._on_player_enters_room(s, pid, to)
 
@@ -122,6 +148,10 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
 
     elif action.type == ActionType.USE_BLUNT:
         use_object(s, pid, "BLUNT", cfg, rng)
+    elif action.type == ActionType.USE_OBJECT:
+        obj_id = action.data.get("object_id")
+        if obj_id:
+            use_object(s, pid, obj_id, cfg, rng)
 
     elif action.type == ActionType.USE_PORTABLE_STAIRS:
         direction = action.data.get("direction", "UP")

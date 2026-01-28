@@ -69,7 +69,15 @@ def use_object(s: GameState, pid: PlayerId, object_id: str, cfg, rng) -> bool:
 
     # Consumir si tiene usos limitados
     if obj_def.uses is not None:
-        p.objects.remove(object_id)
+        remaining = int(p.object_charges.get(object_id, obj_def.uses))
+        remaining -= 1
+        if remaining <= 0:
+            if object_id in p.objects:
+                p.objects.remove(object_id)
+            if object_id in p.object_charges:
+                del p.object_charges[object_id]
+        else:
+            p.object_charges[object_id] = remaining
 
     return True
 
@@ -122,11 +130,19 @@ def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
                     loot_keys = s.flags.get(f"GOBLIN_LOOT_KEYS_{mid}", 0)
                     
                     if loot_objects:
-                        p.objects.extend(loot_objects)
+                        from engine.inventory import add_object
+                        for obj_id in loot_objects:
+                            if not add_object(s, pid, obj_id, discard_choice=None):
+                                s.discard_pile.append(obj_id)
                         del s.flags[f"GOBLIN_LOOT_OBJECTS_{mid}"]
 
                     if loot_keys > 0:
-                        p.keys += loot_keys
+                        from engine.inventory import can_add_key
+                        for _ in range(int(loot_keys)):
+                            if can_add_key(p):
+                                p.keys += 1
+                            else:
+                                s.keys_destroyed += 1
                         del s.flags[f"GOBLIN_LOOT_KEYS_{mid}"]
                         
                     s.flags[f"GOBLIN_HAS_LOOT_{mid}"] = False
@@ -152,11 +168,11 @@ def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
 def _use_treasure_stairs(s: GameState, pid: PlayerId, cfg) -> None:
     """
     Escaleras (Tesoro): 3 usos. Coloca escalera temporal en habitación actual.
-    Dura hasta fin de ronda.
+    Dura solo por el turno del jugador que la activa.
     """
     p = s.players[pid]
-    # Registrar escalera temporal
-    s.flags[f"TEMP_STAIRS_{p.room}"] = s.round  # Válida solo esta ronda
+    # Registrar escalera temporal (válida solo este turno)
+    s.flags[f"TEMP_STAIRS_{p.room}"] = {"round": s.round, "pid": str(pid)}
 
     # Decrementar usos (manejado automáticamente por el sistema en use_object)
 

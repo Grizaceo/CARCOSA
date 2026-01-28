@@ -121,11 +121,11 @@ def test_treasure_stairs_creates_temp_stairs():
     # Verificar que se creó la escalera temporal
     flag_key = f"TEMP_STAIRS_{p.room}"
     assert flag_key in s.flags, "Debe crear flag de escalera temporal"
-    assert s.flags[flag_key] == s.round, "Flag debe contener el número de ronda actual"
+    assert s.flags[flag_key] == {"round": s.round, "pid": str(PlayerId("P1"))}, "Flag debe contener ronda y jugador"
 
 
 def test_treasure_stairs_consumed_after_use():
-    """Escaleras: Se consume al usar (tiene 3 usos)"""
+    """Escaleras: Se consume al tercer uso (tiene 3 usos)"""
     from engine.rng import RNG
     s = setup_basic_state()
     p = s.players[PlayerId("P1")]
@@ -133,11 +133,18 @@ def test_treasure_stairs_consumed_after_use():
     cfg = Config()
     rng = RNG(1)
 
-    # Usar escaleras
+    # Usar escaleras (1er uso)
     use_object(s, PlayerId("P1"), "TREASURE_STAIRS", cfg, rng)
+    assert "TREASURE_STAIRS" in p.objects
+    assert p.object_charges.get("TREASURE_STAIRS") == 2
 
-    # El objeto se consume después de cada uso
-    assert "TREASURE_STAIRS" not in p.objects, "Escaleras debe consumirse después de usar"
+    # 2do uso
+    use_object(s, PlayerId("P1"), "TREASURE_STAIRS", cfg, rng)
+    assert p.object_charges.get("TREASURE_STAIRS") == 1
+
+    # 3er uso -> se consume
+    use_object(s, PlayerId("P1"), "TREASURE_STAIRS", cfg, rng)
+    assert "TREASURE_STAIRS" not in p.objects
 
 
 def test_treasure_stairs_temp_stairs_valid_only_current_round():
@@ -154,13 +161,13 @@ def test_treasure_stairs_temp_stairs_valid_only_current_round():
     use_object(s, PlayerId("P1"), "TREASURE_STAIRS", cfg, rng)
 
     flag_key = f"TEMP_STAIRS_{p.room}"
-    assert s.flags[flag_key] == 1, "Flag debe ser ronda 1"
+    assert s.flags[flag_key] == {"round": 1, "pid": str(PlayerId("P1"))}, "Flag debe tener ronda 1 y jugador"
 
     # Avanzar a ronda 2
     s.round = 2
 
     # La escalera temporal ya no es válida (flag sigue siendo 1, pero ronda actual es 2)
-    assert s.flags[flag_key] != s.round, "Escalera temporal no es válida en ronda diferente"
+    assert s.flags[flag_key]["round"] != s.round, "Escalera temporal no es válida en ronda diferente"
 
 
 # ===== Tests de Otros Tesoros (Pendientes de Implementación Detallada) =====

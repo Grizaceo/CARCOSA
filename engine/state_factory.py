@@ -31,6 +31,7 @@ def make_player(
     role_id: Optional[str] = None,
     keys: int = 0,
     objects: Optional[Iterable[str]] = None,
+    object_charges: Optional[Dict[str, int]] = None,
 ) -> PlayerState:
     player = PlayerState(
         player_id=PlayerId(player_id),
@@ -43,6 +44,8 @@ def make_player(
         player.role_id = role_id
     if objects:
         player.objects = list(objects)
+    if object_charges:
+        player.object_charges = dict(object_charges)
     return player
 
 
@@ -88,6 +91,7 @@ def make_game_state(
             role_id=cfg.get("role_id"),
             keys=cfg.get("keys", 0),
             objects=cfg.get("objects"),
+            object_charges=cfg.get("object_charges"),
         )
 
     if turn_order is None:

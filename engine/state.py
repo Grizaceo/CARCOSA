@@ -26,6 +26,8 @@ class PlayerState:
     sanity_max: Optional[int] = None
     keys: int = 0
     objects: List[str] = field(default_factory=list)
+    # Usos restantes por objeto (solo para objetos con uses)
+    object_charges: Dict[str, int] = field(default_factory=dict)
     soulbound_items: List[str] = field(default_factory=list)
     statuses: List[StatusInstance] = field(default_factory=list)
     # Penalidad permanente de slots de objetos (sacrificio)
@@ -272,6 +274,7 @@ class GameState:
                 sanity_max=pdata.get("sanity_max", None),
                 keys=pdata.get("keys", 0),
                 objects=pdata.get("objects", []),
+                object_charges=pdata.get("object_charges", {}),
                 soulbound_items=pdata.get("soulbound_items", []),
                 statuses=statuses,
                 at_umbral=pdata.get("at_umbral", False),
