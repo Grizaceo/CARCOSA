@@ -23,20 +23,15 @@ def test_tue_tue_sanity_wipe():
     assert not any("TUE_TUE" in m.monster_id for m in s.monsters)
 
 def test_tue_tue_spawn_at_low_sanity():
-    """Test Tue Tue: Sanity <= 1 -> Monster Spawns."""
+    """Test Tue Tue: 0-1 -> Aparición sin ficha."""
     s = create_simple_state()
     pid = PlayerId("P1")
     p = s.players[pid]
-    p.sanity = 1
+    p.sanity = 0
     
     # Trigger Omen
     _resolve_card_minimal(s, pid, CardId("OMEN:TUE_TUE"), Config())
     
-    # Sanity remains (or doesn't change by rule, only monster spawns?)
-    # Canon: "0-1 cuenta como aparición". Doesn't say "Sanity 0 AND Appearance".
-    # Assuming just Spawn.
-    
-    assert any("MONSTER:TUE_TUE" in m.monster_id for m in s.monsters)
-    # Sanity unmodified? Or rule logic?
-    # Impl: if sanity >= 2: sanity=0. else: spawn.
-    assert p.sanity == 1
+    assert not any("TUE_TUE" in m.monster_id for m in s.monsters)
+    assert s.tue_tue_revelations == 1
+    assert p.sanity == -1

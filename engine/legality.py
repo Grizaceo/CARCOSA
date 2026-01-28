@@ -72,6 +72,20 @@ def _is_paranoia_move_legal(state: GameState, pid: PlayerId, to_room: RoomId) ->
     return True
 
 
+def _temp_stairs_active(state: GameState, room_id: RoomId, pid: PlayerId) -> bool:
+    """Retorna True si hay escalera temporal activa en la habitación (solo este turno)."""
+    key = f"TEMP_STAIRS_{room_id}"
+    flag = state.flags.get(key)
+    if isinstance(flag, dict):
+        return flag.get("round") == state.round and flag.get("pid") == str(pid)
+    if isinstance(flag, int):
+        # Compatibilidad con estados antiguos: fijar dueño al jugador actual.
+        if flag == state.round:
+            state.flags[key] = {"round": state.round, "pid": str(pid)}
+            return True
+    return False
+
+
 def get_legal_actions(state: GameState, actor: str) -> List[Action]:
     if state.game_over:
         return []
@@ -180,6 +194,20 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                     if movement_allowed and _is_paranoia_move_legal(state, pid, dest_stair):
                         acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
 
+        # MOVE especial: escaleras temporales (TREASURE_STAIRS) permiten subir/bajar al mismo cuarto
+        if _temp_stairs_active(state, p.room, pid):
+            suffix = str(p.room).split("_", 1)[1]
+            if f > 1:
+                dest = RoomId(f"F{f-1}_{suffix}")
+                if dest in state.rooms:
+                    if movement_allowed and _is_paranoia_move_legal(state, pid, dest):
+                        acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest)}))
+            if f < 3:
+                dest = RoomId(f"F{f+1}_{suffix}")
+                if dest in state.rooms:
+                    if movement_allowed and _is_paranoia_move_legal(state, pid, dest):
+                        acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest)}))
+
         # SEARCH solo en habitación con mazo activo
         deck = active_deck_for_room(state, p.room)
         if deck is not None and deck.remaining() > 0:
@@ -283,6 +311,17 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         if "BLUNT" in p.objects:
             if any(m.room == p.room for m in state.monsters):
                 acts.append(Action(actor=str(pid), type=ActionType.USE_BLUNT, data={}))
+
+        # Objetos gratuitos: COMPASS / VIAL / TREASURE_STAIRS
+        if "COMPASS" in p.objects:
+            corridor = corridor_id(floor_of(p.room))
+            if p.room != corridor:
+                if movement_allowed and _is_paranoia_move_legal(state, pid, corridor):
+                    acts.append(Action(actor=str(pid), type=ActionType.USE_OBJECT, data={"object_id": "COMPASS"}))
+        if "VIAL" in p.objects:
+            acts.append(Action(actor=str(pid), type=ActionType.USE_OBJECT, data={"object_id": "VIAL"}))
+        if "TREASURE_STAIRS" in p.objects:
+            acts.append(Action(actor=str(pid), type=ActionType.USE_OBJECT, data={"object_id": "TREASURE_STAIRS"}))
 
         # Escalera portÃ¡til: moverse +/-1 piso (respeta bloqueo de movimiento)
         if "PORTABLE_STAIRS" in p.objects and movement_allowed:

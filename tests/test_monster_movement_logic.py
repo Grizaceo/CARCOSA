@@ -78,9 +78,9 @@ def test_goblin_spawn_steal_teleport():
     assert p1.objects == [], "Goblin should steal all objects"
     assert s.flags.get("GOBLIN_HAS_LOOT_GOBLIN_1") is True
     
-    # 2. Teleport to F2_R1 (Same room R1, diff floor)
+    # 2. Teleport to nearest empty room (F1_R2)
     goblin = s.monsters[0]
-    assert goblin.room == RoomId("F2_R1"), f"Goblin should teleport to F2_R1, got {goblin.room}"
+    assert goblin.room == RoomId("F1_R2"), f"Goblin should teleport to F1_R2, got {goblin.room}"
 
 def test_goblin_flee_logic():
     s = make_movement_state()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from engine.board import floor_of
 from engine.effects.states_canonical import has_status
+from engine.entities import normalize_monster_id
 from engine.systems.status import apply_end_of_turn_status_effects
 from engine.state import GameState
 
@@ -51,7 +52,8 @@ def start_new_round(state: GameState) -> None:
 
     reina_floors = set()
     for monster in state.monsters:
-        if monster.monster_id in ("REINA_HELADA", "ICE_QUEEN", "FROZEN_QUEEN", "MONSTER:ICE_SERVANT"):
+        mid = normalize_monster_id(monster.monster_id)
+        if mid in ("REINA_HELADA", "ICE_QUEEN", "FROZEN_QUEEN", "ICE_SERVANT"):
             if monster.stunned_remaining_rounds <= 0:
                 reina_floors.add(floor_of(monster.room))
 

@@ -56,6 +56,7 @@ class ActionType(str, Enum):
     USE_HEALER_HEAL = "USE_HEALER_HEAL"  # Healer: -1 propia → +2 otros + estado
     USE_BLUNT = "USE_BLUNT"  # Usar contundente (Brawler gratis)
     USE_PORTABLE_STAIRS = "USE_PORTABLE_STAIRS"  # Escalera portátil: ±1 piso
+    USE_OBJECT = "USE_OBJECT"  # Uso genérico de objetos (COMPASS/VIAL/TREASURE_STAIRS)
 
     # Hallway Peek (Room -> Hallway)
     PEEK_ROOM_DECK = "PEEK_ROOM_DECK"

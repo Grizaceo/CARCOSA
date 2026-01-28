@@ -138,23 +138,17 @@ def _post_spawn_goblin(state: GameState, pid: PlayerId, monster: MonsterState, c
         state.flags[f"GOBLIN_LOOT_KEYS_{monster.monster_id}"] = loot_keys
         
         p.objects = []
+        p.object_charges = {}
         p.keys = 0
         state.flags[f"GOBLIN_HAS_LOOT_{monster.monster_id}"] = True
 
-    if rng:
-        # Move away? Or just standard spawn logic?
-        # Preserving existing logic: Move to random other floor
-        current_floor = floor_of(monster.room)
-        floors = [f for f in (1, 2, 3) if f != current_floor]
-        if floors:
-            new_floor = rng.choice(floors)
-            parts = str(monster.room).split("_")
-            if len(parts) >= 2:
-                suffix = parts[1]
-                new_room_id = RoomId(f"F{new_floor}_{suffix}")
-                monster.room = new_room_id
-                from engine.systems.monsters import on_monster_enters_room
-                on_monster_enters_room(state, new_room_id)
+    # CANON: Teleport a la habitación más cercana sin jugadores.
+    from engine.pathing import find_nearest_empty_room
+    target_room = find_nearest_empty_room(state, monster.room)
+    if target_room != monster.room:
+        monster.room = target_room
+        from engine.systems.monsters import on_monster_enters_room
+        on_monster_enters_room(state, target_room)
 
 
 @register_monster_post_spawn("GOBLIN", contains=True)
