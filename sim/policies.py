@@ -1,6 +1,8 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict, Any
+import json
+from pathlib import Path
 
 from engine.actions import Action, ActionType
 from engine.config import Config
@@ -11,7 +13,7 @@ from engine.tension import king_utility
 from engine.transition import step
 from engine.types import RoomId, PlayerId
 
-from engine.board import floor_of, neighbors, is_corridor
+from engine.board import floor_of, neighbors, is_corridor, corridor_id
 from sim.pathing import bfs_next_step
 from engine.inventory import get_inventory_limits, get_object_count, get_key_count
 from engine.objects import is_soulbound
@@ -42,6 +44,30 @@ def _keys_total(state: GameState) -> int:
     return sum(p.keys for p in state.players.values())
 
 
+_POLICY_PARAMS_CACHE: Optional[Dict[str, Any]] = None
+
+
+def _load_policy_params() -> Dict[str, Any]:
+    global _POLICY_PARAMS_CACHE
+    if _POLICY_PARAMS_CACHE is not None:
+        return _POLICY_PARAMS_CACHE
+    path = Path(__file__).with_name("policy_params.json")
+    if not path.exists():
+        _POLICY_PARAMS_CACHE = {}
+        return _POLICY_PARAMS_CACHE
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            _POLICY_PARAMS_CACHE = json.load(f) or {}
+    except Exception:
+        _POLICY_PARAMS_CACHE = {}
+    return _POLICY_PARAMS_CACHE
+
+
+def refresh_policy_params() -> None:
+    global _POLICY_PARAMS_CACHE
+    _POLICY_PARAMS_CACHE = None
+
+
 def _pick_first(actions: List[Action], t: ActionType) -> Optional[Action]:
     for a in actions:
         if a.type == t:
@@ -51,6 +77,13 @@ def _pick_first(actions: List[Action], t: ActionType) -> Optional[Action]:
 def _pick_use_object(actions: List[Action], object_id: str) -> Optional[Action]:
     for a in actions:
         if a.type == ActionType.USE_OBJECT and a.data.get("object_id") == object_id:
+            return a
+    return None
+
+def _pick_move_to_corridor(actions: List[Action], floor: int) -> Optional[Action]:
+    target = corridor_id(floor)
+    for a in actions:
+        if a.type == ActionType.MOVE and a.data.get("to") == str(target):
             return a
     return None
 
@@ -375,9 +408,26 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
     - Con llaves suficientes: BFS al Umbral y luego END_TURN (no seguir explorando).
     """
     cfg: Config = Config()
+    # Umbral base de “meditar por seguridad” (más estricto que <=1)
+    meditate_critical: int = -3
+    # Diferencia mínima de cartas para cambiar a otro piso
+    move_for_better_delta: int = 2
+    # Mínimo de cartas locales para preferir SEARCH
+    search_local_min_remaining: int = 1
+    # Margen de uso de VIAL vs umbral de meditar
+    vial_margin: int = 1
+    # Endgame: forzar umbral agresivamente
+    endgame_force_umbral: bool = True
 
-    # Umbral de “meditar por seguridad” (más estricto que <=1)
-    MEDITATE_CRITICAL: int = -3
+    def __post_init__(self) -> None:
+        params = _load_policy_params()
+        if not isinstance(params, dict):
+            return
+        self.meditate_critical = int(params.get("meditate_critical", self.meditate_critical))
+        self.move_for_better_delta = int(params.get("move_for_better_delta", self.move_for_better_delta))
+        self.search_local_min_remaining = int(params.get("search_local_min_remaining", self.search_local_min_remaining))
+        self.vial_margin = int(params.get("vial_margin", self.vial_margin))
+        self.endgame_force_umbral = bool(params.get("endgame_force_umbral", self.endgame_force_umbral))
 
     def choose(self, state: GameState, rng: RNG) -> Action:
         actor = _get_active_actor(state)
@@ -408,7 +458,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             return finalize(forced)
 
         danger = _danger_score(state, pid)
-        meditate_threshold = self.MEDITATE_CRITICAL
+        meditate_threshold = self.meditate_critical
         key_carrier = p.keys > 0
         team_low, team_critical = _team_fragility(state)
         if danger > 0:
@@ -433,7 +483,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         vial = _pick_use_object(acts, "VIAL")
         if vial:
             sanity_max = p.sanity_max or p.sanity
-            if p.sanity < sanity_max and (p.sanity <= meditate_threshold + 1 or danger > 0):
+            if p.sanity < sanity_max and (p.sanity <= meditate_threshold + self.vial_margin or danger > 0):
                 return finalize(vial)
 
         compass = _pick_use_object(acts, "COMPASS")
@@ -474,6 +524,32 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             a = _pick_first(acts, ActionType.MEDITATE)
             if a:
                 return finalize(a)
+
+        # 2.8) Endgame: con llaves suficientes, priorizar umbral agresivamente
+        if self.endgame_force_umbral and keys_total >= self.cfg.KEYS_TO_WIN and p.room != umbral:
+            doors_actions = [a for a in acts if a.type == ActionType.USE_YELLOW_DOORS]
+            if doors_actions:
+                for a in doors_actions:
+                    target = PlayerId(a.data.get("target_player"))
+                    if target in state.players and state.players[target].room == umbral:
+                        return finalize(a)
+                return finalize(doors_actions[0])
+
+            stairs = _pick_use_object(acts, "TREASURE_STAIRS")
+            if stairs and not _temp_stairs_active_for_pid(state, p.room, pid):
+                dest = _temp_stairs_dest(state, p.room, floor_of(umbral))
+                if dest is not None:
+                    return finalize(stairs)
+
+            nxt = bfs_next_step(state, p.room, umbral)
+            if nxt is not None:
+                for a in acts:
+                    if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                        return finalize(a)
+
+            move_actions = [a for a in acts if a.type == ActionType.MOVE]
+            if move_actions:
+                return finalize(rng.choice(move_actions))
 
         # 2.5) Guardrail para portadores de llaves en riesgo: curar o escapar primero
         if carrier_caution:
@@ -518,7 +594,42 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             if key_special:
                 return finalize(key_special)
 
-            if _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold):
+            goal = _best_room_global(state)
+            current_rem = _room_remaining(state, p.room)
+            same_floor_goal = goal is not None and floor_of(goal) == floor_of(p.room)
+            search_allowed = (current_rem >= self.search_local_min_remaining) or same_floor_goal
+
+            if goal is not None and floor_of(goal) != floor_of(p.room):
+                if not search_allowed:
+                    stairs = _pick_use_object(acts, "TREASURE_STAIRS")
+                    if stairs and not _temp_stairs_active_for_pid(state, p.room, pid):
+                        dest = _temp_stairs_dest(state, p.room, floor_of(goal))
+                        if dest is not None:
+                            return finalize(stairs)
+                    nxt = bfs_next_step(state, p.room, goal)
+                    if nxt is not None:
+                        for a in acts:
+                            if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                                return finalize(a)
+                    corridor_move = _pick_move_to_corridor(acts, floor_of(p.room))
+                    if corridor_move:
+                        return finalize(corridor_move)
+                else:
+                    goal_rem = _room_remaining(state, goal)
+                    move_for_better = goal_rem > 0 and (current_rem == 0 or goal_rem >= current_rem + self.move_for_better_delta)
+                    if move_for_better:
+                        stairs = _pick_use_object(acts, "TREASURE_STAIRS")
+                        if stairs and not _temp_stairs_active_for_pid(state, p.room, pid):
+                            dest = _temp_stairs_dest(state, p.room, floor_of(goal))
+                            if dest is not None:
+                                return finalize(stairs)
+                        nxt = bfs_next_step(state, p.room, goal)
+                        if nxt is not None:
+                            for a in acts:
+                                if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                                    return finalize(a)
+
+            if search_allowed and _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold):
                 a = _pick_first(acts, ActionType.SEARCH)
                 if a:
                     return finalize(a)
@@ -526,20 +637,21 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         # 4) Especiales generales (evitar salon cuando estamos en progreso)
         avoid_salon = need_keys and p.sanity > meditate_threshold
         risk_averse = carrier_caution or team_critical >= 1
-        special = _choose_special_action(
-            acts,
-            state,
-            pid,
-            rng,
-            self.cfg,
-            avoid_armory=avoid_armory,
-            armory_streak=armory_streak,
-            avoid_salon=avoid_salon,
-            key_progress_only=False,
-            risk_averse=risk_averse,
-        )
-        if special:
-            return finalize(special)
+        if keys_total < self.cfg.KEYS_TO_WIN:
+            special = _choose_special_action(
+                acts,
+                state,
+                pid,
+                rng,
+                self.cfg,
+                avoid_armory=avoid_armory,
+                armory_streak=armory_streak,
+                avoid_salon=avoid_salon,
+                key_progress_only=False,
+                risk_averse=risk_averse,
+            )
+            if special:
+                return finalize(special)
 
         # 5) Si ya hay llaves suficientes: converger a Umbral
         if keys_total >= self.cfg.KEYS_TO_WIN:
@@ -572,9 +684,45 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
 
         # 6) Falta llaves: SEARCH si hay cartas y no esta estancado por riesgo
         if need_keys and _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold) and not carrier_caution:
-            a = _pick_first(acts, ActionType.SEARCH)
-            if a:
-                return finalize(a)
+            goal = _best_room_global(state)
+            current_rem = _room_remaining(state, p.room)
+            same_floor_goal = goal is not None and floor_of(goal) == floor_of(p.room)
+            search_allowed = (current_rem >= self.search_local_min_remaining) or same_floor_goal
+
+            if goal is not None and floor_of(goal) != floor_of(p.room):
+                if not search_allowed:
+                    a = _pick_use_object(acts, "TREASURE_STAIRS")
+                    if a and not _temp_stairs_active_for_pid(state, p.room, pid):
+                        dest = _temp_stairs_dest(state, p.room, floor_of(goal))
+                        if dest is not None:
+                            return finalize(a)
+                    nxt = bfs_next_step(state, p.room, goal)
+                    if nxt is not None:
+                        for a in acts:
+                            if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                                return finalize(a)
+                    corridor_move = _pick_move_to_corridor(acts, floor_of(p.room))
+                    if corridor_move:
+                        return finalize(corridor_move)
+                else:
+                    goal_rem = _room_remaining(state, goal)
+                    move_for_better = goal_rem > 0 and (current_rem == 0 or goal_rem >= current_rem + self.move_for_better_delta)
+                    if move_for_better:
+                        a = _pick_use_object(acts, "TREASURE_STAIRS")
+                        if a and not _temp_stairs_active_for_pid(state, p.room, pid):
+                            dest = _temp_stairs_dest(state, p.room, floor_of(goal))
+                            if dest is not None:
+                                return finalize(a)
+                        nxt = bfs_next_step(state, p.room, goal)
+                        if nxt is not None:
+                            for a in acts:
+                                if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                                    return finalize(a)
+
+            if search_allowed and _room_remaining(state, p.room) > 0:
+                a = _pick_first(acts, ActionType.SEARCH)
+                if a:
+                    return finalize(a)
 
         # 7) Si estas critico o en peligro, meditar
         if p.sanity <= meditate_threshold:

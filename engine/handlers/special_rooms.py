@@ -9,6 +9,7 @@ from engine.objects import get_max_keys_capacity, is_soulbound
 from engine.rng import RNG
 from engine.state import GameState
 from engine.systems.decks import reveal_one
+from engine.systems.rooms import enter_room_and_reveal
 from engine.systems.sanity import apply_sanity_loss, heal_player
 from engine.types import PlayerId, RoomId
 from engine.rules.keys import get_base_keys_total, get_effective_keys_total
@@ -147,12 +148,10 @@ def _yellow_doors(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg
     if target_id in state.players:
         target = state.players[target_id]
         p = state.players[pid]
+        from_room = p.room
         p.room = target.room
         apply_sanity_loss(state, target, 1, source="YELLOW_DOORS", cfg=cfg)
-        card = reveal_one(state, p.room)
-        if card is not None:
-            from engine.handlers.cards import resolve_card_minimal
-            resolve_card_minimal(state, pid, card, cfg, rng)
+        enter_room_and_reveal(state, pid, p.room, from_room=from_room, cfg=cfg, rng=rng)
 
 
 @register_special_room_action(ActionType.USE_TABERNA_ROOMS)

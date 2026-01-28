@@ -8,6 +8,20 @@ from engine.types import PlayerId, RoomId, CardId
 from engine.actions import Action, ActionType
 from engine.transition import step
 from engine.board import room_id
+from engine.rng import RNG
+
+
+def _clear_room_deck(state, room: RoomId) -> None:
+    deck = state.rooms[room].deck
+    deck.cards = []
+    deck.top = 0
+
+
+def _prepare_special_room(state, room: RoomId, special_id: str) -> None:
+    state.rooms[room].special_card_id = special_id
+    state.rooms[room].special_revealed = False
+    state.rooms[room].special_destroyed = False
+    _clear_room_deck(state, room)
 
 
 def test_player_enters_reveals_special():
@@ -207,3 +221,67 @@ def test_reveal_happens_before_card_resolution():
     # 2. Carta del mazo también fue revelada y resuelta
     # (P1 debería tener la llave si la carta KEY fue resuelta)
     assert state_after.players[PlayerId("P1")].keys >= 1
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "ascensor",
+        "trampilla",
+        "cambia_caras",
+        "comida_servida",
+        "yellow_doors",
+    ],
+)
+def test_entry_by_effect_reveals_special(case):
+    """Entradas por efecto (no MOVE) revelan habitacion especial"""
+    cfg = Config()
+    state = make_smoke_state(seed=1, cfg=cfg)
+    rng = RNG(1)
+
+    if case == "ascensor":
+        special_room = RoomId("F2_R1")
+        _prepare_special_room(state, special_room, "TABERNA")
+        state.players[PlayerId("P1")].room = RoomId("F1_R1")
+        from engine.handlers import events
+        events._event_ascensor(state, PlayerId("P1"), total=2, cfg=cfg, rng=rng)
+    elif case == "trampilla":
+        special_room = RoomId("F3_R1")
+        _prepare_special_room(state, special_room, "TABERNA")
+        state.players[PlayerId("P1")].room = RoomId("F1_R1")
+        from engine.handlers import events
+        events._event_trampilla(state, PlayerId("P1"), total=5, cfg=cfg, rng=rng)
+    elif case == "cambia_caras":
+        special_room = RoomId("F1_R2")
+        _prepare_special_room(state, special_room, "TABERNA")
+        _clear_room_deck(state, RoomId("F1_R1"))
+        state.turn_order = [PlayerId("P1"), PlayerId("P2")]
+        p1 = state.players[PlayerId("P1")]
+        p2 = state.players[PlayerId("P2")]
+        p1.room = RoomId("F1_R1")
+        p2.room = special_room
+        from engine.handlers import events
+        events._event_cambia_caras(state, PlayerId("P1"), total=6, cfg=cfg, rng=rng)
+    elif case == "comida_servida":
+        special_room = RoomId("F1_R1")
+        _prepare_special_room(state, special_room, "TABERNA")
+        p1 = state.players[PlayerId("P1")]
+        p2 = state.players[PlayerId("P2")]
+        p1.room = special_room
+        p2.room = RoomId("F1_R2")
+        from engine.handlers import events
+        events._event_comida_servida(state, PlayerId("P1"), total=7, cfg=cfg, rng=rng)
+    elif case == "yellow_doors":
+        special_room = RoomId("F2_R1")
+        _prepare_special_room(state, special_room, "PUERTAS_AMARILLO")
+        p1 = state.players[PlayerId("P1")]
+        p2 = state.players[PlayerId("P2")]
+        p1.room = RoomId("F1_R1")
+        p2.room = special_room
+        from engine.handlers import special_rooms
+        action = Action(actor="P1", type=ActionType.USE_YELLOW_DOORS, data={"target_player": "P2"})
+        special_rooms._yellow_doors(state, PlayerId("P1"), action, rng, cfg)
+    else:
+        raise AssertionError(f"Unknown case: {case}")
+
+    assert state.rooms[special_room].special_revealed is True
