@@ -44,6 +44,40 @@ def on_player_enters_room(state: GameState, pid: PlayerId, room: RoomId) -> None
         state.flags[f"SPECIAL_REVEALED_{room}_{room_state.special_card_id}"] = state.round
 
 
+def enter_room_and_reveal(
+    state: GameState,
+    pid: PlayerId,
+    room: RoomId,
+    *,
+    from_room: RoomId | None = None,
+    cfg=None,
+    rng=None,
+) -> None:
+    """
+    Unifica el flujo de entrada a habitación:
+    - Aplica efectos de entrada (on_player_enters_room)
+    - Maneja PEEK si entra a pasillo desde habitación en el mismo piso
+    - Revela y resuelve la carta del mazo de la habitación (si aplica)
+    """
+    on_player_enters_room(state, pid, room)
+
+    if from_room is not None:
+        if (not is_corridor(from_room)) and is_corridor(room) and floor_of(from_room) == floor_of(room):
+            state.flags["PENDING_HALLWAY_PEEK"] = str(pid)
+            return
+
+    # Lazy imports to avoid circular dependencies with handlers/events.
+    from engine.systems.decks import reveal_one
+    from engine.handlers.cards import resolve_card_minimal
+    if cfg is None:
+        from engine.config import Config
+        cfg = Config()
+
+    card = reveal_one(state, room)
+    if card is not None:
+        resolve_card_minimal(state, pid, card, cfg, rng)
+
+
 def update_umbral_flags(state: GameState, cfg) -> None:
     for p in state.players.values():
         p.at_umbral = str(p.room) == str(cfg.UMBRAL_NODE)
