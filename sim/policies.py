@@ -11,7 +11,7 @@ from engine.tension import king_utility
 from engine.transition import step
 from engine.types import RoomId, PlayerId
 
-from engine.board import floor_of, neighbors
+from engine.board import floor_of, neighbors, is_corridor
 from sim.pathing import bfs_next_step
 from engine.inventory import get_inventory_limits, get_object_count, get_key_count
 from engine.objects import is_soulbound
@@ -48,6 +48,27 @@ def _pick_first(actions: List[Action], t: ActionType) -> Optional[Action]:
             return a
     return None
 
+def _pick_use_object(actions: List[Action], object_id: str) -> Optional[Action]:
+    for a in actions:
+        if a.type == ActionType.USE_OBJECT and a.data.get("object_id") == object_id:
+            return a
+    return None
+
+def _temp_stairs_dest(state: GameState, room: RoomId, target_floor: int) -> Optional[RoomId]:
+    f = floor_of(room)
+    if target_floor == f:
+        return None
+    step = 1 if target_floor > f else -1
+    suffix = str(room).split("_", 1)[1]
+    dest = RoomId(f"F{f + step}_{suffix}")
+    return dest if dest in state.rooms else None
+
+def _temp_stairs_active_for_pid(state: GameState, room: RoomId, pid: PlayerId) -> bool:
+    key = f"TEMP_STAIRS_{room}"
+    flag = state.flags.get(key)
+    if isinstance(flag, dict):
+        return flag.get("round") == state.round and flag.get("pid") == str(pid)
+    return False
 
 def _room_remaining(state: GameState, rid: RoomId) -> int:
     rs = state.rooms.get(rid)
@@ -356,7 +377,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
     cfg: Config = Config()
 
     # Umbral de “meditar por seguridad” (más estricto que <=1)
-    MEDITATE_CRITICAL: int = -2
+    MEDITATE_CRITICAL: int = -3
 
     def choose(self, state: GameState, rng: RNG) -> Action:
         actor = _get_active_actor(state)
@@ -394,14 +415,53 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             meditate_threshold += 1
         if danger >= 2:
             meditate_threshold += 1
-        if team_low >= 2:
-            meditate_threshold += 1
         if team_critical >= 1:
             meditate_threshold += 1
         if key_carrier:
             meditate_threshold += 1
+        meditate_threshold = min(meditate_threshold, -2)
 
         carrier_caution = key_carrier and (danger > 0 or team_critical > 0)
+
+        # 0) Reacción inmediata: BLUNT si hay monstruo en la sala
+        if any(m.room == p.room for m in state.monsters):
+            a = _pick_first(acts, ActionType.USE_BLUNT)
+            if a:
+                return finalize(a)
+
+        # 0.5) Objetos gratuitos (priorizar evitar MEDITATE)
+        vial = _pick_use_object(acts, "VIAL")
+        if vial:
+            sanity_max = p.sanity_max or p.sanity
+            if p.sanity < sanity_max and (p.sanity <= meditate_threshold + 1 or danger > 0):
+                return finalize(vial)
+
+        compass = _pick_use_object(acts, "COMPASS")
+        if compass and not is_corridor(p.room) and danger > 0:
+            return finalize(compass)
+
+        # Si ya hay escalera temporal activa en esta sala, usarla para cambiar piso
+        if _temp_stairs_active_for_pid(state, p.room, pid):
+            move_actions = [a for a in acts if a.type == ActionType.MOVE]
+            if move_actions:
+                # Preferir mover hacia el piso objetivo (Umbral o mejor room global)
+                target_floor = floor_of(umbral) if keys_total >= self.cfg.KEYS_TO_WIN else None
+                if target_floor is None:
+                    goal = _best_room_global(state)
+                    if goal is not None:
+                        target_floor = floor_of(goal)
+                if target_floor is not None and target_floor != floor_of(p.room):
+                    best = None
+                    best_delta = 999
+                    for a in move_actions:
+                        to = RoomId(a.data.get("to"))
+                        if to in state.rooms:
+                            delta = abs(target_floor - floor_of(to))
+                            if delta < best_delta:
+                                best_delta = delta
+                                best = a
+                    if best:
+                        return finalize(best)
 
         # 1) Panico extremo: meditar si existe
         if p.sanity <= self.cfg.PLAYER_SANITY_PANIC:
@@ -495,6 +555,12 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                 if a:
                     return finalize(a)
 
+            stairs = _pick_use_object(acts, "TREASURE_STAIRS")
+            if stairs and not _temp_stairs_active_for_pid(state, p.room, pid):
+                dest = _temp_stairs_dest(state, p.room, floor_of(umbral))
+                if dest is not None:
+                    return finalize(stairs)
+
             nxt = bfs_next_step(state, p.room, umbral)
             if nxt is not None:
                 for a in acts:
@@ -519,6 +585,12 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         # 8) Exploracion GLOBAL: ir al room con mas cartas restantes
         goal = _best_room_global(state)
         if goal is not None and p.room != goal:
+            stairs = _pick_use_object(acts, "TREASURE_STAIRS")
+            if stairs and not _temp_stairs_active_for_pid(state, p.room, pid):
+                dest = _temp_stairs_dest(state, p.room, floor_of(goal))
+                if dest is not None:
+                    return finalize(stairs)
+
             nxt = bfs_next_step(state, p.room, goal)
             if nxt is not None:
                 for a in acts:
