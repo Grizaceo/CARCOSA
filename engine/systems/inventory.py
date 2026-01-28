@@ -76,6 +76,9 @@ def add_object(state: GameState, player_id: PlayerId, object_id: str,
     if can_add_object(player, object_id):
         objects.append(object_id)
         player.objects = objects
+        obj_def = OBJECT_CATALOG.get(object_id)
+        if obj_def and obj_def.uses is not None:
+            player.object_charges[object_id] = int(obj_def.uses)
         if object_id in ("BOOK_CHAMBERS", "CHAMBERS_BOOK"):
             state.chambers_book_holder = player_id
         return True
@@ -94,6 +97,9 @@ def add_object(state: GameState, player_id: PlayerId, object_id: str,
         state.discard_pile.append(discard_choice)
         objects.append(object_id)
         player.objects = objects
+        obj_def = OBJECT_CATALOG.get(object_id)
+        if obj_def and obj_def.uses is not None:
+            player.object_charges[object_id] = int(obj_def.uses)
         return True
 
     return False
@@ -110,6 +116,8 @@ def remove_object(state: GameState, player_id: PlayerId, object_id: str,
         return False
     objects.remove(object_id)
     player.objects = objects
+    if object_id in player.object_charges:
+        del player.object_charges[object_id]
     if to_discard:
         state.discard_pile.append(object_id)
     return True

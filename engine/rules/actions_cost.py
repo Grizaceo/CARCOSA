@@ -20,6 +20,7 @@ def consume_action_cost(action_type: ActionType, cost_override: Optional[int] = 
         ActionType.DISCARD_SANIDAD,
         ActionType.PEEK_ROOM_DECK,
         ActionType.SKIP_PEEK,
+        ActionType.USE_OBJECT,
     }
 
     if action_type in free_action_types:
@@ -31,9 +32,9 @@ def consume_action_cost(action_type: ActionType, cost_override: Optional[int] = 
         ActionType.MEDITATE,
         ActionType.SACRIFICE,
         ActionType.ESCAPE_TRAPPED,
+        ActionType.USE_BLUNT,
         ActionType.USE_YELLOW_DOORS,
         ActionType.USE_HEALER_HEAL,
-        ActionType.USE_BLUNT,
         ActionType.USE_PORTABLE_STAIRS,
         ActionType.USE_CAMARA_LETAL_RITUAL,
         ActionType.USE_CAPILLA,

@@ -86,7 +86,8 @@ def resolve_card_minimal(state: GameState, pid: PlayerId, card, cfg: Config, rng
 
     if s_str.startswith("OMEN:"):
         omen_id = s_str.split(":", 1)[1]
-        handle_omen_reveal(state, pid, omen_id, rng)
+        handle_omen_reveal(state, pid, omen_id, rng, cfg)
+        state.discard_pile.append(f"OMEN:{omen_id}")
         return
 
     if s_str.startswith("EVENT:") or s_str.startswith("EVENTS:"):

@@ -87,6 +87,8 @@ def test_goblin_loot_steal_return(basic_state):
     assert basic_state.flags.get("GOBLIN_LOOT_KEYS_MONSTER:DUENDE") == 1
     
     # Now Use Blunt (Stun)
+    # Goblin teleports on spawn; move player to its new room to stun it.
+    p1.room = monster.room
     p1.objects = ["BLUNT"] # Give blunt to use (fake it)
     OBJECT_CATALOG["BLUNT"].uses = 1 # Update catalog mock/real
     
@@ -100,39 +102,43 @@ def test_goblin_loot_steal_return(basic_state):
 def test_omen_spider_checks(basic_state):
     p1 = basic_state.players[PlayerId("P1")]
     p1.sanity = 5
+    cfg = Config()
     
-    # High Roll (6) + 5 = 11 > 5 (Success/Baby)
+    # High Roll (6) + 5 = 11 >= 2 (Baby)
     rng = MockRNG(d6_val=6)
-    handle_omen_reveal(basic_state, PlayerId("P1"), "ARAÑA", rng)
+    handle_omen_reveal(basic_state, PlayerId("P1"), "ARAÑA", rng, cfg)
     
-    # Should spawn BABY_SPIDER and STUN
+    # Should spawn BABY_SPIDER and skip turn
     has_baby = any("BABY_SPIDER" in m.monster_id for m in basic_state.monsters)
     assert has_baby
-    assert any(st.status_id == "STUN" for st in p1.statuses)
+    assert basic_state.flags.get(f"SKIP_TURN_{PlayerId('P1')}")
     
-    # Low Roll (1) + 1 (Sanity) = 2 < 5 (Failure/Big)
+    # Low Roll (1) + (-2) = -1 (Low/Big)
     basic_state.monsters = []
     p1.statuses = []
-    p1.sanity = 1
+    basic_state.flags = {}
+    p1.sanity = -2
     rng = MockRNG(d6_val=1)
     
-    handle_omen_reveal(basic_state, PlayerId("P1"), "ARAÑA", rng)
+    handle_omen_reveal(basic_state, PlayerId("P1"), "ARAÑA", rng, cfg)
     
-    has_big = any("MONSTER:SPIDER" in m.monster_id for m in basic_state.monsters)
+    has_big = any("SPIDER" in m.monster_id for m in basic_state.monsters)
     assert has_big
-    assert basic_state.flags.get(f"SKIP_TURN_{PlayerId('P1')}")
+    assert not basic_state.flags.get(f"SKIP_TURN_{PlayerId('P1')}")
 
 def test_omen_tue_tue(basic_state):
     p1 = basic_state.players[PlayerId("P1")]
     p1.sanity = 3
+    cfg = Config()
     
     # Case 1: Sanity >= 2 -> Drop to 0
-    handle_omen_reveal(basic_state, PlayerId("P1"), "TUE_TUE", None)
+    handle_omen_reveal(basic_state, PlayerId("P1"), "TUE_TUE", None, cfg)
     assert p1.sanity == 0
     assert not any("TUE_TUE" in m.monster_id for m in basic_state.monsters)
     
-    # Case 2: Sanity 0 -> Spawn
+    # Case 2: Sanity 0 -> Tue Tue appearance (sin ficha)
     p1.sanity = 0
-    handle_omen_reveal(basic_state, PlayerId("P1"), "TUE_TUE", None)
-    assert any("MONSTER:TUE_TUE" in m.monster_id for m in basic_state.monsters)
+    handle_omen_reveal(basic_state, PlayerId("P1"), "TUE_TUE", None, cfg)
+    assert not any("TUE_TUE" in m.monster_id for m in basic_state.monsters)
+    assert basic_state.tue_tue_revelations == 1
 

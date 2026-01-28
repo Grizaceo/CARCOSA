@@ -81,7 +81,10 @@ def move_monsters(state: GameState, cfg) -> None:
                 # CANON: Spider traps player if it moves into their room
                 for pid, p in state.players.items():
                     if p.room == m.room:
-                         add_status(p, "TRAPPED", duration=3, metadata={"source_monster_id": mid})
+                         if "BABY_SPIDER" in mid:
+                             add_status(p, "STUN", duration=1, metadata={"source_monster_id": mid})
+                         else:
+                             add_status(p, "TRAPPED", duration=3, metadata={"source_monster_id": mid})
 
         elif "DUENDE" in mid or "GOBLIN" in mid:
             has_loot = state.flags.get(f"GOBLIN_HAS_LOOT_{mid}", False)
@@ -145,7 +148,7 @@ def spawn_monster_from_card(state: GameState, pid: PlayerId, mid: str, cfg, rng:
     return True
 
 
-def handle_omen_reveal(state: GameState, pid: PlayerId, omen_id: str, rng: RNG | None) -> bool:
+def handle_omen_reveal(state: GameState, pid: PlayerId, omen_id: str, rng: RNG | None, cfg) -> bool:
     """
     Handles OMEN effects related to monsters. Returns True if handled.
     """
@@ -153,57 +156,16 @@ def handle_omen_reveal(state: GameState, pid: PlayerId, omen_id: str, rng: RNG |
     count = state.flags.get(flag_name, 0)
     state.flags[flag_name] = count + 1
 
-    # CANON 4.0: Presagios usan D6 + Cordura (SUPUESTO: Threshold 5)
-    # Success (True) = Minor effect / Baby monster
-    # Failure (False) = Major effect / Big monster
-    check_passed = False
-    if rng:
-        d6 = rng.randint(1, 6)
-        # TUE_TUE has specific logic, handled in its own handler or here?
-        # Presagios uses generic check.
-        p_sanity = state.players[pid].sanity
-        total = d6 + p_sanity
-        check_passed = total >= 5  # SUPUESTO
-    
-    # We pass check_passed as the boolean argument (formerly is_early)
+    # CANON 4.0: Presagios usan D6 + Cordura con umbral 0-1 vs 2+
+    d6 = rng.randint(1, 6) if rng else 1
+    p_sanity = state.players[pid].sanity
+    total = d6 + p_sanity
+    is_low = total <= 1
 
-    def find_spawn_room(start_room):
-        occupied = {pl.room for pl in state.players.values()}
-        current_floor_num = floor_of(start_room)
-
-        candidates = []
-        for r in range(1, 5):
-            rid = RoomId(f"F{current_floor_num}_R{r}")
-            if rid not in occupied:
-                candidates.append(rid)
-        if candidates:
-            return candidates[0]
-
-        cid = RoomId(f"F{current_floor_num}_P")
-        if cid not in occupied:
-            return cid
-
-        for f in range(1, 4):
-            if f == current_floor_num:
-                continue
-            cid = RoomId(f"F{f}_P")
-            if cid not in occupied:
-                return cid
-
-        for f in range(1, 4):
-            if f == current_floor_num:
-                continue
-            for r in range(1, 5):
-                rid = RoomId(f"F{f}_R{r}")
-                if rid not in occupied:
-                    return rid
-
-        return start_room
-
-    spawn_pos = find_spawn_room(state.players[pid].room)
+    spawn_pos = state.players[pid].room
 
     handler = get_omen_handler(omen_id)
     if handler is not None:
-        return handler(state, pid, omen_id, spawn_pos, check_passed, rng)
+        return handler(state, pid, omen_id, spawn_pos, total, is_low, cfg, rng)
 
     return False

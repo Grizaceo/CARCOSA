@@ -30,6 +30,8 @@ def apply_sacrifice_choice(state: GameState, pid: PlayerId, cfg, choice: dict | 
             if drop not in non_soul:
                 drop = non_soul[-1]
             p.objects.remove(drop)
+            if drop in p.object_charges:
+                del p.object_charges[drop]
             state.discard_pile.append(drop)
 
     elif mode == "SANITY_MAX":
@@ -71,6 +73,7 @@ def apply_minus5_consequences(state: GameState, pid: PlayerId, cfg) -> None:
     state.keys_destroyed += p.keys
     p.keys = 0
     p.objects = []
+    p.object_charges = {}
 
     for other_pid, other in state.players.items():
         if other_pid != pid:
