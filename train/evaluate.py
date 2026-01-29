@@ -99,6 +99,9 @@ class NeuralNetworkPlayerPolicy:
         self.model.to(self.device)
         self.model.eval()
         
+        # Ajustar la lista de tipos de acción para que coincida con la salida del modelo
+        self.action_types = self.ACTION_TYPES[:num_actions]
+
         print(f"Modelo cargado: {model_path}")
         print(f"  obs_dim={obs_dim}, num_actions={num_actions}")
         
@@ -141,11 +144,11 @@ class NeuralNetworkPlayerPolicy:
         with torch.no_grad():
             logits = self.model(obs.unsqueeze(0)).squeeze(0)
             
-            # Aplicar máscara de acciones legales
+            # Aplicar máscara de acciones legales (acoplada al tamaño de salida del modelo)
             legal_types = set(a.type for a in legal)
-            mask = torch.zeros(len(self.ACTION_TYPES), device=self.device)
-            
-            for i, at in enumerate(self.ACTION_TYPES):
+            mask = torch.zeros(len(self.action_types), device=self.device)
+
+            for i, at in enumerate(self.action_types):
                 if at in legal_types:
                     mask[i] = 1.0
             
@@ -161,7 +164,7 @@ class NeuralNetworkPlayerPolicy:
                 action_id = torch.multinomial(probs, 1).item()
         
         # Mapear a Action
-        target_type = self.ACTION_TYPES[action_id]
+            target_type = self.action_types[action_id]
         
         for a in legal:
             if a.type == target_type:
@@ -205,7 +208,32 @@ def run_evaluation_episode(
         if action not in legal:
             action = rng.choice(legal) if legal else action
         
-        state = step(state, action, rng, cfg)
+        try:
+            state = step(state, action, rng, cfg)
+        except ValueError:
+            # Acción ilegal inesperada: intentar elegir otra acción legal o saltar turno
+            actor = action.actor
+            legal = get_legal_actions(state, actor)
+            if legal:
+                alt_action = rng.choice(legal)
+                try:
+                    state = step(state, alt_action, rng, cfg)
+                except Exception:
+                    # Si aún falla, forzar END_TURN o KING endround según corresponda
+                    if state.phase == "PLAYER":
+                        fallback = Action(actor=actor, type=ActionType.END_TURN, data={})
+                    else:
+                        fallback = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+                    try:
+                        state = step(state, fallback, rng, cfg)
+                    except Exception:
+                        # Si sigue fallando, marcar game_over y romper
+                        state.game_over = True
+                        break
+            else:
+                # No hay acciones legales; terminar episodio
+                state.game_over = True
+                break
         step_idx += 1
     
     return {
