@@ -69,7 +69,9 @@ def use_object(s: GameState, pid: PlayerId, object_id: str, cfg, rng) -> bool:
 
     # Consumir si tiene usos limitados
     if obj_def.uses is not None:
-        remaining = int(p.object_charges.get(object_id, obj_def.uses))
+        # Aseguramos que object_charges exista para evitar AttributeError
+        charges = getattr(p, "object_charges", {})
+        remaining = int(charges.get(object_id, obj_def.uses))
         remaining -= 1
         if remaining <= 0:
             if object_id in p.objects:

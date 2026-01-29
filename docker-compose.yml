@@ -1,0 +1,18 @@
+services:
+  engine:
+    build: .
+    volumes:
+      - .:/app
+    command: python -m sim.runner --seed 1 --max-steps 400
+
+  tests:
+    build: .
+    volumes:
+      - .:/app
+    command: pytest tests/
+
+  tools:
+    build: .
+    volumes:
+      - .:/app
+    command: python tools/ai_ready_export.py --mode summary
