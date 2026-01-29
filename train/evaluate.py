@@ -329,6 +329,8 @@ def main():
                         help="Comparar todas las policies heurísticas")
     parser.add_argument("--temperature", type=float, default=1.0,
                         help="Temperatura para sampling (1.0 = greedy)")
+    parser.add_argument("--device", type=str, default=None,
+                        help="Dispositivo a usar: 'cuda' o 'cpu'. Si no se especifica, intenta usar cuda si está disponible.")
     
     args = parser.parse_args()
     
@@ -336,10 +338,13 @@ def main():
         compare_policies(args.episodes)
     elif args.model:
         cfg = Config()
+        # Determinar dispositivo: usar argumento si se dio, sino intentar cuda cuando esté disponible
+        device = args.device if args.device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
         policy = NeuralNetworkPlayerPolicy(
-            args.model, 
+            args.model,
             cfg=cfg,
-            temperature=args.temperature
+            device=device,
+            temperature=args.temperature,
         )
         results = evaluate_policy(policy, f"NN:{Path(args.model).stem}", args.episodes, cfg)
         print_results(results)

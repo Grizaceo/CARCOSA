@@ -5,6 +5,22 @@ services:
       - .:/app
     command: python -m sim.runner --seed 1 --max-steps 400
 
+  engine_gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    # Docker Desktop / Docker Engine will respect the --gpus flag when running
+    # If your Docker Compose supports device reservations you can add them under deploy
+    runtime: nvidia
+    volumes:
+      - .:/app
+    command: python -m sim.runner --seed 1 --max-steps 400
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
   tests:
     build: .
     volumes:
