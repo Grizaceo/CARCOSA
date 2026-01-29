@@ -83,7 +83,13 @@ def _event_golpe_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, 
 def _event_espejo_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
     """Espejo de Amarillo: invierte la cordura (cordura x -1)."""
     p = s.players[pid]
-    p.sanity = -p.sanity
+    target = -p.sanity
+    if target >= p.sanity:
+        p.sanity = target
+    else:
+        amount = p.sanity - target
+        if amount > 0:
+            apply_sanity_loss(s, p, amount, source="ESPEJO_AMARILLO", cfg=cfg, apply_vanidad=False)
 
 
 def _event_hay_cadaver(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:

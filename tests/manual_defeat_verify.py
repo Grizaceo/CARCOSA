@@ -25,7 +25,7 @@ def test_detailed_sanity_loss_outcome():
     # We must patch s.config to exist if the function uses it
     s.config = cfg
     
-    apply_sanity_loss(s, s.players[PlayerId("P1")], 1, source="MONSTER_TEST")
+    apply_sanity_loss(s, s.players[PlayerId("P1")], 1, source="MONSTER_TEST", allow_sacrifice=False)
     
     assert s.players[PlayerId("P1")].sanity == -5
     assert s.last_sanity_loss_event == "MONSTER_TEST -> P1"

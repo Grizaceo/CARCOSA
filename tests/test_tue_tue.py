@@ -33,10 +33,15 @@ def test_tue_tue_revelations():
     assert s.tue_tue_revelations == 2
     assert p1.sanity == 3  # 5 - 2 = 3
 
-    # Tercera revelación (Fija en -5)
+    # Tercera revelación (ofrece sacrificio antes de llegar a -5)
     _resolve_card_minimal(s, PlayerId("P1"), CardId("MONSTER:TUE_TUE"), cfg)
     assert s.tue_tue_revelations == 3
-    assert p1.sanity == -5
+    pending = s.flags.get("PENDING_SACRIFICE_CHECK")
+    if isinstance(pending, list):
+        assert pending and pending[0] == "P1"
+    else:
+        assert pending == "P1"
+    assert p1.sanity == 3
 
 def test_tue_tue_vanity_interaction():
     """
@@ -58,11 +63,12 @@ def test_tue_tue_vanity_interaction():
     _resolve_card_minimal(s, PlayerId("P1"), CardId("MONSTER:TUE_TUE"), cfg)
     assert p1.sanity == 1  # 4 - 3 = 1
 
-    # 3a rev: Fija en -5. ¿Aplica vanidad?
-    # Regla: "Fijar ... en -5".
-    # Si es "Set to -5", no es una "pérdida" calculada standard?
-    # O es "Perder hasta llegar a -5"?
-    # Si fijamos, Vanidad podría ser ignorada o aplicada tras fijar.
-    # Asumimos FIJAR estricto (-5).
+    # 3a rev: Ofrece sacrificio antes de fijar en -5 (ignora vanidad).
+    # Regla: "Fijar ... en -5". Interpretamos que se ofrece sacrificio previo.
     _resolve_card_minimal(s, PlayerId("P1"), CardId("MONSTER:TUE_TUE"), cfg)
-    assert p1.sanity == -5
+    pending = s.flags.get("PENDING_SACRIFICE_CHECK")
+    if isinstance(pending, list):
+        assert pending and pending[0] == "P1"
+    else:
+        assert pending == "P1"
+    assert p1.sanity == 1
