@@ -23,14 +23,19 @@ def test_sacrifice_interrupt():
     cfg = Config()
 
     # Trigger -5 transition logic manually (or via damage)
-    # Applying damage to reach -5
-    apply_sanity_loss(s, p1, 1, source="TEST") # Now -5
+    # Applying damage to reach -5 (should queue sacrifice BEFORE applying -5)
+    apply_sanity_loss(s, p1, 1, source="TEST")
     _apply_minus5_transitions(s, cfg)
     
     # Check flag set
-    assert s.flags.get("PENDING_SACRIFICE_CHECK") == "P1"
-    # Check NOT destroyed yet
+    pending = s.flags.get("PENDING_SACRIFICE_CHECK")
+    if isinstance(pending, list):
+        assert pending and pending[0] == "P1"
+    else:
+        assert pending == "P1"
+    # Check NOT destroyed yet and sanity unchanged (pre-sacrifice)
     assert p1.keys == 2
+    assert p1.sanity == -4
     assert not p1.at_minus5
     
     # Check legality: SACRIFICE options + ACCEPT
@@ -45,6 +50,68 @@ def test_sacrifice_interrupt():
     assert s2.players[PlayerId("P1")].sanity == 0
     assert s2.players[PlayerId("P1")].sanity_max == 4
     assert s2.players[PlayerId("P1")].keys == 2 # Keys saved!
+
+
+def test_pre_sacrifice_defers_damage():
+    from engine.state_factory import make_game_state
+    from engine.actions import Action, ActionType
+    from engine.transition import step
+    from engine.systems.sanity import apply_sanity_loss
+
+    s = make_game_state(
+        players={"P1": {"room": str(corridor_id(1)), "sanity": -4, "sanity_max": 5}},
+        rooms=[str(corridor_id(1))],
+        turn_order=["P1"],
+        remaining_actions={"P1": 2},
+    )
+    p1 = s.players[PlayerId("P1")]
+    cfg = Config()
+
+    apply_sanity_loss(s, p1, 1, source="TEST", cfg=cfg)
+
+    pending = s.flags.get("PENDING_SACRIFICE_CHECK")
+    if isinstance(pending, list):
+        assert pending and pending[0] == "P1"
+    else:
+        assert pending == "P1"
+    assert p1.sanity == -4
+
+    s2 = step(s, Action(actor="P1", type=ActionType.SACRIFICE, data={"mode": "SANITY_MAX"}), None, cfg)
+    assert s2.players[PlayerId("P1")].sanity == 0
+    assert s2.flags.get("PENDING_SACRIFICE_CHECK") is None
+
+
+def test_auto_accept_when_no_sacrifice_options():
+    from engine.state_factory import make_game_state
+    from engine.systems.sanity import apply_sanity_loss
+
+    s = make_game_state(
+        players={
+            "P1": {
+                "room": str(corridor_id(1)),
+                "sanity": -4,
+                "sanity_max": -1,
+                "keys": 2,
+            },
+            "P2": {"room": str(corridor_id(1)), "sanity": 3},
+        },
+        rooms=[str(corridor_id(1))],
+        turn_order=["P1", "P2"],
+        remaining_actions={"P1": 2, "P2": 2},
+    )
+    p1 = s.players[PlayerId("P1")]
+    p1.object_slots_penalty = 99
+    p2 = s.players[PlayerId("P2")]
+    cfg = Config()
+
+    apply_sanity_loss(s, p1, 1, source="TEST", cfg=cfg)
+
+    assert s.flags.get("PENDING_SACRIFICE_CHECK") is None
+    assert p1.sanity == cfg.S_LOSS
+    assert p1.at_minus5 is True
+    assert p1.keys == 0
+    assert s.keys_destroyed == 2
+    assert p2.sanity == 2
     
 
 def test_trapped_duration():

@@ -14,7 +14,7 @@ from engine.types import PlayerId, RoomId, CardId
 from engine.board import corridor_id, room_id, is_corridor
 from engine.transition import step
 from engine.legality import get_legal_actions
-from sim.policies import GoalDirectedPlayerPolicy, HeuristicKingPolicy
+from sim.policies import get_king_policy, get_player_policy
 from sim.metrics import transition_record, write_jsonl
 
 
@@ -211,15 +211,7 @@ def run_episode(
     )
     from sim.mcts_policy import MCTSPlayerPolicy
     
-    if policy_name == "COWARD":
-        ppol = CowardPolicy(cfg)
-    elif policy_name == "BERSERKER":
-        ppol = BerserkerPolicy(cfg)
-    elif policy_name == "SPEEDRUNNER":
-        ppol = SpeedrunnerPolicy(cfg)
-    elif policy_name == "RANDOM":
-        ppol = RandomPolicy()
-    elif policy_name == "MCTS":
+    if policy_name == "MCTS":
         # Extraer config de argumentos si existen, por ahora defaults
         # Hack: Parse args generically or expect caller to modify cfg?
         # For P0 CLI args are parsed in main(), but run_episode receives only signature args.
@@ -231,9 +223,9 @@ def run_episode(
         # I'll rely on defaults for P0 or simple hack:
         ppol = MCTSPlayerPolicy(cfg, rollouts=getattr(cfg, "MCTS_ROLLOUTS", 100)) 
     else:
-        ppol = GoalDirectedPlayerPolicy(cfg)
+        ppol = get_player_policy(policy_name, cfg)
 
-    kpol = HeuristicKingPolicy(cfg)
+    kpol = get_king_policy(getattr(cfg, "KING_POLICY", "RANDOM"), cfg)
 
     records: List[Dict[str, Any]] = []
     step_idx = 0
@@ -259,6 +251,8 @@ def run_episode(
     while step_idx < max_steps and not state.game_over:
         # Check for Sacrifice Interrupt
         pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
+        if isinstance(pending_sacrifice_pid, list):
+            pending_sacrifice_pid = pending_sacrifice_pid[0] if pending_sacrifice_pid else None
         
         if pending_sacrifice_pid:
             episode_stats["sacrifice"]["opportunities"] += 1
@@ -398,7 +392,7 @@ def main():
     ap.add_argument("--max-steps", type=int, default=2000)
     ap.add_argument("--out", type=str, default=None)
     ap.add_argument("--policy", type=str, default="GOAL", 
-                    choices=["GOAL", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM", "MCTS"],
+                    choices=["GOAL", "HABITANTEDECARCOSA", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM", "MCTS"],
                     help="Player policy to use")
     
     # MCTS Args

@@ -86,7 +86,9 @@ def _spawn_tue_tue(state: GameState, pid: PlayerId, monster_id: str, cfg: Config
     elif rev == 2:
         apply_sanity_loss(state, p, 2, source="TUE_TUE_2", cfg=cfg)
     else:
-        p.sanity = -5
+        amount = p.sanity - cfg.S_LOSS
+        if amount > 0:
+            apply_sanity_loss(state, p, amount, source="TUE_TUE_3", cfg=cfg, apply_vanidad=False)
     return True
 
 

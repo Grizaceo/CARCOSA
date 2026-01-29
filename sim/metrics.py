@@ -133,6 +133,7 @@ def transition_record(
 
         "done": bool(next_state.game_over),
         "outcome": next_state.outcome,
+        "sanity_loss_events": list(getattr(next_state, "last_sanity_loss_events", [])),
         
         # FULL REPLAY STATE
         "full_state": state.to_dict()

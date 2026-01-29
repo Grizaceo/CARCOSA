@@ -19,6 +19,9 @@ from engine.systems.sacrifice import (
     apply_sacrifice_choice,
     apply_minus5_consequences,
     apply_minus5_transitions,
+    pending_sacrifice_pid,
+    pop_pending_sacrifice_damage,
+    pop_pending_sacrifice,
 )
 from engine.compat.legacy import (
     legacy_reveal_one,
@@ -149,6 +152,8 @@ def _start_new_round(s, cfg):
 def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = None) -> GameState:
     cfg = cfg or Config()
     s = state.clone()
+    if hasattr(s, "last_sanity_loss_events"):
+        s.last_sanity_loss_events = []
 
     if not isinstance(action.type, ActionType):
         normalized = normalize_action_type(str(action.type))
@@ -169,7 +174,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
     )
 
     # CANON Fix #A: Handle Pending Sacrifice Check
-    pending_pid_str = s.flags.get(PENDING_SACRIFICE_FLAG)
+    pending_pid_str = pending_sacrifice_pid(s)
     if pending_pid_str:
         if action.actor != pending_pid_str:
              raise ValueError(f"Pending sacrifice check for {pending_pid_str}, but {action.actor} acted.")
@@ -177,17 +182,28 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         if action.type == ActionType.SACRIFICE:
             # Player chose to SACRIFICE
             # Apply sacrifice cost
-            p = s.players[PlayerId(pending_pid_str)]
             apply_sacrifice_choice(s, PlayerId(pending_pid_str), cfg, action.data)
             # Clear flag, do NOT apply -5 consequences (as sanity is now 0 > -5)
             # p.at_minus5 remains False (or becomes False)
-            del s.flags[PENDING_SACRIFICE_FLAG]
+            pop_pending_sacrifice_damage(s, PlayerId(pending_pid_str))
+            pop_pending_sacrifice(s)
             return _finalize_and_return(s, cfg)
             
         elif action.type == ActionType.ACCEPT_SACRIFICE:
             # Player chose to accept consequences
+            pending_damage = pop_pending_sacrifice_damage(s, PlayerId(pending_pid_str))
+            if pending_damage:
+                p = s.players[PlayerId(pending_pid_str)]
+                apply_sanity_loss(
+                    s,
+                    p,
+                    int(pending_damage.get("amount", 0)),
+                    cfg=cfg,
+                    source=pending_damage.get("source", "UNKNOWN"),
+                    allow_sacrifice=False,
+                )
             apply_minus5_consequences(s, PlayerId(pending_pid_str), cfg)
-            del s.flags[PENDING_SACRIFICE_FLAG]
+            pop_pending_sacrifice(s)
             return _finalize_and_return(s, cfg)
             
         else:

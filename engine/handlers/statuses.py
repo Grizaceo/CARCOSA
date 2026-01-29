@@ -5,7 +5,7 @@ from typing import Callable, Dict
 from engine.board import floor_of
 from engine.effects.states_canonical import has_status
 from engine.state import GameState
-from engine.systems.sanity import heal_player
+from engine.systems.sanity import apply_sanity_loss, heal_player
 from engine.types import PlayerId
 
 StatusEndOfRoundHandler = Callable[[GameState, PlayerId], None]
@@ -63,7 +63,7 @@ def _status_cursed(state: GameState, pid: PlayerId) -> None:
     player_floor = floor_of(p.room)
     for other_pid, other in state.players.items():
         if other_pid != pid and floor_of(other.room) == player_floor:
-            other.sanity -= 1
+            apply_sanity_loss(state, other, 1, source="MALDITO")
 
 
 @register_status_end_of_turn("SANIDAD")
