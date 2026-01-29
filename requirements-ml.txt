@@ -1,0 +1,24 @@
+# CARCOSA - Requirements for Neural Network Training
+# ===================================================
+# Instalar con: pip install -r requirements-ml.txt
+
+# Core ML
+torch>=2.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+
+# RL Framework
+gymnasium>=0.29.0
+stable-baselines3>=2.0.0
+
+# Training utilities
+tensorboard>=2.14.0
+scikit-learn>=1.3.0
+
+# Optional but recommended
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tqdm>=4.65.0
+
+# Note: Para instalar PyTorch con CUDA (RTX 4060), usar:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
