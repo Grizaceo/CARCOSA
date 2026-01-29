@@ -4,6 +4,7 @@ import math
 
 from engine.config import Config
 from engine.state import GameState
+from engine.board import floor_of
 
 
 def _clip01(x: float) -> float:
@@ -88,6 +89,22 @@ def debuff_pressure(state: GameState, cfg: Config) -> float:
     return _clip01(total / emax)
 
 
+def king_risk_pressure(state: GameState, cfg: Config) -> float:
+    """
+    Riesgo del Rey: (jugadores en piso del Rey) × (severidad por min_sanity).
+    Captura el peligro de tener jugadores expuestos a King Presence.
+    """
+    if not state.players:
+        return 0.0
+    on_king_floor = sum(1 for p in state.players.values() 
+                        if floor_of(p.room) == state.king_floor)
+    exposure = on_king_floor / len(state.players)
+    min_sanity = min(p.sanity for p in state.players.values())
+    # Multiplicador de severidad: crece cuando min_sanity < -2
+    severity = 1 + max(0, -2 - min_sanity)
+    return _clip01(exposure * severity / 3.0)  # normalizar a [0,1]
+
+
 def compute_features(state: GameState, cfg: Config) -> Dict[str, float]:
     return {
         "P_sanity": sanity_pressure(state, cfg),
@@ -97,6 +114,7 @@ def compute_features(state: GameState, cfg: Config) -> Dict[str, float]:
         "P_crown": crown_pressure(state),
         "P_umbral": umbral_pressure(state),
         "P_debuff": debuff_pressure(state, cfg),
+        "P_king_risk": king_risk_pressure(state, cfg),
     }
 
 
@@ -111,6 +129,7 @@ def tension_T(state: GameState, cfg: Config, features: Optional[Dict[str, float]
         + cfg.W_CROWN * f["P_crown"]
         + cfg.W_UMBRAL * f["P_umbral"]
         + cfg.W_DEBUFF * f["P_debuff"]
+        + cfg.W_KING_RISK * f["P_king_risk"]
     )
     return _clip01(sigmoid(z))
 

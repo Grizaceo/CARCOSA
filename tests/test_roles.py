@@ -101,7 +101,7 @@ class TestTankBlockMeditation:
         other = make_player(player_id="OTHER", room="F1_R1", sanity=5, sanity_max=5, role_id="HEALER")
         
         # Test función blocks_meditation
-        assert blocks_meditation(tank, other) is True
+        from engine.effects.protect import can_protect; assert can_protect(tank, other) is True
     
     def test_tank_can_meditate_self(self):
         """Tank puede meditar donde quiera"""

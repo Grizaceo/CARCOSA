@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from engine.board import floor_of
 from engine.effects.states_canonical import has_status
+from engine.effects.protect import apply_tank_shields
 from engine.entities import normalize_monster_id
 from engine.systems.status import apply_end_of_turn_status_effects
 from engine.state import GameState
@@ -33,6 +34,9 @@ def advance_turn_or_king(state: GameState) -> None:
 
 
 def start_new_round(state: GameState) -> None:
+    # TANK: Apply +1 shield at round start
+    apply_tank_shields(state)
+    
     order = state.turn_order
     if not order:
         state.phase = "PLAYER"

@@ -44,6 +44,7 @@ class PlayerState:
     role_id: str = "DEFAULT"  # Rol del personaje (HEALER, TANK, etc.)
     double_roll_used_this_turn: bool = False  # Para High Roller
     free_move_used_this_turn: bool = False  # Para Scout
+    shield: int = 0  # Escudo temporal del TANK (absorbe daño)
 
     def __post_init__(self) -> None:
         if self.sanity_max is None:
@@ -282,6 +283,7 @@ class GameState:
                 at_minus5=pdata.get("at_minus5", False),
                 last_minus5_round=pdata.get("last_minus5_round", -1),
                 object_slots_penalty=pdata.get("object_slots_penalty", 0),
+                shield=pdata.get("shield", 0),
             )
 
         roles_assigned_data = d.get("roles_assigned", {})
