@@ -8,6 +8,79 @@ from engine.systems.sanity import apply_sanity_loss
 from engine.types import PlayerId
 
 PENDING_SACRIFICE_FLAG = "PENDING_SACRIFICE_CHECK"
+PENDING_SACRIFICE_DAMAGE_FLAG = "PENDING_SACRIFICE_DAMAGE"
+
+
+def _pending_queue(state: GameState) -> list[str]:
+    raw = state.flags.get(PENDING_SACRIFICE_FLAG)
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return list(raw)
+    return [str(raw)]
+
+
+def _pending_damage_map(state: GameState) -> dict[str, dict]:
+    raw = state.flags.get(PENDING_SACRIFICE_DAMAGE_FLAG)
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    return {}
+
+
+def pending_sacrifice_pid(state: GameState) -> str | None:
+    queue = _pending_queue(state)
+    return queue[0] if queue else None
+
+
+def is_pending_sacrifice(state: GameState, pid: PlayerId) -> bool:
+    return str(pid) in _pending_queue(state)
+
+
+def has_pending_sacrifice_damage(state: GameState, pid: PlayerId) -> bool:
+    return str(pid) in _pending_damage_map(state)
+
+
+def set_pending_sacrifice_damage(state: GameState, pid: PlayerId, amount: int, source: str | None) -> None:
+    pending = _pending_damage_map(state)
+    pid_str = str(pid)
+    if pid_str in pending:
+        return
+    pending[pid_str] = {"amount": int(amount), "source": source or "UNKNOWN"}
+    state.flags[PENDING_SACRIFICE_DAMAGE_FLAG] = pending
+
+
+def pop_pending_sacrifice_damage(state: GameState, pid: PlayerId) -> dict | None:
+    pending = _pending_damage_map(state)
+    pid_str = str(pid)
+    info = pending.pop(pid_str, None)
+    if pending:
+        state.flags[PENDING_SACRIFICE_DAMAGE_FLAG] = pending
+    else:
+        state.flags.pop(PENDING_SACRIFICE_DAMAGE_FLAG, None)
+    return info
+
+def queue_pending_sacrifice(state: GameState, pid: PlayerId) -> None:
+    queue = _pending_queue(state)
+    pid_str = str(pid)
+    if pid_str in queue:
+        return
+    queue.append(pid_str)
+    state.flags[PENDING_SACRIFICE_FLAG] = queue
+
+
+def pop_pending_sacrifice(state: GameState) -> str | None:
+    queue = _pending_queue(state)
+    if not queue:
+        state.flags.pop(PENDING_SACRIFICE_FLAG, None)
+        return None
+    pid_str = queue.pop(0)
+    if queue:
+        state.flags[PENDING_SACRIFICE_FLAG] = queue
+    else:
+        state.flags.pop(PENDING_SACRIFICE_FLAG, None)
+    return pid_str
 
 
 def apply_sacrifice_choice(state: GameState, pid: PlayerId, cfg, choice: dict | None) -> None:
@@ -53,6 +126,22 @@ def apply_sacrifice_choice(state: GameState, pid: PlayerId, cfg, choice: dict | 
 
 
 def apply_minus5_transitions(state: GameState, cfg) -> None:
+    if state.flags.get(PENDING_SACRIFICE_FLAG) is not None:
+        pending = _pending_queue(state)
+        filtered: list[str] = []
+        for pid_str in pending:
+            pid = PlayerId(pid_str)
+            p = state.players.get(pid)
+            if p is None:
+                continue
+            if p.at_minus5:
+                continue
+            if p.sanity <= cfg.S_LOSS or has_pending_sacrifice_damage(state, pid):
+                filtered.append(pid_str)
+        if filtered:
+            state.flags[PENDING_SACRIFICE_FLAG] = filtered
+        else:
+            state.flags.pop(PENDING_SACRIFICE_FLAG, None)
     for pid, p in state.players.items():
         if p.sanity <= cfg.S_LOSS:
             if not p.at_minus5:
@@ -61,8 +150,7 @@ def apply_minus5_transitions(state: GameState, cfg) -> None:
                     p.at_minus5 = True
                     p.last_minus5_round = state.round
                     continue
-                if state.flags.get(PENDING_SACRIFICE_FLAG) != str(pid):
-                    state.flags[PENDING_SACRIFICE_FLAG] = str(pid)
+                queue_pending_sacrifice(state, pid)
         else:
             if p.at_minus5:
                 p.at_minus5 = False

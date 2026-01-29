@@ -94,6 +94,8 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
     # Si hay un chequeo de sacrificio pendiente, solo el jugador afectado puede actuar.
     # Debe elegir entre SACRIFICE o ACCEPT_SACRIFICE.
     pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
+    if isinstance(pending_sacrifice_pid, list):
+        pending_sacrifice_pid = pending_sacrifice_pid[0] if pending_sacrifice_pid else None
     if pending_sacrifice_pid:
         if actor == pending_sacrifice_pid:
             p = state.players[PlayerId(actor)]

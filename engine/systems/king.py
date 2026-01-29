@@ -177,6 +177,19 @@ def end_of_round_checks(state: GameState, cfg: Config) -> None:
         state.outcome = "WIN"
 
 
+def _roll_override(action, key: str, lo: int, hi: int) -> int | None:
+    if not action or not getattr(action, "data", None):
+        return None
+    val = action.data.get(key)
+    try:
+        val = int(val)
+    except (TypeError, ValueError):
+        return None
+    if lo <= val <= hi:
+        return val
+    return None
+
+
 def resolve_king_phase(state: GameState, action, rng: RNG, cfg: Config):
     # PASO 1: Casa (configurable) a todos
     for p in state.players.values():
@@ -190,7 +203,9 @@ def resolve_king_phase(state: GameState, action, rng: RNG, cfg: Config):
 
     if king_active:
         # PASO 2: Ruleta d4 para determinar nuevo piso (canon P0)
-        d4 = rng.randint(1, 4)
+        d4 = _roll_override(action, "d4", 1, 4)
+        if d4 is None:
+            d4 = rng.randint(1, 4)
         rng.last_king_d4 = d4
         new_floor = ruleta_floor(state.king_floor, d4)
 
@@ -212,7 +227,9 @@ def resolve_king_phase(state: GameState, action, rng: RNG, cfg: Config):
                     apply_sanity_loss(state, p, pres, source="KING_PRESENCE")
 
         # PASO 4: Efecto d6 aleatorio
-        d6 = rng.randint(1, 6)
+        d6 = _roll_override(action, "d6", 1, 6)
+        if d6 is None:
+            d6 = rng.randint(1, 6)
         rng.last_king_d6 = d6
         fk_floor = current_false_king_floor(state)
 

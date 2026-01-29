@@ -216,6 +216,7 @@ class GameState:
     
     # Tracking de derrota
     last_sanity_loss_event: Optional[str] = None  # Fuente del último daño significativo (que llevó a -5)
+    last_sanity_loss_events: List[str] = field(default_factory=list)  # Eventos de daño a -5 en el último step
 
     def __post_init__(self) -> None:
         ensure_canonical_rooms(self)
@@ -404,4 +405,5 @@ class GameState:
             
             # Tracking
             last_sanity_loss_event=d.get("last_sanity_loss_event"),
+            last_sanity_loss_events=list(d.get("last_sanity_loss_events", [])),
         )

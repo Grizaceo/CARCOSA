@@ -23,6 +23,8 @@ from engine.objects import is_soulbound
 def _get_active_actor(state: GameState) -> str:
     # 1. Check Interrupts
     pending = state.flags.get("PENDING_SACRIFICE_CHECK")
+    if isinstance(pending, list):
+        pending = pending[0] if pending else None
     if pending:
         return str(pending)
     # 2. Normal Turn
@@ -757,6 +759,24 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             return finalize(rng.choice(acts))
 
         return finalize(Action(actor=actor, type=ActionType.END_TURN, data={}))
+
+
+@dataclass
+class HabitanteDeCarcosaPolicy(GoalDirectedPlayerPolicy):
+    """
+    PolÃ­tica humana base: menos meditaciÃ³n, mÃ¡s movimiento y exploraciÃ³n,
+    pero con foco en ganar y sin tests artificiales.
+    """
+    cfg: Config = Config()
+    meditate_critical: int = -4
+    move_for_better_delta: int = 1
+    search_local_min_remaining: int = 0
+    vial_margin: int = 2
+    endgame_force_umbral: bool = True
+
+    def __post_init__(self) -> None:
+        # Mantener parÃ¡metros fijos (no cargar policy_params.json)
+        return
 @dataclass
 class HeuristicKingPolicy(KingPolicy):
     cfg: Config = Config()
@@ -815,6 +835,19 @@ class HeuristicKingPolicy(KingPolicy):
 
         # Fallback to random choice if no 'best' found (e.g. all lose)
         return best if best is not None else rng.choice(acts)
+
+
+@dataclass
+class RandomKingPolicy(KingPolicy):
+    cfg: Config = Config()
+
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        acts = get_legal_actions(state, "KING")
+        if not acts:
+            return None
+        d4 = rng.randint(1, 4)
+        d6 = rng.randint(1, 6)
+        return Action(actor="KING", type=ActionType.KING_ENDROUND, data={"d4": d4, "d6": d6})
 
 
 @dataclass
@@ -993,4 +1026,35 @@ class RandomPolicy(PlayerPolicy):
         acts = get_legal_actions(state, actor)
         if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
         return rng.choice(acts)
+
+
+PLAYER_POLICY_REGISTRY = {
+    "GOAL": GoalDirectedPlayerPolicy,
+    "HABITANTEDECARCOSA": HabitanteDeCarcosaPolicy,
+    "COWARD": CowardPolicy,
+    "BERSERKER": BerserkerPolicy,
+    "SPEEDRUNNER": SpeedrunnerPolicy,
+    "RANDOM": RandomPolicy,
+}
+
+KING_POLICY_REGISTRY = {
+    "RANDOM": RandomKingPolicy,
+    "HEURISTIC": HeuristicKingPolicy,
+}
+
+
+def get_player_policy(policy_name: str, cfg: Config) -> PlayerPolicy:
+    name = (policy_name or "GOAL").upper()
+    cls = PLAYER_POLICY_REGISTRY.get(name)
+    if cls is None:
+        raise ValueError(f"Unknown player policy: {policy_name}")
+    return cls(cfg)
+
+
+def get_king_policy(policy_name: str, cfg: Config) -> KingPolicy:
+    name = (policy_name or "RANDOM").upper()
+    cls = KING_POLICY_REGISTRY.get(name)
+    if cls is None:
+        raise ValueError(f"Unknown king policy: {policy_name}")
+    return cls(cfg)
 

@@ -8,7 +8,7 @@ from engine.config import Config
 from engine.rng import RNG
 from engine.legality import get_legal_actions
 
-from sim.policies import PlayerPolicy, GoalDirectedPlayerPolicy, HeuristicKingPolicy
+from sim.policies import PlayerPolicy, GoalDirectedPlayerPolicy, HeuristicKingPolicy, RandomKingPolicy
 from sim.mcts import mcts_search
 
 @dataclass
@@ -39,7 +39,7 @@ class MCTSPlayerPolicy(PlayerPolicy):
         # Default policies for Rollout and Opponent modeling
         # We use GoalDirected for teammates and Heuristic for King.
         self._default_player_policy = GoalDirectedPlayerPolicy(self.cfg)
-        self._king_policy = HeuristicKingPolicy(self.cfg)
+        self._king_policy = RandomKingPolicy(self.cfg)
 
     def _rollout_policy(self, state: GameState, rng: RNG) -> Action:
         """
