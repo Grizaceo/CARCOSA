@@ -127,6 +127,31 @@ def _best_room_global(state: GameState) -> Optional[RoomId]:
     return best[2] if best else None
 
 
+def _best_room_global_filtered(state: GameState, avoid_floor: Optional[int] = None) -> Optional[RoomId]:
+    best: Optional[Tuple[int, str, RoomId]] = None  # (remaining, tie_break, rid)
+    for rid, room in state.rooms.items():
+        s = str(rid)
+        if s.endswith("_P"):
+            continue
+        if avoid_floor is not None and floor_of(rid) == avoid_floor:
+            continue
+        rem = room.deck.remaining()
+        if rem <= 0:
+            continue
+        cand = (rem, s, rid)
+        if best is None or cand > best:
+            best = cand
+    return best[2] if best else None
+
+
+def _pick_move_to(actions: List[Action], dest: RoomId) -> Optional[Action]:
+    dest_str = str(dest)
+    for a in actions:
+        if a.type == ActionType.MOVE and a.data.get("to") == dest_str:
+            return a
+    return None
+
+
 ARMORY_STREAK_LIMIT = 2
 STALL_KEY_STEPS = 24
 
@@ -400,6 +425,58 @@ def _team_fragility(state: GameState) -> Tuple[int, int]:
     return low, critical
 
 
+_DEBUFF_WEIGHTS = {
+    "TRAPPED": 3.0,
+    "TRAPPED_SPIDER": 3.0,
+    "MALDITO": 2.0,
+    "CURSE": 2.0,
+    "BLEED": 2.0,
+    "SANGRADO": 2.0,
+    "ENVENENADO": 2.0,
+    "PARANOIA": 1.5,
+    "STUN": 1.0,
+    "VANIDAD": 1.0,
+}
+
+
+def _debuff_score_player(p) -> float:
+    score = 0.0
+    for st in getattr(p, "statuses", []):
+        weight = _DEBUFF_WEIGHTS.get(getattr(st, "status_id", ""), 0.0)
+        stacks = getattr(st, "stacks", 1) or 1
+        score += weight * stacks
+    return score
+
+
+def _team_debuff_max(state: GameState) -> float:
+    if not state.players:
+        return 0.0
+    return max(_debuff_score_player(p) for p in state.players.values())
+
+
+def _min_sanity_player(state: GameState) -> Tuple[PlayerId, int]:
+    min_pid = None
+    min_sanity = 999
+    for pid, p in state.players.items():
+        if p.sanity < min_sanity:
+            min_sanity = p.sanity
+            min_pid = pid
+    return min_pid, min_sanity
+
+
+def _king_exposure(state: GameState) -> float:
+    if not state.players:
+        return 0.0
+    total = len(state.players)
+    on_floor = sum(1 for p in state.players.values() if floor_of(p.room) == state.king_floor)
+    return on_floor / total
+
+
+def _king_risk(state: GameState, min_sanity: int) -> float:
+    exposure = _king_exposure(state)
+    multiplier = 1 + max(0, -2 - int(min_sanity))
+    return exposure * multiplier
+
 @dataclass
 class GoalDirectedPlayerPolicy(PlayerPolicy):
     """
@@ -430,6 +507,26 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         self.search_local_min_remaining = int(params.get("search_local_min_remaining", self.search_local_min_remaining))
         self.vial_margin = int(params.get("vial_margin", self.vial_margin))
         self.endgame_force_umbral = bool(params.get("endgame_force_umbral", self.endgame_force_umbral))
+        # Sistema de memoria (se configura desde runner.py)
+        self._team_memory = None
+        self._bot_memories = None
+    
+    def set_memory(self, team_memory, bot_memories) -> None:
+        """Configura el sistema de memoria para la policy."""
+        self._team_memory = team_memory
+        self._bot_memories = bot_memories
+    
+    def _get_known_key_rooms(self) -> list:
+        """Retorna habitaciones donde se sabe que hay llaves."""
+        if self._team_memory is None:
+            return []
+        return self._team_memory.get_key_rooms()
+    
+    def _get_threat_rooms(self) -> list:
+        """Retorna habitaciones con amenazas conocidas."""
+        if self._team_memory is None:
+            return []
+        return self._team_memory.get_threat_rooms()
 
     def choose(self, state: GameState, rng: RNG) -> Action:
         actor = _get_active_actor(state)
@@ -471,7 +568,33 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             meditate_threshold += 1
         if key_carrier:
             meditate_threshold += 1
-        meditate_threshold = min(meditate_threshold, -2)
+        
+        # === NUEVOS FACTORES DE RIESGO ===
+        
+        # Factor: Piso del Rey -> más riesgo si estás en su piso
+        if floor_of(p.room) == state.king_floor:
+            if p.sanity <= 1:
+                meditate_threshold += 2  # Muy crítico en piso del Rey con baja cordura
+            else:
+                meditate_threshold += 1
+        
+        # Factor: TALE en mano -> proteger valor similar a llaves
+        has_tale = any("TALE" in obj for obj in p.objects)
+        if has_tale:
+            meditate_threshold += 1
+        
+        # Factor: Ronda actual -> late game prioriza velocidad sobre seguridad
+        if state.round > 25:
+            meditate_threshold -= 1  # Menos conservador en late game
+        elif state.round > 35:
+            meditate_threshold -= 2  # Mucho menos conservador en muy late game
+        
+        # Factor: Capacidad de sacrificio restante -> si no puede sacrificar, meditar más urgente
+        can_sacrifice = p.object_slots_penalty < 2 and (p.sanity_max or 5) > -3
+        if not can_sacrifice and p.sanity <= 0:
+            meditate_threshold += 2  # Sin sacrificio disponible, urgente meditar
+        
+        meditate_threshold = min(meditate_threshold, 0)  # Cap menos restrictivo (-2 -> 0)
 
         carrier_caution = key_carrier and (danger > 0 or team_critical > 0)
 
@@ -578,6 +701,23 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                 )
                 if _danger_score_room(state, RoomId(best.data.get("to"))) < danger:
                     return finalize(best)
+
+        # 2.9) MEMORIA DE EQUIPO: Priorizar habitaciones con llaves conocidas
+        known_key_rooms = self._get_known_key_rooms()
+        if known_key_rooms and need_keys and p.sanity > meditate_threshold:
+            for key_room_str in known_key_rooms:
+                key_room = RoomId(key_room_str)
+                # Si ya estoy en la habitación con llave conocida, hacer SEARCH
+                if p.room == key_room:
+                    a = _pick_first(acts, ActionType.SEARCH)
+                    if a:
+                        return finalize(a)
+                # Si puedo moverme hacia la habitación con llave
+                nxt = bfs_next_step(state, p.room, key_room)
+                if nxt is not None:
+                    for a in acts:
+                        if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                            return finalize(a)
 
         # 3) Progreso de llaves: specials de progreso primero
         if need_keys and p.sanity > meditate_threshold and not carrier_caution:

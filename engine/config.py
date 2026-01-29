@@ -26,7 +26,10 @@ class Config:
 
     # --- Debuffs ---
     E_MAX_PER_PLAYER: float = 3.0
-    NEGATIVE_STATUS_IDS: Set[str] = field(default_factory=lambda: {"STUN", "CURSE", "BLEED"})
+    NEGATIVE_STATUS_IDS: Set[str] = field(default_factory=lambda: {
+        "TRAPPED", "TRAPPED_SPIDER", "MALDITO", "ENVENENADO", 
+        "PARANOIA", "STUN", "VANIDAD"
+    })
 
     # --- Llaves ---
     KEYS_TO_WIN: int = 4
@@ -34,7 +37,7 @@ class Config:
     KEYS_LOSE_THRESHOLD: int = 3     # derrota si quedan <= 3 llaves "en juego" (no destruidas)
 
     # --- Roles ---
-    ROLE_DRAW_MODE: str = "FIXED"  # FIXED | RANDOM_UNIQUE | RANDOM_WITH_REPLACEMENT
+    ROLE_DRAW_MODE: str = "RANDOM_UNIQUE"  # FIXED | RANDOM_UNIQUE | RANDOM_WITH_REPLACEMENT
     ROLE_POOL: tuple[str, ...] = field(
         default_factory=lambda: (
             "HEALER",
@@ -60,6 +63,7 @@ class Config:
     W_CROWN: float = 1.0
     W_UMBRAL: float = 0.7
     W_DEBUFF: float = 0.6
+    W_KING_RISK: float = 0.8  # peso para riesgo del Rey (jugadores expuestos)
 
     # --- Penalizaciones utilidad Rey ---
     PENALTY_LOSE: float = 10.0
