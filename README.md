@@ -1,3 +1,51 @@
+# Carcosa — Docker development workflow
+
+This README documents the recommended Docker workflow for development and experiments.
+
+Quick commands
+
+- Build deps image (heavy, do rarely):
+  ```bash
+  docker build -f Dockerfile.deps -t carcosa:deps .
+  ```
+
+- Build app image (fast):
+  ```bash
+  docker build -f Dockerfile.app -t carcosa:app .
+  ```
+
+- Dev run (mounts project, no rebuild needed):
+  ```bash
+  docker run --rm -it -v ${PWD}:/app -w /app carcosa:app python -m sim.runner --seed 1 --max-steps 400
+  ```
+
+- Generate Behavioral Cloning dataset from `runs/*.jsonl`:
+  ```bash
+  docker run --rm -v ${PWD}:/app -w /app carcosa:app python tools/ai_ready_export.py --input runs/*.jsonl --mode bc --output data/bc_training.csv
+  ```
+
+- Quick BC training (1 epoch, CPU):
+  ```bash
+  docker run --rm -v ${PWD}:/app -w /app carcosa:app python train/train_bc.py --data data/bc_training.csv --epochs 1 --batch-size 32 --device cpu --save-dir models_dev --log-dir runs/dev
+  ```
+
+GPU notes
+
+- If you want to use the NVIDIA GPU (e.g., RTX 4060), build the GPU image and run with `--gpus all`:
+  ```bash
+  docker build -f Dockerfile.gpu -t carcosa:gpu .
+  docker run --gpus all --rm -it -v ${PWD}:/app -w /app carcosa:gpu python -c "import torch; print(torch.cuda.is_available())"
+  ```
+
+Dev helpers
+
+- Use `Makefile` targets on Unix / WSL or `run.ps1` on Windows to simplify common tasks.
+
+Tips to avoid rebuilding frequently
+
+- Keep `carcosa:deps` built and only rebuild `carcosa:app` when you change code.
+- Use volumes (`-v ${PWD}:/app`) to mount host code into containers for iterative development.
+- Enable BuildKit and use cache mounts if you need to rebuild dependencies often.
 # CARCOSA - Core Simulation Engine (P0 Canonical)
 
 A deterministic game engine for CARCOSA (P0 core), ready for iteration.

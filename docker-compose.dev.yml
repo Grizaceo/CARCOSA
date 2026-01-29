@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  engine_dev:
+    image: carcosa:app
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    volumes:
+      - .:/app:rw
+    command: python -m sim.runner --seed 1 --max-steps 400
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 6G
+
+  engine_deps_only:
+    image: carcosa:deps
+    command: ["python", "-c", "print('deps image')"]

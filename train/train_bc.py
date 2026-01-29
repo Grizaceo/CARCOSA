@@ -88,8 +88,9 @@ def train_behavioral_cloning(
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='max', patience=10, factor=0.5, verbose=True
+        optimizer, mode='max', patience=10, factor=0.5
     )
+
     
     # Logging
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
