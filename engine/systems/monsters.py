@@ -110,6 +110,21 @@ def move_monsters(state: GameState, cfg) -> None:
                 m.room = next_room
                 on_monster_enters_room(state, next_room)
 
+                # Si lleva víctima, arrastra al/los jugadores atrapados por este Viejo del Saco
+                if has_victim:
+                    victim_pids = []
+                    for pid, p in state.players.items():
+                        for st in getattr(p, "statuses", []):
+                            if st.status_id == "TRAPPED" and st.metadata.get("source_monster_id") == mid:
+                                victim_pids.append(pid)
+                                break
+                    if victim_pids:
+                        for vpid in victim_pids:
+                            state.players[vpid].room = next_room
+                    else:
+                        # Flag inconsistente: no hay víctima con status -> liberar flag
+                        state.flags[f"SACK_HAS_VICTIM_{mid}"] = False
+
         elif "REINA" in mid or "HELADA" in mid:
             pass
 

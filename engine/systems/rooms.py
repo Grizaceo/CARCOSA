@@ -14,10 +14,18 @@ def on_player_enters_room(state: GameState, pid: PlayerId, room: RoomId) -> None
     if room not in state.rooms:
         return
 
+    p = state.players[pid]
+
+    # Si está atrapado específicamente por el Viejo del Saco, no se disparan efectos de entrada
+    for st in getattr(p, "statuses", []):
+        if st.status_id == "TRAPPED":
+            src = (st.metadata or {}).get("source_monster_id", "")
+            if "VIEJO" in src or "SACK" in src:
+                return
+
     # FASE 1: Habilidad PSYCHIC - Scry 2
     # Ver/reordenar 2 cartas top.
     # Heurística: Monstruo al fondo (-2), Otros arriba (-1).
-    p = state.players[pid]
     if getattr(p, "role_id", "") == "PSYCHIC":
         deck = active_deck_for_room(state, room)
         if deck and deck.remaining() >= 2:

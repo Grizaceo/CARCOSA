@@ -15,6 +15,7 @@ from engine.board import corridor_id, room_id, is_corridor
 from engine.transition import step
 from engine.legality import get_legal_actions
 from sim.policies import get_king_policy, get_player_policy
+from sim.memory import create_team_memory, create_bot_memories, TeamMemory
 from sim.metrics import transition_record, write_jsonl
 
 
@@ -248,6 +249,14 @@ def run_episode(
     }
     prev_status_counts = _status_counts(state)
 
+    # === Sistema de Memoria de Cartas ===
+    team_memory = create_team_memory()
+    bot_memories = create_bot_memories([str(pid) for pid in state.players.keys()])
+    team_memory.sync_from_state(state)
+    # Pasar memoria a la policy si la soporta
+    if hasattr(ppol, 'set_memory'):
+        ppol.set_memory(team_memory, bot_memories)
+
     while step_idx < max_steps and not state.game_over:
         # Check for Sacrifice Interrupt
         pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
@@ -325,6 +334,39 @@ def run_episode(
             _bump(episode_stats["sacrifice"]["keys_destroyed_by"], str(who), keys_delta)
             source = state.last_sanity_loss_event or "UNKNOWN"
             _bump(episode_stats["sacrifice"]["keys_destroyed_sources"], str(source), keys_delta)
+
+        # === Memory System Updates ===
+        # Sincronizar posiciones de boxes después de rotación (KING_ENDROUND)
+        if action.type == ActionType.KING_ENDROUND:
+            team_memory.sync_from_state(next_state)
+            team_memory.age_all_memories(bot_memories)
+            # Re-optimizar asignaciones con memorias envejecidas
+            team_memory.optimize_assignments(bot_memories)
+        
+        # Detectar carta revelada por SEARCH
+        if action.type == ActionType.SEARCH and actor in state.players:
+            from sim.memory import CardMemory, card_priority
+            pid_actor = PlayerId(actor)
+            p = state.players[pid_actor]
+            # Obtener box_id de la habitación actual
+            box_id = state.box_at_room.get(p.room)
+            if box_id:
+                # Obtener posición actual del deck antes de SEARCH
+                from engine.boxes import active_deck_for_room
+                old_deck = active_deck_for_room(state, p.room)
+                if old_deck and old_deck.top < len(old_deck.cards):
+                    revealed_card = old_deck.cards[old_deck.top]
+                    priority = card_priority(str(revealed_card))
+                    card_mem = CardMemory(
+                        card_id=str(revealed_card),
+                        box_id=str(box_id),
+                        position_in_deck=old_deck.top,
+                        priority=priority
+                    )
+                    # Compartir con el equipo
+                    team_memory.share_card(card_mem, from_player=actor)
+                    # Re-optimizar quién recuerda qué
+                    team_memory.optimize_assignments(bot_memories)
 
         next_status_counts = _status_counts(next_state)
         for st, count in next_status_counts.items():

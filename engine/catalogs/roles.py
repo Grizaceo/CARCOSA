@@ -38,8 +38,8 @@ ROLE_CATALOG = {
         sanity_max=7,
         key_slots=1,
         object_slots=3,
-        ability_id="BLOCK_MEDITATION",
-        ability_description="OTROS no pueden meditar en su habitación"
+        ability_id="PROTECT_ALLY",
+        ability_description="Puede recibir daño en lugar de aliados en mismo nodo. +1 escudo al inicio de ronda."
     ),
     
     "HIGH_ROLLER": RoleDefinition(
