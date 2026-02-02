@@ -1,0 +1,26 @@
+{
+  "exp_id": "20260202_163226_c8d35bda_smoke",
+  "tag": "smoke",
+  "timestamp": "20260202_163226",
+  "git": {
+    "commit": "a9d971bb",
+    "branch": "main"
+  },
+  "config_hash": "c8d35bda",
+  "config_path": "C:\\Users\\usuario\\AppData\\Local\\Temp\\pytest-of-usuario\\pytest-0\\test_smoke_pipeline0\\exp_smoke.yaml",
+  "config_resolved_path": "reports\\20260202_163226_c8d35bda_smoke\\config.resolved.yaml",
+  "paths": {
+    "runs_dir": "runs\\20260202_163226_c8d35bda_smoke"
+  },
+  "simulation": {
+    "policy": null,
+    "policy_kwargs": null,
+    "seeds": [
+      1
+    ],
+    "max_steps": 50
+  },
+  "results": {},
+  "status": "failed",
+  "error": "Command failed: tools/ai_ready_export.py --input runs\\20260202_163226_c8d35bda_smoke\\*.jsonl --mode bc --output reports\\20260202_163226_c8d35bda_smoke\\bc_smoke.csv"
+}

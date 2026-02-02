@@ -1,0 +1,28 @@
+eval:
+  enabled: true
+  max_steps: 50
+  n_episodes: 1
+experiment:
+  data_root: data
+  models_root: models
+  output_root: reports
+  runs_root: runs
+  tag: smoke
+export:
+  enabled: true
+  exporter: ai_ready
+  out_csv: bc_smoke.csv
+simulation:
+  max_steps: 50
+  policy: mcts
+  policy_kwargs:
+    mcts_sims: 50
+  seeds:
+  - 1
+train:
+  bc:
+    batch_size: 8
+    epochs: 1
+    lr: 0.001
+  device: cpu
+  mode: bc
