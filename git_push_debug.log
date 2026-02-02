@@ -1,0 +1,293 @@
+﻿git : 15:27:31.939825 exec-cmd.c:266          trace: resolved executable dir: C:/Program 
+Files/Git/mingw64/bin
+En línea: 1 Carácter: 44
++ ... T_TRACE=1; $env:GIT_CURL_VERBOSE=1; git push origin main 2>&1 | Out-F ...
++                                         ~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (15:27:31.939825...Git/mingw64/bin:String) [], R 
+   emoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+15:27:31.960621 git.c:502               trace: built-in: git push origin main
+15:27:31.967503 run-command.c:674       trace: run_command: GIT_DIR=.git git remote-https 
+origin https://github.com/Grizaceo/CARCOSA.git
+15:27:31.967503 run-command.c:935       trace: start_command: git remote-https origin 
+https://github.com/Grizaceo/CARCOSA.git
+15:27:31.989307 exec-cmd.c:266          trace: resolved executable dir: C:/Program 
+Files/Git/mingw64/libexec/git-core
+15:27:32.004295 git.c:807               trace: exec: git-remote-https origin 
+https://github.com/Grizaceo/CARCOSA.git
+15:27:32.004295 run-command.c:674       trace: run_command: git-remote-https origin 
+https://github.com/Grizaceo/CARCOSA.git
+15:27:32.004295 run-command.c:935       trace: start_command: git-remote-https origin 
+https://github.com/Grizaceo/CARCOSA.git
+15:27:32.021686 exec-cmd.c:266          trace: resolved executable dir: C:/Program 
+Files/Git/mingw64/libexec/git-core
+15:27:32.057947 http.c:915              == Info: Couldn't find host github.com in the .netrc 
+file; using defaults
+15:27:32.073159 http.c:915              == Info: Host github.com:443 was resolved.
+15:27:32.073159 http.c:915              == Info: IPv6: (none)
+15:27:32.073159 http.c:915              == Info: IPv4: 4.228.31.150
+15:27:32.073159 http.c:915              == Info:   Trying 4.228.31.150:443...
+15:27:32.076166 http.c:915              == Info: schannel: disabled automatic use of client 
+certificate
+15:27:32.076166 http.c:915              == Info: ALPN: curl offers http/1.1
+15:27:32.196707 http.c:915              == Info: ALPN: server accepted http/1.1
+15:27:32.196707 http.c:915              == Info: Established connection to github.com 
+(4.228.31.150 port 443) from 10.5.0.2 port 11297 
+15:27:32.196707 http.c:915              == Info: using HTTP/1.x
+15:27:32.196707 http.c:862              => Send header, 0000000198 bytes (0x000000c6)
+15:27:32.196707 http.c:874              => Send header: GET 
+/Grizaceo/CARCOSA.git/info/refs?service=git-receive-pack HTTP/1.1
+15:27:32.196707 http.c:874              => Send header: Host: github.com
+15:27:32.196707 http.c:874              => Send header: User-Agent: git/2.51.1.windows.1
+15:27:32.196707 http.c:874              => Send header: Accept: */*
+15:27:32.196707 http.c:874              => Send header: Accept-Encoding: deflate, gzip, br, 
+zstd
+15:27:32.197213 http.c:874              => Send header: Pragma: no-cache
+15:27:32.197213 http.c:874              => Send header:
+15:27:32.197213 http.c:915              == Info: Request completely sent off
+15:27:32.255112 http.c:915              == Info: schannel: remote party requests 
+renegotiation
+15:27:32.255112 http.c:915              == Info: schannel: renegotiating SSL/TLS connection
+15:27:32.255617 http.c:915              == Info: schannel: SSL/TLS connection renegotiated
+15:27:32.255617 http.c:915              == Info: schannel: remote party requests 
+renegotiation
+15:27:32.255617 http.c:915              == Info: schannel: renegotiating SSL/TLS connection
+15:27:32.255617 http.c:915              == Info: schannel: SSL/TLS connection renegotiated
+15:27:32.381412 http.c:862              <= Recv header, 0000000027 bytes (0x0000001b)
+15:27:32.381412 http.c:874              <= Recv header: HTTP/1.1 401 Unauthorized
+15:27:32.381412 http.c:862              <= Recv header, 0000000026 bytes (0x0000001a)
+15:27:32.381412 http.c:874              <= Recv header: Server: GitHub-Babel/3.0
+15:27:32.381412 http.c:862              <= Recv header, 0000000054 bytes (0x00000036)
+15:27:32.381412 http.c:874              <= Recv header: Content-Security-Policy: default-src 
+'none'; sandbox
+15:27:32.381412 http.c:862              <= Recv header, 0000000041 bytes (0x00000029)
+15:27:32.381412 http.c:874              <= Recv header: Content-Type: text/plain; 
+charset=UTF-8
+15:27:32.381412 http.c:862              <= Recv header, 0000000040 bytes (0x00000028)
+15:27:32.381412 http.c:874              <= Recv header: www-authenticate: Basic 
+realm="GitHub"
+15:27:32.381412 http.c:862              <= Recv header, 0000000020 bytes (0x00000014)
+15:27:32.381412 http.c:874              <= Recv header: Content-Length: 26
+15:27:32.381412 http.c:862              <= Recv header, 0000000037 bytes (0x00000025)
+15:27:32.381412 http.c:874              <= Recv header: Date: Thu, 29 Jan 2026 18:27:32 GMT
+15:27:32.381412 http.c:862              <= Recv header, 0000000023 bytes (0x00000017)
+15:27:32.381412 http.c:874              <= Recv header: X-Frame-Options: DENY
+15:27:32.381412 http.c:862              <= Recv header, 0000000073 bytes (0x00000049)
+15:27:32.381412 http.c:874              <= Recv header: Strict-Transport-Security: 
+max-age=31536000; includeSubDomains; preload
+15:27:32.381412 http.c:862              <= Recv header, 0000000057 bytes (0x00000039)
+15:27:32.381412 http.c:874              <= Recv header: X-GitHub-Request-Id: 
+5DB4:25F3AF:5F77D1:68CF67:697BA694
+15:27:32.381412 http.c:862              <= Recv header, 0000000002 bytes (0x00000002)
+15:27:32.381412 http.c:874              <= Recv header:
+15:27:32.381412 http.c:915              == Info: Connection #0 to host github.com:443 left 
+intact
+15:27:32.381412 run-command.c:674       trace: run_command: 'git credential-manager get'
+15:27:32.382929 run-command.c:935       trace: start_command: 'C:/Program 
+Files/Git/usr/bin/sh.exe' -c 'git credential-manager get' 'git credential-manager get'
+15:27:32.456222 exec-cmd.c:266          trace: resolved executable dir: C:/Program 
+Files/Git/mingw64/libexec/git-core
+15:27:32.472318 git.c:807               trace: exec: git-credential-manager get
+15:27:32.472318 run-command.c:674       trace: run_command: git-credential-manager get
+15:27:32.472318 run-command.c:935       trace: start_command: git-credential-manager get
+15:27:32.604344 exec-cmd.c:266          trace: resolved executable dir: C:/Program 
+Files/Git/mingw64/libexec/git-core
+15:27:32.617404 git.c:502               trace: built-in: git config --null --list
+15:27:32.807890 http.c:915              == Info: Reusing existing https: connection with 
+host github.com
+15:27:32.807890 http.c:915              == Info: Server auth using Basic with user 
+'cristoe4-jpg'
+15:27:32.807890 http.c:862              => Send header, 0000000293 bytes (0x00000125)
+15:27:32.807890 http.c:874              => Send header: GET 
+/Grizaceo/CARCOSA.git/info/refs?service=git-receive-pack HTTP/1.1
+15:27:32.807890 http.c:874              => Send header: Host: github.com
+15:27:32.807890 http.c:874              => Send header: Authorization: Basic <redacted>
+15:27:32.807890 http.c:874              => Send header: User-Agent: git/2.51.1.windows.1
+15:27:32.807890 http.c:874              => Send header: Accept: */*
+15:27:32.807890 http.c:874              => Send header: Accept-Encoding: deflate, gzip, br, 
+zstd
+15:27:32.807890 http.c:874              => Send header: Pragma: no-cache
+15:27:32.807890 http.c:874              => Send header:
+15:27:32.807890 http.c:915              == Info: Request completely sent off
+15:27:33.042826 http.c:862              <= Recv header, 0000000017 bytes (0x00000011)
+15:27:33.042826 http.c:874              <= Recv header: HTTP/1.1 200 OK
+15:27:33.042826 http.c:862              <= Recv header, 0000000026 bytes (0x0000001a)
+15:27:33.042826 http.c:874              <= Recv header: Server: GitHub-Babel/3.0
+15:27:33.042826 http.c:862              <= Recv header, 0000000060 bytes (0x0000003c)
+15:27:33.042826 http.c:874              <= Recv header: Content-Type: 
+application/x-git-receive-pack-advertisement
+15:27:33.042826 http.c:862              <= Recv header, 0000000054 bytes (0x00000036)
+15:27:33.042826 http.c:874              <= Recv header: Content-Security-Policy: default-src 
+'none'; sandbox
+15:27:33.042826 http.c:862              <= Recv header, 0000000040 bytes (0x00000028)
+15:27:33.042826 http.c:874              <= Recv header: expires: Fri, 01 Jan 1980 00:00:00 
+GMT
+15:27:33.042826 http.c:862              <= Recv header, 0000000018 bytes (0x00000012)
+15:27:33.042826 http.c:874              <= Recv header: pragma: no-cache
+15:27:33.042826 http.c:862              <= Recv header, 0000000053 bytes (0x00000035)
+15:27:33.042826 http.c:874              <= Recv header: Cache-Control: no-cache, max-age=0, 
+must-revalidate
+15:27:33.042826 http.c:862              <= Recv header, 0000000023 bytes (0x00000017)
+15:27:33.042826 http.c:874              <= Recv header: Vary: Accept-Encoding
+15:27:33.042826 http.c:862              <= Recv header, 0000000028 bytes (0x0000001c)
+15:27:33.042826 http.c:874              <= Recv header: Transfer-Encoding: chunked
+15:27:33.042826 http.c:862              <= Recv header, 0000000037 bytes (0x00000025)
+15:27:33.042826 http.c:874              <= Recv header: Date: Thu, 29 Jan 2026 18:27:32 GMT
+15:27:33.042826 http.c:862              <= Recv header, 0000000023 bytes (0x00000017)
+15:27:33.042826 http.c:874              <= Recv header: X-Frame-Options: DENY
+15:27:33.042826 http.c:862              <= Recv header, 0000000073 bytes (0x00000049)
+15:27:33.042826 http.c:874              <= Recv header: Strict-Transport-Security: 
+max-age=31536000; includeSubDomains; preload
+15:27:33.042826 http.c:862              <= Recv header, 0000000057 bytes (0x00000039)
+15:27:33.042826 http.c:874              <= Recv header: X-GitHub-Request-Id: 
+5DB4:25F3AF:5F78D1:68D06C:697BA694
+15:27:33.042826 http.c:862              <= Recv header, 0000000002 bytes (0x00000002)
+15:27:33.042826 http.c:874              <= Recv header:
+15:27:33.042826 http.c:915              == Info: Connection #0 to host github.com:443 left 
+intact
+15:27:33.042826 run-command.c:674       trace: run_command: 'git credential-manager store'
+15:27:33.043891 run-command.c:935       trace: start_command: 'C:/Program 
+Files/Git/usr/bin/sh.exe' -c 'git credential-manager store' 'git credential-manager store'
+15:27:33.119881 exec-cmd.c:266          trace: resolved executable dir: C:/Program 
+Files/Git/mingw64/libexec/git-core
+15:27:33.130667 git.c:807               trace: exec: git-credential-manager store
+15:27:33.130667 run-command.c:674       trace: run_command: git-credential-manager store
+15:27:33.130667 run-command.c:935       trace: start_command: git-credential-manager store
+15:27:33.255066 exec-cmd.c:266          trace: resolved executable dir: C:/Program 
+Files/Git/mingw64/libexec/git-core
+15:27:33.267523 git.c:502               trace: built-in: git config --null --list
+15:27:33.433889 run-command.c:674       trace: run_command: git send-pack --stateless-rpc 
+--helper-status --thin --no-progress https://github.com/Grizaceo/CARCOSA.git/ --stdin
+15:27:33.433889 run-command.c:935       trace: start_command: git send-pack --stateless-rpc 
+--helper-status --thin --no-progress https://github.com/Grizaceo/CARCOSA.git/ --stdin
+15:27:33.450564 exec-cmd.c:266          trace: resolved executable dir: C:/Program 
+Files/Git/mingw64/libexec/git-core
+15:27:33.466469 git.c:502               trace: built-in: git send-pack --stateless-rpc 
+--helper-status --thin --no-progress https://github.com/Grizaceo/CARCOSA.git/ --stdin
+15:27:33.476589 run-command.c:674       trace: run_command: git pack-objects 
+--all-progress-implied --revs --stdout --thin --delta-base-offset -q
+15:27:33.476589 run-command.c:935       trace: start_command: git pack-objects 
+--all-progress-implied --revs --stdout --thin --delta-base-offset -q
+15:27:33.494197 exec-cmd.c:266          trace: resolved executable dir: C:/Program 
+Files/Git/mingw64/libexec/git-core
+15:27:33.507650 git.c:502               trace: built-in: git pack-objects 
+--all-progress-implied --revs --stdout --thin --delta-base-offset -q
+15:27:33.844513 http.c:915              == Info: Reusing existing https: connection with 
+host github.com
+15:27:33.844513 http.c:915              == Info: Server auth using Basic with user 
+'cristoe4-jpg'
+15:27:33.844513 http.c:862              => Send header, 0000000323 bytes (0x00000143)
+15:27:33.844513 http.c:874              => Send header: POST 
+/Grizaceo/CARCOSA.git/git-receive-pack HTTP/1.1
+15:27:33.844513 http.c:874              => Send header: Host: github.com
+15:27:33.844513 http.c:874              => Send header: Authorization: Basic <redacted>
+15:27:33.844513 http.c:874              => Send header: User-Agent: git/2.51.1.windows.1
+15:27:33.844513 http.c:874              => Send header: Content-Type: 
+application/x-git-receive-pack-request
+15:27:33.844513 http.c:874              => Send header: Accept: 
+application/x-git-receive-pack-result
+15:27:33.844513 http.c:874              => Send header: Content-Length: 4
+15:27:33.844513 http.c:874              => Send header:
+15:27:33.844513 http.c:915              == Info: upload completely sent off: 4 bytes
+15:27:34.067531 http.c:862              <= Recv header, 0000000017 bytes (0x00000011)
+15:27:34.067531 http.c:874              <= Recv header: HTTP/1.1 200 OK
+15:27:34.067531 http.c:862              <= Recv header, 0000000026 bytes (0x0000001a)
+15:27:34.067531 http.c:874              <= Recv header: Server: GitHub-Babel/3.0
+15:27:34.067531 http.c:862              <= Recv header, 0000000053 bytes (0x00000035)
+15:27:34.067531 http.c:874              <= Recv header: Content-Type: 
+application/x-git-receive-pack-result
+15:27:34.067531 http.c:862              <= Recv header, 0000000054 bytes (0x00000036)
+15:27:34.067531 http.c:874              <= Recv header: Content-Security-Policy: default-src 
+'none'; sandbox
+15:27:34.067531 http.c:862              <= Recv header, 0000000040 bytes (0x00000028)
+15:27:34.067531 http.c:874              <= Recv header: expires: Fri, 01 Jan 1980 00:00:00 
+GMT
+15:27:34.067531 http.c:862              <= Recv header, 0000000018 bytes (0x00000012)
+15:27:34.067531 http.c:874              <= Recv header: pragma: no-cache
+15:27:34.067531 http.c:862              <= Recv header, 0000000053 bytes (0x00000035)
+15:27:34.067531 http.c:874              <= Recv header: Cache-Control: no-cache, max-age=0, 
+must-revalidate
+15:27:34.067531 http.c:862              <= Recv header, 0000000023 bytes (0x00000017)
+15:27:34.067531 http.c:874              <= Recv header: Vary: Accept-Encoding
+15:27:34.067531 http.c:862              <= Recv header, 0000000019 bytes (0x00000013)
+15:27:34.067531 http.c:874              <= Recv header: Content-Length: 0
+15:27:34.067531 http.c:862              <= Recv header, 0000000037 bytes (0x00000025)
+15:27:34.067531 http.c:874              <= Recv header: Date: Thu, 29 Jan 2026 18:27:33 GMT
+15:27:34.067531 http.c:862              <= Recv header, 0000000023 bytes (0x00000017)
+15:27:34.067531 http.c:874              <= Recv header: X-Frame-Options: DENY
+15:27:34.067531 http.c:862              <= Recv header, 0000000073 bytes (0x00000049)
+15:27:34.067531 http.c:874              <= Recv header: Strict-Transport-Security: 
+max-age=31536000; includeSubDomains; preload
+15:27:34.067531 http.c:862              <= Recv header, 0000000057 bytes (0x00000039)
+15:27:34.067531 http.c:874              <= Recv header: X-GitHub-Request-Id: 
+5DB4:25F3AF:5F7A54:68D240:697BA694
+15:27:34.067531 http.c:862              <= Recv header, 0000000002 bytes (0x00000002)
+15:27:34.067531 http.c:874              <= Recv header:
+15:27:34.067531 http.c:915              == Info: Connection #0 to host github.com:443 left 
+intact
+15:27:34.067531 http.c:915              == Info: Reusing existing https: connection with 
+host github.com
+15:27:34.067531 http.c:915              == Info: Server auth using Basic with user 
+'cristoe4-jpg'
+15:27:34.067531 http.c:862              => Send header, 0000000374 bytes (0x00000176)
+15:27:34.067531 http.c:874              => Send header: POST 
+/Grizaceo/CARCOSA.git/git-receive-pack HTTP/1.1
+15:27:34.067531 http.c:874              => Send header: Host: github.com
+15:27:34.067531 http.c:874              => Send header: Authorization: Basic <redacted>
+15:27:34.067531 http.c:874              => Send header: User-Agent: git/2.51.1.windows.1
+15:27:34.067531 http.c:874              => Send header: Accept-Encoding: deflate, gzip, br, 
+zstd
+15:27:34.067531 http.c:874              => Send header: Transfer-Encoding: chunked
+15:27:34.067531 http.c:874              => Send header: Content-Type: 
+application/x-git-receive-pack-request
+15:27:34.067531 http.c:874              => Send header: Accept: 
+application/x-git-receive-pack-result
+15:27:34.067531 http.c:874              => Send header:
+15:27:45.541153 http.c:915              == Info: upload completely sent off: 130450962 bytes
+15:27:46.654952 http.c:862              <= Recv header, 0000000017 bytes (0x00000011)
+15:27:46.654952 http.c:874              <= Recv header: HTTP/1.1 200 OK
+15:27:46.654952 http.c:862              <= Recv header, 0000000026 bytes (0x0000001a)
+15:27:46.654952 http.c:874              <= Recv header: Server: GitHub-Babel/3.0
+15:27:46.654952 http.c:862              <= Recv header, 0000000053 bytes (0x00000035)
+15:27:46.654952 http.c:874              <= Recv header: Content-Type: 
+application/x-git-receive-pack-result
+15:27:46.654952 http.c:862              <= Recv header, 0000000054 bytes (0x00000036)
+15:27:46.654952 http.c:874              <= Recv header: Content-Security-Policy: default-src 
+'none'; sandbox
+15:27:46.654952 http.c:862              <= Recv header, 0000000040 bytes (0x00000028)
+15:27:46.654952 http.c:874              <= Recv header: expires: Fri, 01 Jan 1980 00:00:00 
+GMT
+15:27:46.654952 http.c:862              <= Recv header, 0000000018 bytes (0x00000012)
+15:27:46.654952 http.c:874              <= Recv header: pragma: no-cache
+15:27:46.654952 http.c:862              <= Recv header, 0000000053 bytes (0x00000035)
+15:27:46.654952 http.c:874              <= Recv header: Cache-Control: no-cache, max-age=0, 
+must-revalidate
+15:27:46.654952 http.c:862              <= Recv header, 0000000023 bytes (0x00000017)
+15:27:46.654952 http.c:874              <= Recv header: Vary: Accept-Encoding
+15:27:46.654952 http.c:862              <= Recv header, 0000000028 bytes (0x0000001c)
+15:27:46.654952 http.c:874              <= Recv header: Transfer-Encoding: chunked
+15:27:46.654952 http.c:862              <= Recv header, 0000000037 bytes (0x00000025)
+15:27:46.654952 http.c:874              <= Recv header: Date: Thu, 29 Jan 2026 18:27:45 GMT
+15:27:46.654952 http.c:862              <= Recv header, 0000000023 bytes (0x00000017)
+15:27:46.654952 http.c:874              <= Recv header: X-Frame-Options: DENY
+15:27:46.654952 http.c:862              <= Recv header, 0000000073 bytes (0x00000049)
+15:27:46.654952 http.c:874              <= Recv header: Strict-Transport-Security: 
+max-age=31536000; includeSubDomains; preload
+15:27:46.654952 http.c:862              <= Recv header, 0000000057 bytes (0x00000039)
+15:27:46.654952 http.c:874              <= Recv header: X-GitHub-Request-Id: 
+5DB4:25F3AF:5F7ACC:68D2B1:697BA695
+15:27:46.654952 http.c:862              <= Recv header, 0000000002 bytes (0x00000002)
+15:27:46.654952 http.c:874              <= Recv header:
+15:27:47.356606 http.c:915              == Info: Connection #0 to host github.com:443 left 
+intact
+remote: error: Trace: 33d86350f32143647ad97fd9646ed155b580bf7c967f1138aea37e6005007f2b       
+ 
+remote: error: See https://gh.io/lfs for more information.        
+remote: error: File venv/Lib/site-packages/torch/lib/torch_cpu.dll is 252.67 MB; this 
+exceeds GitHub's file size limit of 100.00 MB        
+remote: error: GH001: Large files detected. You may want to try Git Large File Storage - 
+https://git-lfs.github.com.        
+To https://github.com/Grizaceo/CARCOSA.git
+ ! [remote rejected]   main -> main (pre-receive hook declined)
+error: failed to push some refs to 'https://github.com/Grizaceo/CARCOSA.git'
