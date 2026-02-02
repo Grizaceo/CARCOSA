@@ -1,0 +1,36 @@
+{
+  "exp_id": "20260202_171125_91096f6a_smoke",
+  "tag": "smoke",
+  "timestamp": "20260202_171125",
+  "git": {
+    "commit": "a9d971bb",
+    "branch": "main"
+  },
+  "config_hash": "91096f6a",
+  "config_path": "configs\\experiment.smoke.yaml",
+  "config_resolved_path": "reports\\20260202_171125_91096f6a_smoke\\config.resolved.yaml",
+  "paths": {
+    "runs_dir": "runs\\20260202_171125_91096f6a_smoke",
+    "dataset_path": "reports\\20260202_171125_91096f6a_smoke\\bc_smoke.csv",
+    "model_path": null
+  },
+  "simulation": {
+    "policy": "mcts",
+    "policy_kwargs": {
+      "mcts_sims": 50
+    },
+    "seeds": [
+      1
+    ],
+    "max_steps": 50
+  },
+  "results": {
+    "winrate": 0.0,
+    "avg_steps": 49.0,
+    "avg_keys_end": 1.0,
+    "avg_sanity_end": -1.0,
+    "n_runs": 1
+  },
+  "status": "ok",
+  "error": null
+}

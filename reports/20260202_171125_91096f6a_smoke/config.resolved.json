@@ -1,0 +1,38 @@
+{
+  "experiment": {
+    "tag": "smoke",
+    "output_root": "reports",
+    "runs_root": "runs",
+    "data_root": "data",
+    "models_root": "models"
+  },
+  "simulation": {
+    "seeds": [
+      1
+    ],
+    "max_steps": 50,
+    "policy": "mcts",
+    "policy_kwargs": {
+      "mcts_sims": 50
+    }
+  },
+  "export": {
+    "enabled": true,
+    "exporter": "ai_ready",
+    "out_csv": "bc_smoke.csv"
+  },
+  "train": {
+    "mode": "bc",
+    "device": "cpu",
+    "bc": {
+      "epochs": 1,
+      "batch_size": 8,
+      "lr": 0.001
+    }
+  },
+  "eval": {
+    "enabled": true,
+    "n_episodes": 1,
+    "max_steps": 50
+  }
+}

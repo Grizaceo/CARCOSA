@@ -249,6 +249,33 @@ pytest tests/test_p0_canon.py::TestP04MinusFiveEvent -v
 pytest tests/test_p0_canon.py::TestP05KingPresenceDamage -v
 ```
 
+## Windows (venv) End-to-End (Experiment pipeline)
+
+This short section shows how to run an end-to-end reproducible experiment on Windows (native venv, CPU). It uses the new `tools/experiment.py` orchestrator.
+
+1. Create and activate venv (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+python -m pip install pyyaml
+```
+
+2. Run the default experiment (this runs simulation -> export -> train (BC) -> eval -> index):
+
+```powershell
+python tools\experiment.py --config configs\experiment.default.yaml
+```
+
+3. Inspect results:
+
+- Summary and artifacts: `reports/<exp_id>/summary.json` and `reports/<exp_id>/summary.md`
+- Index of experiments: `reports/experiments.csv`
+
+4. Optional: run a smoke experiment (quick, CPU) by creating a small YAML and running the same script; see `tests/test_smoke_pipeline.py` for an example.
+
+
 ## Command Usage Format (for future edits)
 When adding or editing commands in this README, always include both variants and keep Windows and WSL paths separate.
 

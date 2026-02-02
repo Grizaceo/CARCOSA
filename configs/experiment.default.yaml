@@ -1,0 +1,36 @@
+experiment:
+  tag: "default"
+  output_root: "reports"
+  runs_root: "runs"
+  data_root: "data"
+  models_root: "models"
+
+simulation:
+  n_episodes: 50
+  seeds: [1,2,3,4,5]
+  max_steps: 300
+  policy: "mcts"
+  policy_kwargs:
+    mcts_sims: 200
+    c_puct: 1.25
+
+export:
+  enabled: true
+  exporter: "ai_ready"
+  out_csv: "bc_training_generated.csv"
+
+train:
+  mode: "bc"
+  device: "auto"
+  bc:
+    epochs: 5
+    batch_size: 256
+    lr: 0.0003
+  rl:
+    timesteps: 20000
+
+eval:
+  enabled: true
+  n_episodes: 50
+  max_steps: 300
+  policy: "trained"

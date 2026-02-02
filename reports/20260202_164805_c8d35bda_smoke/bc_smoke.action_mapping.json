@@ -1,0 +1,11 @@
+{
+  "MOVE": 0,
+  "ACCEPT_SACRIFICE": 1,
+  "MEDITATE": 2,
+  "END_TURN": 3,
+  "USE_HEALER_HEAL": 4,
+  "SEARCH": 5,
+  "PEEK_ROOM_DECK": 6,
+  "DISCARD_SANIDAD": 7,
+  "SKIP_PEEK": 8
+}

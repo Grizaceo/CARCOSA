@@ -1,0 +1,27 @@
+{
+  "exp_id": "20260202_164433_c8d35bda_smoke",
+  "tag": "smoke",
+  "timestamp": "20260202_164433",
+  "git": {
+    "commit": "a9d971bb",
+    "branch": "main"
+  },
+  "config_hash": "c8d35bda",
+  "config_path": "temp_smoke.yaml",
+  "config_resolved_path": "reports\\20260202_164433_c8d35bda_smoke\\config.resolved.yaml",
+  "paths": {
+    "runs_dir": "runs\\20260202_164433_c8d35bda_smoke",
+    "dataset_path": "reports\\20260202_164433_c8d35bda_smoke\\bc_smoke.csv"
+  },
+  "simulation": {
+    "policy": null,
+    "policy_kwargs": null,
+    "seeds": [
+      1
+    ],
+    "max_steps": 50
+  },
+  "results": {},
+  "status": "failed",
+  "error": "Command failed: train/train_bc.py --data reports\\20260202_164433_c8d35bda_smoke\\bc_smoke.csv --epochs 1 --batch-size 8 --lr 0.001 --save-dir reports\\20260202_164433_c8d35bda_smoke\\models --log-dir reports\\20260202_164433_c8d35bda_smoke\\runs --device cpu"
+}
