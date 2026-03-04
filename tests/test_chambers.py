@@ -35,22 +35,23 @@ def test_attach_tale_logic():
     assert s.flags.get("TALE_ATTACHED_TALE_REPAIRER")
 
 def test_vanish_trigger():
-    """Verifica que al unir el 4to cuento se activa el Vanish por 4 turnos."""
-    s = create_base_state()
-    p = s.players["P1"]
-    
-    # Setup: Ya tiene 3 cuentos unidos
-    s.chambers_tales_attached = 3
-    p.objects.append("TALE_SIGN") # El 4to
-    p.objects.append("BOOK_CHAMBERS") # Requisito para la acción
-    
-    action = Action(actor="P1", type=ActionType.USE_ATTACH_TALE, data={"tale_id": "TALE_SIGN"})
-    s = step(s, action, RNG(0), Config())
-    
-    assert s.chambers_tales_attached == 4
-    assert s.king_vanished_turns == 4
-    # Check log
-    assert any(log.get("event") == "KING_VANISHED" for log in s.action_log)
+    """Verifica que cada cuento activa Vanish por N rondas (N = número de cuentos unidos)."""
+    tales = ["TALE_REPAIRER", "TALE_MASK", "TALE_DRAGON", "TALE_SIGN"]
+
+    for i, tale_id in enumerate(tales):
+        s = create_base_state()
+        p = s.players["P1"]
+        s.chambers_tales_attached = i  # ya tiene i cuentos unidos
+        p.objects.append(tale_id)
+        p.objects.append("BOOK_CHAMBERS")
+
+        action = Action(actor="P1", type=ActionType.USE_ATTACH_TALE, data={"tale_id": tale_id})
+        s = step(s, action, RNG(0), Config())
+
+        expected = i + 1
+        assert s.chambers_tales_attached == expected, f"Tale {i+1}: chambers_tales_attached debe ser {expected}"
+        assert s.king_vanished_turns == expected, f"Tale {i+1}: king_vanished_turns debe ser {expected}"
+        assert any(log.get("event") == "KING_VANISHED" for log in s.action_log), f"Tale {i+1}: debe haber log KING_VANISHED"
 
 def test_king_vanish_skips_phase():
     """Verifica que si king_vanished_turns > 0, se salta la fase del Rey."""

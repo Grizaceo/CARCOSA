@@ -396,9 +396,10 @@ def run_episode(
         step_idx += 1
 
     if out_path is None:
-        Path("runs").mkdir(exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_path = f"runs/run_{policy_name}_seed{seed}_{ts}.jsonl"
+        session_dir = Path("runs") / f"{ts}_{policy_name}"
+        session_dir.mkdir(parents=True, exist_ok=True)
+        out_path = str(session_dir / f"seed{seed}.jsonl")
 
     write_jsonl(out_path, records)
     role_draw_mode = getattr(cfg, "ROLE_DRAW_MODE", "FIXED")

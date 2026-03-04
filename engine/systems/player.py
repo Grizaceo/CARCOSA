@@ -83,7 +83,12 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
         apply_sacrifice_choice(s, pid, cfg, action.data)
 
     elif action.type == ActionType.ESCAPE_TRAPPED:
-        d6 = rng.randint(1, 6)
+        from engine.roles import can_use_double_roll
+        if can_use_double_roll(p, p.double_roll_used_this_turn):
+            d6 = rng.randint(1, 6) + rng.randint(1, 6)
+            p.double_roll_used_this_turn = True
+        else:
+            d6 = rng.randint(1, 6)
         total = d6 + p.sanity
         s.action_log.append({"event": "ESCAPE_ATTEMPT", "d6": d6, "sanity": p.sanity, "total": total, "success": total >= 3})
 
@@ -127,9 +132,8 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
             p.objects.remove(tale_id)
             s.chambers_tales_attached += 1
             s.flags[f"TALE_ATTACHED_{tale_id}"] = True
-            if s.chambers_tales_attached >= 4:
-                s.king_vanished_turns = 4
-                s.action_log.append({"event": "KING_VANISHED", "turns": 4})
+            s.king_vanished_turns = s.chambers_tales_attached
+            s.action_log.append({"event": "KING_VANISHED", "turns": s.chambers_tales_attached})
 
     elif action.type == ActionType.USE_HEALER_HEAL:
         apply_sanity_loss(s, p, 1, source="HEALER_ABILITY", cfg=cfg)
