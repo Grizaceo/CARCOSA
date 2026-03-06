@@ -13,6 +13,7 @@ Uso con StableBaselines3:
 """
 
 from typing import Tuple, Dict, Any, Optional, List
+import math
 import numpy as np
 
 import gymnasium as gym
@@ -29,6 +30,7 @@ from engine.transition import step
 from engine.legality import get_legal_actions
 from engine.actions import Action, ActionType
 from engine.tension import compute_features, tension_T
+from sim.memory import PRIORITY_EVENT, PRIORITY_KEY, PRIORITY_MONSTER, PRIORITY_OMEN, PRIORITY_TREASURE, card_priority
 from sim.runner import make_smoke_state
 
 
@@ -70,17 +72,27 @@ class CarcosaEnv(gym.Env):
         ActionType.USE_CAMARA_LETAL_RITUAL,
         ActionType.USE_TABERNA_ROOMS,
         ActionType.USE_SALON_BELLEZA,
+        ActionType.PEEK_ROOM_DECK,
+        ActionType.SKIP_PEEK,
     ]
     
     def __init__(
-        self, 
-        seed: int = None, 
+        self,
+        seed: int = None,
         render_mode: str = None,
-        max_steps: int = 500,
+        max_steps: int = 2000,
         reward_win: float = 100.0,
         reward_lose: float = -10.0,
-        reward_key: float = 1.0,
-        reward_sanity_loss: float = -0.1,
+        reward_key: float = 2.0,
+        reward_key_lost: float = -3.0,
+        reward_sanity_loss: float = -0.05,
+        reward_info_gain: float = 0.03,
+        reward_info_use: float = 0.12,
+        reward_info_realize: float = 0.35,
+        penalty_skip_info: float = -0.015,
+        penalty_miss_info: float = -0.008,
+        info_decay: float = 0.28,
+        info_memory_max_age: int = 18,
     ):
         """
         Args:
@@ -100,7 +112,15 @@ class CarcosaEnv(gym.Env):
         self.reward_win = reward_win
         self.reward_lose = reward_lose
         self.reward_key = reward_key
+        self.reward_key_lost = reward_key_lost
         self.reward_sanity_loss = reward_sanity_loss
+        self.reward_info_gain = reward_info_gain
+        self.reward_info_use = reward_info_use
+        self.reward_info_realize = reward_info_realize
+        self.penalty_skip_info = penalty_skip_info
+        self.penalty_miss_info = penalty_miss_info
+        self.info_decay = info_decay
+        self.info_memory_max_age = info_memory_max_age
         
         # Observation space: 10 features [0, 1]
         self.observation_space = spaces.Box(
@@ -114,6 +134,7 @@ class CarcosaEnv(gym.Env):
         self.state = None
         self.rng = None
         self.step_count = 0
+        self.shared_info_memory: Dict[Tuple[str, str, int], Dict[str, Any]] = {}
         
     def _get_obs(self) -> np.ndarray:
         """Extrae observación del estado actual."""
@@ -160,6 +181,11 @@ class CarcosaEnv(gym.Env):
     
     def _get_info(self) -> Dict[str, Any]:
         """Construye el dict de info."""
+        shared_key_hints = sum(
+            1
+            for entry in self.shared_info_memory.values()
+            if entry.get("priority") == PRIORITY_KEY and not entry.get("resolved", False)
+        )
         return {
             "legal_actions": self._get_legal_action_mask(),
             "round": self.state.round,
@@ -167,7 +193,246 @@ class CarcosaEnv(gym.Env):
             "step": self.step_count,
             "keys_in_hand": sum(p.keys for p in self.state.players.values()),
             "min_sanity": min(p.sanity for p in self.state.players.values()),
+            "shared_info_count": len(self.shared_info_memory),
+            "shared_key_hints": shared_key_hints,
         }
+
+    def _card_value(self, card_id: str) -> float:
+        priority = card_priority(card_id)
+        if priority == PRIORITY_KEY:
+            return 1.0
+        if priority == PRIORITY_MONSTER:
+            return 0.6
+        if priority == PRIORITY_TREASURE:
+            return 0.4
+        if priority in (PRIORITY_EVENT, PRIORITY_OMEN):
+            return 0.2
+        return 0.1
+
+    def _room_for_box(self, state) -> Dict[str, str]:
+        return {str(box_id): str(room_id) for room_id, box_id in state.box_at_room.items()}
+
+    def _pick_action_for_type(self, legal_actions: List[Action], target_type: Optional[ActionType], actor: str) -> Optional[Action]:
+        if target_type is None:
+            return None
+
+        candidates = [a for a in legal_actions if a.type == target_type]
+        if not candidates:
+            return None
+
+        if target_type == ActionType.PEEK_ROOM_DECK:
+            best = None
+            best_score = float("-inf")
+            for candidate in candidates:
+                observed = self._extract_observations(self.state, candidate, actor)
+                if not observed:
+                    continue
+                obs = observed[0]
+                score = float(obs["value"])
+                key = (obs["box_id"], obs["card_id"], obs["position"])
+                if key in self.shared_info_memory:
+                    score *= 0.25
+                if score > best_score:
+                    best = candidate
+                    best_score = score
+            if best is not None:
+                return best
+
+        return candidates[0]
+
+    def _extract_observations(self, state, action: Action, actor: str) -> List[Dict[str, Any]]:
+        if actor not in state.players:
+            return []
+
+        from engine.boxes import active_deck_for_room
+
+        target_rooms: List[str] = []
+        actor_room = str(state.players[next(pid for pid in state.players if str(pid) == actor)].room)
+
+        if action.type == ActionType.SEARCH and actor_room is not None:
+            target_rooms = [actor_room]
+        elif action.type == ActionType.PEEK_ROOM_DECK:
+            room_id = action.data.get("room_id")
+            if room_id:
+                target_rooms = [str(room_id)]
+        elif action.type == ActionType.USE_TABERNA_ROOMS:
+            room_a = action.data.get("room_a")
+            room_b = action.data.get("room_b")
+            if room_a:
+                target_rooms.append(str(room_a))
+            if room_b:
+                target_rooms.append(str(room_b))
+
+        observations: List[Dict[str, Any]] = []
+        seen_rooms = set()
+        for room_str in target_rooms:
+            if room_str in seen_rooms:
+                continue
+            seen_rooms.add(room_str)
+
+            room_id = next((rid for rid in state.rooms if str(rid) == room_str), None)
+            if room_id is None:
+                continue
+
+            deck = active_deck_for_room(state, room_id)
+            if deck is None or deck.remaining() <= 0 or deck.top >= len(deck.cards):
+                continue
+
+            box_id = state.box_at_room.get(room_id)
+            if box_id is None:
+                continue
+
+            card_id = str(deck.cards[deck.top])
+            observations.append(
+                {
+                    "card_id": card_id,
+                    "box_id": str(box_id),
+                    "room_id": str(room_id),
+                    "position": int(deck.top),
+                    "priority": card_priority(card_id),
+                    "value": self._card_value(card_id),
+                    "action_type": action.type.value,
+                }
+            )
+
+        return observations
+
+    def _prune_shared_info_memory(self) -> None:
+        stale_keys = []
+        for key, entry in self.shared_info_memory.items():
+            age = max(0, self.step_count - int(entry.get("seen_step", self.step_count)))
+            if age > self.info_memory_max_age:
+                stale_keys.append(key)
+            elif entry.get("resolved", False) and age > 2:
+                stale_keys.append(key)
+        for key in stale_keys:
+            self.shared_info_memory.pop(key, None)
+
+    def _register_observations(self, observations: List[Dict[str, Any]], actor: str, state_round: int) -> float:
+        reward = 0.0
+        for obs in observations:
+            key = (obs["box_id"], obs["card_id"], obs["position"])
+            entry = self.shared_info_memory.get(key)
+            novelty = 1.0
+            if entry is None:
+                entry = {
+                    "card_id": obs["card_id"],
+                    "box_id": obs["box_id"],
+                    "position": obs["position"],
+                    "priority": obs["priority"],
+                    "value": obs["value"],
+                    "source_player": actor,
+                    "seen_step": self.step_count,
+                    "seen_round": state_round,
+                    "last_observer": actor,
+                    "confidence": 1.0,
+                    "observation_type": obs["action_type"],
+                    "resolved": False,
+                    "used_count": 0,
+                }
+                self.shared_info_memory[key] = entry
+            else:
+                novelty = 0.2
+                entry["seen_step"] = self.step_count
+                entry["seen_round"] = state_round
+                entry["last_observer"] = actor
+                entry["observation_type"] = obs["action_type"]
+                if actor != entry.get("source_player"):
+                    entry["confidence"] = min(1.5, float(entry.get("confidence", 1.0)) + 0.1)
+
+            reward += self.reward_info_gain * float(obs["value"]) * novelty
+
+        self._prune_shared_info_memory()
+        return reward
+
+    def _active_key_hints(self, state) -> List[Dict[str, Any]]:
+        room_for_box = self._room_for_box(state)
+        hints: List[Dict[str, Any]] = []
+        for key, entry in self.shared_info_memory.items():
+            if entry.get("priority") != PRIORITY_KEY:
+                continue
+            if entry.get("resolved", False):
+                continue
+            age = max(0, self.step_count - int(entry.get("seen_step", self.step_count)))
+            if age > self.info_memory_max_age:
+                continue
+            room_id = room_for_box.get(entry.get("box_id", ""))
+            if room_id is None:
+                continue
+            decay = math.exp(-self.info_decay * age)
+            scored = dict(entry)
+            scored["memory_key"] = key
+            scored["room_id"] = room_id
+            scored["age"] = age
+            scored["decay"] = decay
+            scored["effective_value"] = float(entry.get("value", 0.0)) * decay
+            hints.append(scored)
+
+        hints.sort(key=lambda hint: hint["effective_value"], reverse=True)
+        return hints
+
+    def _compute_info_usage_reward(
+        self,
+        prev_state,
+        action: Action,
+        actor: str,
+        legal_actions: List[Action],
+        prev_keys: int,
+        curr_keys: int,
+    ) -> float:
+        self._prune_shared_info_memory()
+        if actor not in prev_state.players:
+            return 0.0
+
+        hints = self._active_key_hints(prev_state)
+        if not hints:
+            if action.type == ActionType.SKIP_PEEK and any(a.type == ActionType.PEEK_ROOM_DECK for a in legal_actions):
+                return self.penalty_skip_info
+            return 0.0
+
+        actor_room = str(prev_state.players[next(pid for pid in prev_state.players if str(pid) == actor)].room)
+        move_destinations = {
+            str(a.data.get("to", ""))
+            for a in legal_actions
+            if a.type == ActionType.MOVE and a.data.get("to")
+        }
+        reachable_hints = [
+            hint for hint in hints
+            if hint["room_id"] == actor_room or hint["room_id"] in move_destinations
+        ]
+        used_hint: Optional[Dict[str, Any]] = None
+
+        if action.type == ActionType.MOVE:
+            dest = str(action.data.get("to", ""))
+            used_hint = next((hint for hint in hints if hint["room_id"] == dest), None)
+        elif action.type == ActionType.SEARCH:
+            used_hint = next((hint for hint in hints if hint["room_id"] == actor_room), None)
+
+        reward = 0.0
+        if action.type == ActionType.SKIP_PEEK and any(a.type == ActionType.PEEK_ROOM_DECK for a in legal_actions):
+            reward += self.penalty_skip_info
+
+        if used_hint is not None:
+            source_player = used_hint.get("source_player")
+            source_factor = 1.15 if source_player and source_player != actor else 1.0
+            gain = self.reward_info_use * used_hint["effective_value"] * source_factor
+            reward += gain
+
+            memory_key = used_hint["memory_key"]
+            entry = self.shared_info_memory.get(memory_key)
+            if entry is not None:
+                entry["used_count"] = int(entry.get("used_count", 0)) + 1
+
+            if curr_keys > prev_keys:
+                reward += self.reward_info_realize * used_hint["effective_value"] * source_factor
+                if entry is not None:
+                    entry["resolved"] = True
+        else:
+            if action.type in (ActionType.MOVE, ActionType.SEARCH) and reachable_hints:
+                best_hint = reachable_hints[0]
+                reward += self.penalty_miss_info * best_hint["effective_value"]
+
+        return reward
     
     def reset(
         self, 
@@ -182,14 +447,16 @@ class CarcosaEnv(gym.Env):
         """
         super().reset(seed=seed)
         
+        # Siempre randomizar seed entre episodios para que el agente generalice
         if seed is not None:
             self.seed_value = seed
-        elif self.seed_value is None:
-            self.seed_value = self.np_random.integers(0, 100000)
+        else:
+            self.seed_value = int(self.np_random.integers(0, 100000))
         
         self.rng = RNG(self.seed_value)
         self.state = make_smoke_state(seed=self.seed_value, cfg=self.cfg)
         self.step_count = 0
+        self.shared_info_memory = {}
         
         return self._get_obs(), self._get_info()
     
@@ -207,43 +474,54 @@ class CarcosaEnv(gym.Env):
             observation, reward, terminated, truncated, info
         """
         self.step_count += 1
-        
-        # Determinar actor
-        if self.state.phase == "KING":
-            # Turno del Rey - usar política simple (random d6)
+
+        # Guard: no step into an already-finished game
+        if self.state.game_over:
+            return self._get_obs(), 0.0, True, False, self._get_info()
+
+        # Sacrifice interrupt tiene prioridad sobre cualquier fase (incluyendo KING)
+        pending = self.state.flags.get("PENDING_SACRIFICE_CHECK")
+        if isinstance(pending, list):
+            pending = pending[0] if pending else None
+
+        legal: List[Action] = []
+
+        if pending:
+            actor = str(pending)
+            legal = get_legal_actions(self.state, actor)
+            target_type = self.ACTION_TYPES[action_id] if action_id < len(self.ACTION_TYPES) else None
+            action = self._pick_action_for_type(legal, target_type, actor)
+            if action is None:
+                action = self.rng.choice(legal) if legal else Action(actor=actor, type=ActionType.ACCEPT_SACRIFICE, data={})
+
+        elif self.state.phase == "KING":
+            actor = "KING"
+            legal = get_legal_actions(self.state, actor)
             from sim.policies import RandomKingPolicy
-            king_pol = RandomKingPolicy(self.cfg)
-            action = king_pol.choose(self.state, self.rng)
+            action = RandomKingPolicy(self.cfg).choose(self.state, self.rng)
+            if action is None:
+                action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+
         else:
             actor = str(self.state.turn_order[self.state.turn_pos])
             legal = get_legal_actions(self.state, actor)
-            
+
             # Mapear action_id a Action
             target_type = self.ACTION_TYPES[action_id] if action_id < len(self.ACTION_TYPES) else None
-            
-            action = None
-            if target_type:
-                for a in legal:
-                    if a.type == target_type:
-                        action = a
-                        break
-            
-            # Si la acción no es legal, elegir una random legal
-            if action is None and legal:
-                action = self.rng.choice(legal)
-            elif action is None:
-                # Forzar END_TURN
-                action = Action(actor=actor, type=ActionType.END_TURN, data={})
-        
-        # Estado previo para calcular reward
-        prev_keys = sum(p.keys for p in self.state.players.values())
-        prev_sanity = sum(p.sanity for p in self.state.players.values())
-        
+            action = self._pick_action_for_type(legal, target_type, actor)
+
+            # Fallback: acción legal aleatoria
+            if action is None:
+                action = self.rng.choice(legal) if legal else Action(actor=actor, type=ActionType.END_TURN, data={})
+
+        prev_state = self.state
+        observations = self._extract_observations(prev_state, action, actor)
+
         # Ejecutar transición
-        next_state = step(self.state, action, self.rng, self.cfg)
-        
+        next_state = step(prev_state, action, self.rng, self.cfg)
+
         # Calcular reward
-        reward = self._calculate_reward(prev_keys, prev_sanity, next_state)
+        reward = self._calculate_reward(prev_state, next_state, action, actor, legal, observations)
         
         self.state = next_state
         
@@ -260,31 +538,55 @@ class CarcosaEnv(gym.Env):
         return obs, reward, terminated, truncated, info
     
     def _calculate_reward(
-        self, 
-        prev_keys: int, 
-        prev_sanity: int, 
-        next_state
+        self,
+        prev_state,
+        next_state,
+        action: Action,
+        actor: str,
+        legal_actions: List[Action],
+        observations: List[Dict[str, Any]],
     ) -> float:
         """Calcula reward para RL."""
-        # Terminación
-        if next_state.game_over:
-            if next_state.outcome == "WIN":
-                return self.reward_win
-            else:
-                return self.reward_lose
-        
-        reward = 0.0
-        
-        # Progreso de llaves
+        prev_keys = sum(p.keys for p in prev_state.players.values())
+        prev_sanity = sum(p.sanity for p in prev_state.players.values())
         curr_keys = sum(p.keys for p in next_state.players.values())
-        if curr_keys > prev_keys:
-            reward += self.reward_key * (curr_keys - prev_keys)
-        
-        # Pérdida de sanity
         curr_sanity = sum(p.sanity for p in next_state.players.values())
-        if curr_sanity < prev_sanity:
-            reward += self.reward_sanity_loss * (prev_sanity - curr_sanity)
-        
+
+        if next_state.game_over:
+            reward = self.reward_win if next_state.outcome == "WIN" else self.reward_lose
+        else:
+            reward = 0.0
+
+            # Ganar llaves
+            if curr_keys > prev_keys:
+                reward += self.reward_key * (curr_keys - prev_keys)
+
+            # Perder llaves (sacrificio o daño)
+            if curr_keys < prev_keys:
+                reward += self.reward_key_lost * (prev_keys - curr_keys)
+
+            # Pérdida de sanity
+            if curr_sanity < prev_sanity:
+                reward += self.reward_sanity_loss * (prev_sanity - curr_sanity)
+
+            # Bonus por acercarse a la condición de victoria (umbral + llaves)
+            keys_needed = self.cfg.KEYS_TO_WIN
+            umbral_players = sum(1 for p in next_state.players.values() if p.at_umbral)
+            if umbral_players > 0 and curr_keys >= keys_needed:
+                reward += 0.5  # shaping hacia condición de win
+
+        info_reward = self._register_observations(observations, actor, prev_state.round)
+        info_reward += self._compute_info_usage_reward(
+            prev_state=prev_state,
+            action=action,
+            actor=actor,
+            legal_actions=legal_actions,
+            prev_keys=prev_keys,
+            curr_keys=curr_keys,
+        )
+        info_reward = max(-0.25, min(0.5, info_reward))
+        reward += info_reward
+
         return reward
     
     def render(self):

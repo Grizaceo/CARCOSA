@@ -56,6 +56,11 @@ class CardMemory:
     position_in_deck: int  # Posición en el mazo (0=siguiente a salir)
     priority: int  # 1=KEY, 2=MONSTER, etc.
     rounds_since_seen: int = 0  # Envejece cada ronda
+    source_player: Optional[str] = None  # Quién la vio primero
+    seen_step: int = -1
+    seen_round: int = -1
+    confidence: float = 1.0
+    observation_type: str = "UNKNOWN"
     
     # Calculado dinámicamente
     current_room: Optional[str] = None  # Se actualiza con box_at_room
@@ -189,8 +194,22 @@ class TeamMemory:
             # Actualizar posición si cambió
             existing.position_in_deck = card.position_in_deck
             existing.rounds_since_seen = 0  # Reset age si se vio de nuevo
+            existing.seen_step = card.seen_step if card.seen_step >= 0 else existing.seen_step
+            existing.seen_round = card.seen_round if card.seen_round >= 0 else existing.seen_round
+            existing.observation_type = card.observation_type or existing.observation_type
+            if existing.source_player is None:
+                existing.source_player = card.source_player or from_player
+            if card.source_player and card.source_player != existing.source_player:
+                existing.confidence = min(1.5, existing.confidence + 0.1)
+            else:
+                existing.confidence = min(1.5, max(existing.confidence, card.confidence))
             return
-        
+
+        if card.source_player is None:
+            card.source_player = from_player
+        if card.current_room is None:
+            card.current_room = self.room_for_box.get(card.box_id)
+
         self.known_cards.append(card)
     
     def mark_card_removed(self, card_id: str) -> None:
@@ -216,7 +235,10 @@ class TeamMemory:
             bot.remembered_cards.clear()
         
         # Ordenar cartas por prioridad (menor = más importante)
-        sorted_cards = sorted(self.known_cards, key=lambda c: (c.priority, c.rounds_since_seen))
+        sorted_cards = sorted(
+            self.known_cards,
+            key=lambda c: (c.priority, c.rounds_since_seen, -c.confidence),
+        )
         
         # Distribuir entre bots (round-robin por prioridad)
         bot_list = list(bots.values())
@@ -267,7 +289,7 @@ class TeamMemory:
         cards = [c for c in cards if c.current_room is not None]
         
         # Ordenar por prioridad y retornar rooms únicos
-        sorted_cards = sorted(cards, key=lambda c: (c.priority, c.rounds_since_seen))
+        sorted_cards = sorted(cards, key=lambda c: (c.priority, c.rounds_since_seen, -c.confidence))
         seen_rooms: Set[str] = set()
         result = []
         for card in sorted_cards:
@@ -284,6 +306,14 @@ class TeamMemory:
     def get_threat_rooms(self) -> List[str]:
         """Obtiene habitaciones con amenazas conocidas (monstruos/trampas)."""
         return self.get_best_targets(PRIORITY_MONSTER)
+
+    def get_key_infos(self) -> List[CardMemory]:
+        """Obtiene memorias de llaves ordenadas por frescura y confianza."""
+        cards = [
+            c for c in self.known_cards
+            if c.priority == PRIORITY_KEY and c.current_room is not None
+        ]
+        return sorted(cards, key=lambda c: (c.rounds_since_seen, -c.confidence))
     
     def get_card_info(self, room_id: str) -> List[CardMemory]:
         """Obtiene información de cartas conocidas en una habitación."""
