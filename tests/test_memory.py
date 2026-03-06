@@ -147,3 +147,28 @@ class TestTeamMemory:
         
         rooms = team.get_key_rooms()
         assert "F1_R1" in rooms
+
+    def test_share_card_confirmation_increases_confidence(self):
+        """Si otro jugador confirma la misma carta, sube confianza de memoria compartida."""
+        team = create_team_memory()
+
+        first = CardMemory(
+            card_id="KEY_1",
+            box_id="BOX_A",
+            position_in_deck=0,
+            priority=PRIORITY_KEY,
+            source_player="P1",
+        )
+        team.share_card(first, from_player="P1")
+
+        confirm = CardMemory(
+            card_id="KEY_1",
+            box_id="BOX_A",
+            position_in_deck=0,
+            priority=PRIORITY_KEY,
+            source_player="P2",
+        )
+        team.share_card(confirm, from_player="P2")
+
+        assert team.known_cards[0].source_player == "P1"
+        assert team.known_cards[0].confidence > 1.0

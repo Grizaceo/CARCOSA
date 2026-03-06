@@ -15,7 +15,13 @@ from engine.board import corridor_id, room_id, is_corridor
 from engine.transition import step
 from engine.legality import get_legal_actions
 from sim.policies import get_king_policy, get_player_policy
-from sim.memory import create_team_memory, create_bot_memories, TeamMemory
+from sim.memory import (
+    CardMemory,
+    TeamMemory,
+    card_priority,
+    create_bot_memories,
+    create_team_memory,
+)
 from sim.metrics import transition_record, write_jsonl
 
 
@@ -50,6 +56,61 @@ def _status_counts(state: GameState) -> Dict[str, int]:
 
 def _bump(counter: Dict[str, int], key: str, amount: int = 1) -> None:
     counter[key] = counter.get(key, 0) + amount
+
+
+def _capture_observed_cards(state: GameState, action: Action, actor: str, step_idx: int) -> List[CardMemory]:
+    """Captura cartas observadas por acciones de información (SEARCH/PEEK/TABERNA)."""
+    if actor not in state.players:
+        return []
+
+    from engine.boxes import active_deck_for_room
+
+    pid_actor = PlayerId(actor)
+    source_room = state.players[pid_actor].room
+    target_rooms: List[RoomId] = []
+
+    if action.type == ActionType.SEARCH:
+        target_rooms = [source_room]
+    elif action.type == ActionType.PEEK_ROOM_DECK:
+        room_raw = action.data.get("room_id")
+        if room_raw:
+            target_rooms = [RoomId(room_raw)]
+    elif action.type == ActionType.USE_TABERNA_ROOMS:
+        room_a = action.data.get("room_a")
+        room_b = action.data.get("room_b")
+        if room_a:
+            target_rooms.append(RoomId(room_a))
+        if room_b:
+            target_rooms.append(RoomId(room_b))
+
+    observed_cards: List[CardMemory] = []
+    unique_rooms = list(dict.fromkeys(target_rooms))
+
+    for room in unique_rooms:
+        deck = active_deck_for_room(state, room)
+        if deck is None or deck.remaining() <= 0 or deck.top >= len(deck.cards):
+            continue
+        box_id = state.box_at_room.get(room)
+        if box_id is None:
+            continue
+
+        card = deck.cards[deck.top]
+        observed_cards.append(
+            CardMemory(
+                card_id=str(card),
+                box_id=str(box_id),
+                position_in_deck=int(deck.top),
+                priority=card_priority(str(card)),
+                source_player=actor,
+                seen_step=step_idx,
+                seen_round=state.round,
+                confidence=1.0,
+                observation_type=action.type.value,
+                current_room=str(room),
+            )
+        )
+
+    return observed_cards
 
 
 def _setup_special_rooms(rng: RNG) -> Dict[str, Dict[int, int]]:
@@ -343,30 +404,11 @@ def run_episode(
             # Re-optimizar asignaciones con memorias envejecidas
             team_memory.optimize_assignments(bot_memories)
         
-        # Detectar carta revelada por SEARCH
-        if action.type == ActionType.SEARCH and actor in state.players:
-            from sim.memory import CardMemory, card_priority
-            pid_actor = PlayerId(actor)
-            p = state.players[pid_actor]
-            # Obtener box_id de la habitación actual
-            box_id = state.box_at_room.get(p.room)
-            if box_id:
-                # Obtener posición actual del deck antes de SEARCH
-                from engine.boxes import active_deck_for_room
-                old_deck = active_deck_for_room(state, p.room)
-                if old_deck and old_deck.top < len(old_deck.cards):
-                    revealed_card = old_deck.cards[old_deck.top]
-                    priority = card_priority(str(revealed_card))
-                    card_mem = CardMemory(
-                        card_id=str(revealed_card),
-                        box_id=str(box_id),
-                        position_in_deck=old_deck.top,
-                        priority=priority
-                    )
-                    # Compartir con el equipo
-                    team_memory.share_card(card_mem, from_player=actor)
-                    # Re-optimizar quién recuerda qué
-                    team_memory.optimize_assignments(bot_memories)
+        observed_cards = _capture_observed_cards(state, action, actor, step_idx)
+        if observed_cards:
+            for card_mem in observed_cards:
+                team_memory.share_card(card_mem, from_player=actor)
+            team_memory.optimize_assignments(bot_memories)
 
         next_status_counts = _status_counts(next_state)
         for st, count in next_status_counts.items():

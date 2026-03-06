@@ -41,6 +41,11 @@ class MCTSPlayerPolicy(PlayerPolicy):
         self._default_player_policy = GoalDirectedPlayerPolicy(self.cfg)
         self._king_policy = RandomKingPolicy(self.cfg)
 
+    def set_memory(self, team_memory, bot_memories) -> None:
+        """Permite que runner inyecte memoria compartida también en rollouts."""
+        if hasattr(self._default_player_policy, "set_memory"):
+            self._default_player_policy.set_memory(team_memory, bot_memories)
+
     def _rollout_policy(self, state: GameState, rng: RNG) -> Action:
         """
         Policy used during the Simulation phase (Play out).

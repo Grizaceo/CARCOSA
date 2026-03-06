@@ -6,6 +6,7 @@ from pathlib import Path
 
 from engine.actions import Action, ActionType
 from engine.config import Config
+from engine.boxes import active_deck_for_room
 from engine.legality import get_legal_actions
 from engine.rng import RNG
 from engine.state import GameState
@@ -14,6 +15,7 @@ from engine.transition import step
 from engine.types import RoomId, PlayerId
 
 from engine.board import floor_of, neighbors, is_corridor, corridor_id
+from sim.memory import PRIORITY_EVENT, PRIORITY_KEY, PRIORITY_MONSTER, PRIORITY_OMEN, PRIORITY_TREASURE, card_priority
 from sim.pathing import bfs_next_step
 from engine.inventory import get_inventory_limits, get_object_count, get_key_count
 from engine.objects import is_soulbound
@@ -242,7 +244,78 @@ def _choose_sacrifice_action(acts: List[Action], state: GameState, pid: PlayerId
     return min(sac_actions, key=_sacrifice_cost)
 
 
-def _choose_forced_action(acts: List[Action], state: GameState, pid: PlayerId, rng: RNG, cfg: Config) -> Optional[Action]:
+def _peek_card_value(card_id: str) -> float:
+    priority = card_priority(card_id)
+    if priority == PRIORITY_KEY:
+        return 4.0
+    if priority == PRIORITY_MONSTER:
+        return 2.0
+    if priority == PRIORITY_TREASURE:
+        return 1.5
+    if priority in (PRIORITY_EVENT, PRIORITY_OMEN):
+        return 0.8
+    return 0.5
+
+
+def _choose_hallway_peek_action(
+    acts: List[Action],
+    state: GameState,
+    team_memory=None,
+) -> Optional[Action]:
+    """Si hay interrupt de hallway peek, selecciona la mejor sala a observar."""
+    peek_actions = [a for a in acts if a.type == ActionType.PEEK_ROOM_DECK]
+    skip_action = _pick_first(acts, ActionType.SKIP_PEEK)
+
+    if not peek_actions:
+        return skip_action
+
+    best_action = None
+    best_score = float("-inf")
+
+    for action in peek_actions:
+        room_raw = action.data.get("room_id")
+        if not room_raw:
+            continue
+        room = RoomId(room_raw)
+        deck = active_deck_for_room(state, room)
+        if deck is None or deck.remaining() <= 0 or deck.top >= len(deck.cards):
+            continue
+
+        card = str(deck.cards[deck.top])
+        base = _peek_card_value(card)
+        rem = deck.remaining()
+        novelty = 1.0
+
+        if team_memory is not None:
+            known_cards = team_memory.get_card_info(str(room))
+            if any(c.card_id == card and c.position_in_deck == deck.top for c in known_cards):
+                novelty = 0.25
+            elif known_cards:
+                novelty = 0.7
+
+        score = (base * novelty) + (0.05 * rem)
+        if score > best_score:
+            best_score = score
+            best_action = action
+
+    if best_action is not None:
+        return best_action
+    return skip_action
+
+
+def _choose_forced_action(
+    acts: List[Action],
+    state: GameState,
+    pid: PlayerId,
+    rng: RNG,
+    cfg: Config,
+    team_memory=None,
+) -> Optional[Action]:
+    # Hallway peek interrupt: solo PEEK/SKIP son legales
+    peek_choice = _choose_hallway_peek_action(acts, state, team_memory=team_memory)
+    if peek_choice is not None:
+        return peek_choice
+
     # Pending sacrifice: only SACRIFICE/ACCEPT are legal
     if _pick_first(acts, ActionType.ACCEPT_SACRIFICE):
         choice = _choose_sacrifice_action(acts, state, pid, cfg)
@@ -552,7 +625,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         armory_streak = _policy_armory_streak(state, pid)
         avoid_armory = stall_steps >= STALL_KEY_STEPS
 
-        forced = _choose_forced_action(acts, state, pid, rng, self.cfg)
+        forced = _choose_forced_action(acts, state, pid, rng, self.cfg, team_memory=self._team_memory)
         if forced is not None:
             return finalize(forced)
 
@@ -704,8 +777,13 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
 
         # 2.9) MEMORIA DE EQUIPO: Priorizar habitaciones con llaves conocidas
         known_key_rooms = self._get_known_key_rooms()
+        known_threat_rooms = set(self._get_threat_rooms())
         if known_key_rooms and need_keys and p.sanity > meditate_threshold:
-            for key_room_str in known_key_rooms:
+            prioritized_key_rooms = [room for room in known_key_rooms if room not in known_threat_rooms]
+            if not prioritized_key_rooms:
+                prioritized_key_rooms = known_key_rooms
+
+            for key_room_str in prioritized_key_rooms:
                 key_room = RoomId(key_room_str)
                 # Si ya estoy en la habitación con llave conocida, hacer SEARCH
                 if p.room == key_room:
@@ -715,6 +793,8 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                 # Si puedo moverme hacia la habitación con llave
                 nxt = bfs_next_step(state, p.room, key_room)
                 if nxt is not None:
+                    if str(nxt) in known_threat_rooms and len(prioritized_key_rooms) > 1:
+                        continue
                     for a in acts:
                         if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
                             return finalize(a)
@@ -1197,4 +1277,3 @@ def get_king_policy(policy_name: str, cfg: Config) -> KingPolicy:
     if cls is None:
         raise ValueError(f"Unknown king policy: {policy_name}")
     return cls(cfg)
-
