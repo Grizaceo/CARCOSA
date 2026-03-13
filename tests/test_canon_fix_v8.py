@@ -187,22 +187,15 @@ def test_salon_belleza_threshold():
     )
     
     # Use 1: Count becomes 1. No status.
-    # Use 1: Count becomes 1. No status.
     s.remaining_actions[PlayerId("P1")] = 10
     s = step(s, Action(actor="P1", type=ActionType.USE_SALON_BELLEZA, data={}), None, Config())
     assert s.salon_belleza_uses == 1
     p1 = s.players[PlayerId("P1")]
-    assert len(p1.statuses) == 0 # Just protection flag? No, statuses list is for StatusInstance. Flag is in s.flags.
-    
-    # Use 2: Count 2. No status.
+    assert len(p1.statuses) == 0
+
+    # Use 2: Count 2. VANIDAD applies (2 % 2 == 0).
     s = step(s, Action(actor="P1", type=ActionType.USE_SALON_BELLEZA, data={}), None, Config())
     assert s.salon_belleza_uses == 2
-    p1 = s.players[PlayerId("P1")]
-    assert len(p1.statuses) == 0
-    
-    # Use 3: Count 3. YES Vanidad.
-    s = step(s, Action(actor="P1", type=ActionType.USE_SALON_BELLEZA, data={}), None, Config())
-    assert s.salon_belleza_uses == 3
     p1 = s.players[PlayerId("P1")]
     assert any(st.status_id == "VANIDAD" for st in p1.statuses)
 

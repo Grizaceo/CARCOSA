@@ -225,7 +225,7 @@ def _salon_belleza(state: GameState, pid: PlayerId, action: Action, rng: RNG, cf
     p = state.players[pid]
     state.salon_belleza_uses += 1
     state.flags[f"PROTECCION_AMARILLO_{pid}"] = state.round + 1
-    if state.salon_belleza_uses >= 3:
+    if state.salon_belleza_uses % 2 == 0:
         from engine.effects.event_utils import add_status
         add_status(p, "VANIDAD")
 

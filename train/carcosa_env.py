@@ -14,6 +14,7 @@ Uso con StableBaselines3:
 
 from typing import Tuple, Dict, Any, Optional, List
 import math
+from collections import deque
 import numpy as np
 
 import gymnasium as gym
@@ -29,6 +30,7 @@ from engine.rng import RNG
 from engine.transition import step
 from engine.legality import get_legal_actions
 from engine.actions import Action, ActionType
+from engine.board import floor_of, neighbors
 from engine.tension import compute_features, tension_T
 from sim.memory import PRIORITY_EVENT, PRIORITY_KEY, PRIORITY_MONSTER, PRIORITY_OMEN, PRIORITY_TREASURE, card_priority
 from sim.runner import make_smoke_state
@@ -83,16 +85,34 @@ class CarcosaEnv(gym.Env):
         max_steps: int = 2000,
         reward_win: float = 100.0,
         reward_lose: float = -10.0,
-        reward_key: float = 2.0,
-        reward_key_lost: float = -3.0,
-        reward_sanity_loss: float = -0.05,
-        reward_info_gain: float = 0.03,
+        reward_key: float = 2.8,
+        reward_key_lost: float = -5.0,
+        reward_sanity_loss: float = -0.07,
+        reward_info_gain: float = 0.02,
         reward_info_use: float = 0.12,
-        reward_info_realize: float = 0.35,
+        reward_info_realize: float = 0.30,
         penalty_skip_info: float = -0.015,
         penalty_miss_info: float = -0.008,
+        penalty_illegal_intent: float = -0.02,
+        penalty_critical_sanity: float = -0.08,
+        critical_sanity_threshold: int = -4,
+        reward_phase2_umbral_progress: float = 0.45,
+        penalty_phase2_umbral_regress: float = -0.30,
+        reward_phase2_sync_step: float = 0.25,
+        reward_phase2_sync_all: float = 2.5,
+        phase2_info_scale: float = 0.15,
+        penalty_phase2_explore: float = -0.06,
         info_decay: float = 0.28,
         info_memory_max_age: int = 18,
+        curriculum_keys34_prob: float = 0.0,
+        curriculum_keys34_min_keys: int = 2,
+        curriculum_keys34_max_keys: int = 3,
+        curriculum_keys34_fragile_sanity_min: int = -4,
+        curriculum_keys34_fragile_sanity_max: int = -2,
+        curriculum_keys34_fragile_carriers: int = 2,
+        curriculum_closing_prob: float = 0.0,
+        curriculum_keys_start: int = 4,
+        curriculum_far_player_prob: float = 0.8,
     ):
         """
         Args:
@@ -119,8 +139,29 @@ class CarcosaEnv(gym.Env):
         self.reward_info_realize = reward_info_realize
         self.penalty_skip_info = penalty_skip_info
         self.penalty_miss_info = penalty_miss_info
+        self.penalty_illegal_intent = penalty_illegal_intent
+        self.penalty_critical_sanity = penalty_critical_sanity
+        self.critical_sanity_threshold = critical_sanity_threshold
+        self.reward_phase2_umbral_progress = reward_phase2_umbral_progress
+        self.penalty_phase2_umbral_regress = penalty_phase2_umbral_regress
+        self.reward_phase2_sync_step = reward_phase2_sync_step
+        self.reward_phase2_sync_all = reward_phase2_sync_all
+        self.phase2_info_scale = phase2_info_scale
+        self.penalty_phase2_explore = penalty_phase2_explore
         self.info_decay = info_decay
         self.info_memory_max_age = info_memory_max_age
+        self.curriculum_keys34_prob = max(0.0, min(1.0, float(curriculum_keys34_prob)))
+        self.curriculum_keys34_min_keys = max(0, int(curriculum_keys34_min_keys))
+        self.curriculum_keys34_max_keys = max(self.curriculum_keys34_min_keys, int(curriculum_keys34_max_keys))
+        self.curriculum_keys34_fragile_sanity_min = int(curriculum_keys34_fragile_sanity_min)
+        self.curriculum_keys34_fragile_sanity_max = max(
+            self.curriculum_keys34_fragile_sanity_min,
+            int(curriculum_keys34_fragile_sanity_max),
+        )
+        self.curriculum_keys34_fragile_carriers = max(0, int(curriculum_keys34_fragile_carriers))
+        self.curriculum_closing_prob = max(0.0, min(1.0, float(curriculum_closing_prob)))
+        self.curriculum_keys_start = max(0, int(curriculum_keys_start))
+        self.curriculum_far_player_prob = max(0.0, min(1.0, float(curriculum_far_player_prob)))
         
         # Observation space: 10 features [0, 1]
         self.observation_space = spaces.Box(
@@ -135,6 +176,62 @@ class CarcosaEnv(gym.Env):
         self.rng = None
         self.step_count = 0
         self.shared_info_memory: Dict[Tuple[str, str, int], Dict[str, Any]] = {}
+        self.last_action_debug: Dict[str, Any] = {}
+        self._reset_action_debug()
+
+    def _reset_action_debug(self) -> None:
+        self.last_action_debug = {
+            "actor": None,
+            "requested_action_id": None,
+            "requested_action_type": None,
+            "requested_action_legal": None,
+            "requested_action_out_of_range": False,
+            "masked_out_action": False,
+            "executed_action_type": None,
+            "requested_action_matched_executed": None,
+            "action_selection_source": None,
+            "fallback_substitution": False,
+            "fallback_substitution_reason": None,
+            "peek_available": False,
+            "illegal_action_intent": False,
+        }
+
+    def _room_neighbors_with_stairs(self, state, room):
+        for nb in neighbors(room):
+            yield nb
+
+        floor = floor_of(room)
+        if room == state.stairs.get(floor):
+            if floor > 1:
+                upper = state.stairs.get(floor - 1)
+                if upper is not None:
+                    yield upper
+            if floor < 3:
+                lower = state.stairs.get(floor + 1)
+                if lower is not None:
+                    yield lower
+
+    def _distance_to_umbral(self, state, room) -> int:
+        target = str(self.cfg.UMBRAL_NODE)
+        if str(room) == target:
+            return 0
+
+        queue = deque([(room, 0)])
+        visited = {room}
+        while queue:
+            current, dist = queue.popleft()
+            for nb in self._room_neighbors_with_stairs(state, current):
+                if nb in visited:
+                    continue
+                if str(nb) == target:
+                    return dist + 1
+                visited.add(nb)
+                queue.append((nb, dist + 1))
+
+        return 999
+
+    def _team_umbral_distance(self, state) -> int:
+        return sum(self._distance_to_umbral(state, player.room) for player in state.players.values())
         
     def _get_obs(self) -> np.ndarray:
         """Extrae observación del estado actual."""
@@ -178,6 +275,10 @@ class CarcosaEnv(gym.Env):
             mask[3] = 1.0  # END_TURN siempre debería ser legal
             
         return mask
+
+    def action_masks(self) -> np.ndarray:
+        """Máscara booleana para algoritmos MaskablePPO (sb3-contrib)."""
+        return self._get_legal_action_mask().astype(bool)
     
     def _get_info(self) -> Dict[str, Any]:
         """Construye el dict de info."""
@@ -186,6 +287,8 @@ class CarcosaEnv(gym.Env):
             for entry in self.shared_info_memory.values()
             if entry.get("priority") == PRIORITY_KEY and not entry.get("resolved", False)
         )
+        umbral_distances = [self._distance_to_umbral(self.state, player.room) for player in self.state.players.values()]
+        players_within_umbral_1 = sum(1 for dist in umbral_distances if dist <= 1)
         return {
             "legal_actions": self._get_legal_action_mask(),
             "round": self.state.round,
@@ -195,7 +298,163 @@ class CarcosaEnv(gym.Env):
             "min_sanity": min(p.sanity for p in self.state.players.values()),
             "shared_info_count": len(self.shared_info_memory),
             "shared_key_hints": shared_key_hints,
+            "team_umbral_distance": int(sum(umbral_distances)),
+            "players_within_umbral_1": players_within_umbral_1,
+            "all_within_umbral_1": players_within_umbral_1 == len(self.state.players),
+            "actor": self.last_action_debug.get("actor"),
+            "requested_action_id": self.last_action_debug.get("requested_action_id"),
+            "requested_action_type": self.last_action_debug.get("requested_action_type"),
+            "requested_action_legal": self.last_action_debug.get("requested_action_legal"),
+            "requested_action_out_of_range": self.last_action_debug.get("requested_action_out_of_range", False),
+            "masked_out_action": self.last_action_debug.get("masked_out_action", False),
+            "executed_action_type": self.last_action_debug.get("executed_action_type"),
+            "requested_action_matched_executed": self.last_action_debug.get("requested_action_matched_executed"),
+            "action_selection_source": self.last_action_debug.get("action_selection_source"),
+            "fallback_substitution": self.last_action_debug.get("fallback_substitution", False),
+            "fallback_substitution_reason": self.last_action_debug.get("fallback_substitution_reason"),
+            "peek_available": self.last_action_debug.get("peek_available", False),
+            "illegal_action_intent": self.last_action_debug.get("illegal_action_intent", False),
         }
+
+    def _select_deterministic_fallback_action(
+        self,
+        legal_actions: List[Action],
+        actor: str,
+        default_type: ActionType,
+    ) -> Action:
+        if not legal_actions:
+            return Action(actor=actor, type=default_type, data={})
+
+        preferred_order = [
+            ActionType.PEEK_ROOM_DECK,
+            ActionType.SEARCH,
+            ActionType.MOVE,
+            ActionType.MEDITATE,
+            ActionType.SKIP_PEEK,
+            ActionType.END_TURN,
+            ActionType.ACCEPT_SACRIFICE,
+            ActionType.SACRIFICE,
+        ]
+
+        for target in preferred_order:
+            selected = self._pick_action_for_type(legal_actions, target, actor)
+            if selected is not None:
+                return selected
+
+        ranked = sorted(
+            legal_actions,
+            key=lambda action: self.ACTION_TYPES.index(action.type) if action.type in self.ACTION_TYPES else 999,
+        )
+        return ranked[0]
+
+    def _apply_closing_curriculum(self) -> None:
+        if self.state is None:
+            return
+
+        keys_goal = max(self.cfg.KEYS_TO_WIN, self.curriculum_keys_start)
+        players = list(self.state.players.keys())
+        if not players:
+            return
+
+        for player in self.state.players.values():
+            player.keys = 0
+
+        assigned = 0
+        player_order = list(players)
+        self.rng.shuffle(player_order)
+        while assigned < keys_goal:
+            pid = player_order[assigned % len(player_order)]
+            self.state.players[pid].keys += 1
+            assigned += 1
+
+        umbral_room = str(self.cfg.UMBRAL_NODE)
+        all_rooms = list(self.state.rooms.keys())
+        if not all_rooms:
+            return
+
+        farthest_room = max(all_rooms, key=lambda rid: self._distance_to_umbral(self.state, rid))
+        close_rooms = sorted(all_rooms, key=lambda rid: self._distance_to_umbral(self.state, rid))
+        close_non_umbral = [rid for rid in close_rooms if str(rid) != umbral_room]
+
+        far_player = None
+        roll = self.rng.randint(1, 10_000) / 10_000.0
+        if roll < self.curriculum_far_player_prob:
+            far_player = self.rng.choice(player_order)
+
+        close_cursor = 0
+        for pid in player_order:
+            player = self.state.players[pid]
+            if far_player is not None and pid == far_player:
+                player.room = farthest_room
+            else:
+                if close_cursor % 2 == 0:
+                    target_room = self.cfg.UMBRAL_NODE
+                else:
+                    target_room = close_non_umbral[0] if close_non_umbral else self.cfg.UMBRAL_NODE
+                player.room = target_room
+                close_cursor += 1
+            player.at_umbral = str(player.room) == umbral_room
+
+        self.state.flags.pop("CURRICULUM_KEYS34_ACTIVE", None)
+        self.state.flags["CURRICULUM_CLOSING_ACTIVE"] = True
+
+    def _apply_keys34_curriculum(self) -> None:
+        if self.state is None:
+            return
+
+        players = list(self.state.players.keys())
+        if not players:
+            return
+
+        for player in self.state.players.values():
+            player.keys = 0
+
+        keys_target = self.rng.randint(self.curriculum_keys34_min_keys, self.curriculum_keys34_max_keys)
+        player_order = list(players)
+        self.rng.shuffle(player_order)
+
+        for idx in range(keys_target):
+            pid = player_order[idx % len(player_order)]
+            self.state.players[pid].keys += 1
+
+        carriers = [pid for pid in player_order if self.state.players[pid].keys > 0]
+        self.rng.shuffle(carriers)
+        fragile_count = min(len(carriers), self.curriculum_keys34_fragile_carriers)
+        for pid in carriers[:fragile_count]:
+            fragile_sanity = self.rng.randint(
+                self.curriculum_keys34_fragile_sanity_min,
+                self.curriculum_keys34_fragile_sanity_max,
+            )
+            self.state.players[pid].sanity = fragile_sanity
+
+        umbral_room = str(self.cfg.UMBRAL_NODE)
+        candidate_rooms = [rid for rid in self.state.rooms if str(rid) != umbral_room]
+        if not candidate_rooms:
+            candidate_rooms = list(self.state.rooms.keys())
+
+        if candidate_rooms:
+            far_sorted_rooms = sorted(
+                candidate_rooms,
+                key=lambda rid: self._distance_to_umbral(self.state, rid),
+                reverse=True,
+            )
+            split_idx = max(1, len(far_sorted_rooms) // 2)
+            far_pool = far_sorted_rooms[:split_idx]
+            other_pool = far_sorted_rooms[split_idx:] if far_sorted_rooms[split_idx:] else far_sorted_rooms
+
+            carrier_set = set(carriers)
+            for pid in player_order:
+                if pid in carrier_set:
+                    room = self.rng.choice(far_pool)
+                else:
+                    room = self.rng.choice(other_pool)
+                self.state.players[pid].room = room
+
+        for player in self.state.players.values():
+            player.at_umbral = str(player.room) == umbral_room
+
+        self.state.flags.pop("CURRICULUM_CLOSING_ACTIVE", None)
+        self.state.flags["CURRICULUM_KEYS34_ACTIVE"] = True
 
     def _card_value(self, card_id: str) -> float:
         priority = card_priority(card_id)
@@ -239,6 +498,55 @@ class CarcosaEnv(gym.Env):
                 return best
 
         return candidates[0]
+
+    def _pick_hint_followup_action(self, state, legal_actions: List[Action], actor: str) -> Optional[Action]:
+        if actor not in state.players:
+            return None
+
+        hints = self._active_key_hints(state)
+        if not hints:
+            return None
+
+        actor_room = str(state.players[next(pid for pid in state.players if str(pid) == actor)].room)
+        for hint in hints:
+            if hint["room_id"] == actor_room:
+                search_candidates = [a for a in legal_actions if a.type == ActionType.SEARCH]
+                if search_candidates:
+                    return search_candidates[0]
+
+            move_candidates = [
+                a
+                for a in legal_actions
+                if a.type == ActionType.MOVE and str(a.data.get("to", "")) == hint["room_id"]
+            ]
+            if move_candidates:
+                return move_candidates[0]
+
+        return None
+
+    def _pick_guided_fallback_action(self, state, legal_actions: List[Action], actor: str) -> Optional[Action]:
+        if not legal_actions:
+            return None
+
+        hint_action = self._pick_hint_followup_action(state, legal_actions, actor)
+        if hint_action is not None:
+            return hint_action
+
+        peek_action = self._pick_action_for_type(legal_actions, ActionType.PEEK_ROOM_DECK, actor)
+        if peek_action is not None:
+            return peek_action
+
+        for preferred_type in (
+            ActionType.SEARCH,
+            ActionType.MOVE,
+            ActionType.MEDITATE,
+            ActionType.END_TURN,
+        ):
+            candidate = self._pick_action_for_type(legal_actions, preferred_type, actor)
+            if candidate is not None:
+                return candidate
+
+        return legal_actions[0]
 
     def _extract_observations(self, state, action: Action, actor: str) -> List[Dict[str, Any]]:
         if actor not in state.players:
@@ -455,8 +763,18 @@ class CarcosaEnv(gym.Env):
         
         self.rng = RNG(self.seed_value)
         self.state = make_smoke_state(seed=self.seed_value, cfg=self.cfg)
+
+        draw = float(self.np_random.random())
+        keys34_cutoff = self.curriculum_keys34_prob
+        closing_cutoff = min(1.0, self.curriculum_keys34_prob + self.curriculum_closing_prob)
+        if keys34_cutoff > 0.0 and draw < keys34_cutoff:
+            self._apply_keys34_curriculum()
+        elif self.curriculum_closing_prob > 0.0 and draw < closing_cutoff:
+            self._apply_closing_curriculum()
+
         self.step_count = 0
         self.shared_info_memory = {}
+        self._reset_action_debug()
         
         return self._get_obs(), self._get_info()
     
@@ -485,14 +803,32 @@ class CarcosaEnv(gym.Env):
             pending = pending[0] if pending else None
 
         legal: List[Action] = []
+        requested_action_out_of_range = action_id < 0 or action_id >= len(self.ACTION_TYPES)
+        requested_action_type = self.ACTION_TYPES[action_id] if 0 <= action_id < len(self.ACTION_TYPES) else None
+        requested_action_label = requested_action_type.value if requested_action_type is not None else "OUT_OF_RANGE"
+        illegal_action_intent = False
+        masked_out_action = False
+        requested_action_legal: Optional[bool] = None
+        peek_available = False
+        action_selection_source = "UNRESOLVED"
+        fallback_substitution_reason: Optional[str] = None
 
         if pending:
             actor = str(pending)
             legal = get_legal_actions(self.state, actor)
-            target_type = self.ACTION_TYPES[action_id] if action_id < len(self.ACTION_TYPES) else None
-            action = self._pick_action_for_type(legal, target_type, actor)
+            legal_types = {a.type for a in legal}
+            requested_action_legal = requested_action_type in legal_types if requested_action_type is not None else False
+            masked_out_action = requested_action_type is not None and requested_action_type not in legal_types
+            peek_available = ActionType.PEEK_ROOM_DECK in legal_types
+            action = self._pick_action_for_type(legal, requested_action_type, actor)
+            if action is not None:
+                action_selection_source = "DIRECT_MATCH"
+            if requested_action_type is not None and requested_action_type not in {a.type for a in legal}:
+                illegal_action_intent = True
             if action is None:
-                action = self.rng.choice(legal) if legal else Action(actor=actor, type=ActionType.ACCEPT_SACRIFICE, data={})
+                action = self._select_deterministic_fallback_action(legal, actor, ActionType.ACCEPT_SACRIFICE)
+                action_selection_source = "PENDING_DETERMINISTIC_FALLBACK" if legal else "PENDING_DEFAULT_ACCEPT"
+                fallback_substitution_reason = "masked_out" if masked_out_action else "no_direct_type"
 
         elif self.state.phase == "KING":
             actor = "KING"
@@ -501,18 +837,61 @@ class CarcosaEnv(gym.Env):
             action = RandomKingPolicy(self.cfg).choose(self.state, self.rng)
             if action is None:
                 action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+                action_selection_source = "KING_DEFAULT_ENDROUND"
+            else:
+                action_selection_source = "KING_POLICY"
 
         else:
             actor = str(self.state.turn_order[self.state.turn_pos])
             legal = get_legal_actions(self.state, actor)
+            legal_types = {a.type for a in legal}
+            requested_action_legal = requested_action_type in legal_types if requested_action_type is not None else False
+            masked_out_action = requested_action_type is not None and requested_action_type not in legal_types
+            peek_available = ActionType.PEEK_ROOM_DECK in legal_types
 
             # Mapear action_id a Action
-            target_type = self.ACTION_TYPES[action_id] if action_id < len(self.ACTION_TYPES) else None
-            action = self._pick_action_for_type(legal, target_type, actor)
+            action = self._pick_action_for_type(legal, requested_action_type, actor)
+            if action is not None:
+                action_selection_source = "DIRECT_MATCH"
+            if requested_action_type is not None and requested_action_type not in {a.type for a in legal}:
+                illegal_action_intent = True
 
-            # Fallback: acción legal aleatoria
+            # Fallback guiado
             if action is None:
-                action = self.rng.choice(legal) if legal else Action(actor=actor, type=ActionType.END_TURN, data={})
+                action = self._pick_guided_fallback_action(self.state, legal, actor)
+                if action is not None:
+                    action_selection_source = "GUIDED_FALLBACK"
+                    fallback_substitution_reason = "masked_out" if masked_out_action else "no_direct_type"
+
+            # Fallback determinístico (evita ruido estocástico extra)
+            if action is None:
+                action = self._select_deterministic_fallback_action(legal, actor, ActionType.END_TURN)
+                action_selection_source = "DETERMINISTIC_FALLBACK" if legal else "DEFAULT_END_TURN"
+                fallback_substitution_reason = "masked_out" if masked_out_action else "no_direct_type"
+
+        if requested_action_legal is None and actor != "KING":
+            requested_action_legal = False
+
+        fallback_substitution = (
+            actor != "KING"
+            and (requested_action_type is None or requested_action_type != action.type)
+        )
+
+        self.last_action_debug = {
+            "actor": actor,
+            "requested_action_id": int(action_id),
+            "requested_action_type": requested_action_label,
+            "requested_action_legal": requested_action_legal,
+            "requested_action_out_of_range": requested_action_out_of_range,
+            "masked_out_action": masked_out_action,
+            "executed_action_type": action.type.value,
+            "requested_action_matched_executed": requested_action_type == action.type if requested_action_type is not None else False,
+            "action_selection_source": action_selection_source,
+            "fallback_substitution": fallback_substitution,
+            "fallback_substitution_reason": fallback_substitution_reason,
+            "peek_available": peek_available,
+            "illegal_action_intent": illegal_action_intent,
+        }
 
         prev_state = self.state
         observations = self._extract_observations(prev_state, action, actor)
@@ -521,7 +900,15 @@ class CarcosaEnv(gym.Env):
         next_state = step(prev_state, action, self.rng, self.cfg)
 
         # Calcular reward
-        reward = self._calculate_reward(prev_state, next_state, action, actor, legal, observations)
+        reward = self._calculate_reward(
+            prev_state,
+            next_state,
+            action,
+            actor,
+            legal,
+            observations,
+            illegal_action_intent=illegal_action_intent,
+        )
         
         self.state = next_state
         
@@ -545,12 +932,15 @@ class CarcosaEnv(gym.Env):
         actor: str,
         legal_actions: List[Action],
         observations: List[Dict[str, Any]],
+        illegal_action_intent: bool = False,
     ) -> float:
         """Calcula reward para RL."""
         prev_keys = sum(p.keys for p in prev_state.players.values())
         prev_sanity = sum(p.sanity for p in prev_state.players.values())
         curr_keys = sum(p.keys for p in next_state.players.values())
         curr_sanity = sum(p.sanity for p in next_state.players.values())
+        keys_needed = self.cfg.KEYS_TO_WIN
+        phase2_active = prev_keys >= keys_needed or curr_keys >= keys_needed
 
         if next_state.game_over:
             reward = self.reward_win if next_state.outcome == "WIN" else self.reward_lose
@@ -569,11 +959,54 @@ class CarcosaEnv(gym.Env):
             if curr_sanity < prev_sanity:
                 reward += self.reward_sanity_loss * (prev_sanity - curr_sanity)
 
-            # Bonus por acercarse a la condición de victoria (umbral + llaves)
-            keys_needed = self.cfg.KEYS_TO_WIN
-            umbral_players = sum(1 for p in next_state.players.values() if p.at_umbral)
-            if umbral_players > 0 and curr_keys >= keys_needed:
-                reward += 0.5  # shaping hacia condición de win
+            prev_critical = sum(
+                1
+                for player in prev_state.players.values()
+                if player.sanity <= self.critical_sanity_threshold
+            )
+            curr_critical = sum(
+                1
+                for player in next_state.players.values()
+                if player.sanity <= self.critical_sanity_threshold
+            )
+            if curr_critical > 0:
+                reward += self.penalty_critical_sanity * curr_critical
+            if curr_critical > prev_critical:
+                reward += 0.5 * self.penalty_critical_sanity * (curr_critical - prev_critical)
+
+            if phase2_active:
+                prev_team_umbral_dist = self._team_umbral_distance(prev_state)
+                curr_team_umbral_dist = self._team_umbral_distance(next_state)
+
+                if curr_team_umbral_dist < prev_team_umbral_dist:
+                    reward += self.reward_phase2_umbral_progress * (prev_team_umbral_dist - curr_team_umbral_dist)
+                elif curr_team_umbral_dist > prev_team_umbral_dist:
+                    reward += self.penalty_phase2_umbral_regress * (curr_team_umbral_dist - prev_team_umbral_dist)
+
+                prev_near_umbral = sum(
+                    1 for player in prev_state.players.values() if self._distance_to_umbral(prev_state, player.room) <= 1
+                )
+                curr_near_umbral = sum(
+                    1 for player in next_state.players.values() if self._distance_to_umbral(next_state, player.room) <= 1
+                )
+                if curr_near_umbral > prev_near_umbral:
+                    reward += self.reward_phase2_sync_step * (curr_near_umbral - prev_near_umbral)
+
+                if action.type in {
+                    ActionType.SEARCH,
+                    ActionType.PEEK_ROOM_DECK,
+                    ActionType.USE_TABERNA_ROOMS,
+                }:
+                    reward += self.penalty_phase2_explore
+
+                if curr_keys >= keys_needed and all(
+                    self._distance_to_umbral(next_state, player.room) == 0
+                    for player in next_state.players.values()
+                ):
+                    reward += self.reward_phase2_sync_all
+
+        if illegal_action_intent and actor in prev_state.players:
+            reward += self.penalty_illegal_intent
 
         info_reward = self._register_observations(observations, actor, prev_state.round)
         info_reward += self._compute_info_usage_reward(
@@ -584,6 +1017,8 @@ class CarcosaEnv(gym.Env):
             prev_keys=prev_keys,
             curr_keys=curr_keys,
         )
+        if phase2_active:
+            info_reward *= self.phase2_info_scale
         info_reward = max(-0.25, min(0.5, info_reward))
         reward += info_reward
 
