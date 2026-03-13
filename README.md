@@ -1,4 +1,68 @@
-# Carcosa — Docker development workflow
+# CARCOSA
+
+Motor de simulacion, entrenamiento y documentacion canonica para el juego CARCOSA.
+
+El repositorio combina tres capas:
+
+- `engine/`: reglas, estado, tablero, cartas, monstruos, habitaciones especiales y condiciones de victoria/derrota.
+- `sim/` y `train/`: simulacion, evaluacion, behavioral cloning y reinforcement learning.
+- `docs/` y `documentos/`: canon operativo, reportes tecnicos y material de referencia.
+
+## Estado del proyecto
+
+- Tablero canonico de 3 pisos con mazos ciclicos por habitacion.
+- Sistema de roles, objetos, estados, monstruos y habitaciones especiales.
+- Entorno para entrenamiento de agentes y pruebas automatizadas extensas.
+- Flujo de trabajo principal basado en Docker para desarrollo y experimentacion.
+
+## Inicio rapido
+
+### Docker
+
+Build de dependencias:
+
+```bash
+docker build -f Dockerfile.deps -t carcosa:deps .
+```
+
+Build de la app:
+
+```bash
+docker build -f Dockerfile.app -t carcosa:app .
+```
+
+Ejecutar una simulacion:
+
+```bash
+docker run --rm -it -v ${PWD}:/app -w /app carcosa:app python -m sim.runner --seed 1 --max-steps 400
+```
+
+### Python local
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+pytest -q
+```
+
+## Estructura
+
+```text
+engine/      Motor principal del juego
+sim/         Runner, politicas y metricas
+train/       Entornos y pipelines de entrenamiento
+tests/       Suite de pruebas funcionales y canonicidad
+tools/       Scripts de analisis y soporte
+docs/        Documentacion tecnica y canon
+documentos/  Reportes operativos y experimentales
+```
+
+## Licencia
+
+Este repositorio se publica bajo `CC BY-NC-SA 4.0`. Esta licencia es adecuada para contenido de juego, reglas, documentos y material creativo del proyecto. Ver [LICENSE](LICENSE).
+
+## Workflow de Docker
 
 This README documents the recommended Docker workflow for development and experiments.
 
@@ -373,4 +437,3 @@ See `tools/README.md` for:
 - **Setup scripts**: Historical implementation records
 - **Debug tools**: Step-by-step debugging
 - **Validation**: Syntax, imports, and quick P0 checks
-

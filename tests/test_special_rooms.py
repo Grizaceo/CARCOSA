@@ -71,30 +71,25 @@ def test_capilla_healing_and_risk():
     assert has_status(newState.players["P1"], "PARANOIA")
 
 def test_salon_belleza_vanity():
-    """B7: Salón Belleza - Contador, Vanidad al 3er uso, Protección."""
+    """B7: Salón Belleza - Contador, Vanidad cada 2 activaciones, Protección."""
     s = create_base_state()
     p = s.players["P1"]
     p = s.players["P1"]
     p.room = RoomId("F1_R1")
     s.rooms[RoomId("F1_R1")].special_card_id = "SALON_BELLEZA"
     s.rooms[RoomId("F1_R1")].special_revealed = True
-    
-    # Uso 1
+
+    # Uso 1: sin VANIDAD
     action = Action(actor="P1", type=ActionType.USE_SALON_BELLEZA, data={})
     s = step(s, action, RNG(0), Config())
     assert s.salon_belleza_uses == 1
     assert s.flags.get("PROTECCION_AMARILLO_P1") is not None
     assert not has_status(s.players["P1"], "VANIDAD")
-    
-    # Uso 2
+
+    # Uso 2: VANIDAD se aplica (2 % 2 == 0)
     s.remaining_actions["P1"] = 2
     s = step(s, action, RNG(0), Config())
     assert s.salon_belleza_uses == 2
-    
-    # Uso 3: Vanidad
-    s.remaining_actions["P1"] = 2
-    s = step(s, action, RNG(0), Config())
-    assert s.salon_belleza_uses == 3
     assert has_status(s.players["P1"], "VANIDAD")
 
 def test_armory_take():

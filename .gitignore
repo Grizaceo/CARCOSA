@@ -31,9 +31,13 @@ get-pip.py
 # ─── Modelos entrenados ───────────────────────────────────────────────────────
 models_bc/
 models_gpu/
+models/
 
 # ─── Claude Code ──────────────────────────────────────────────────────────────
 .claude/
+
+# ─── Artefactos locales accidentales ──────────────────────────────────────────
+=2.7.0
 
 # ─── Windows / WSL metadata ───────────────────────────────────────────────────
 *:Zone.Identifier
