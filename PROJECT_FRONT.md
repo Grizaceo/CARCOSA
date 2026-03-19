@@ -52,3 +52,11 @@ Si se retoma sin nueva instrucción, empezar por:
 
 ## Veredicto actual
 **active-and-delegable**
+
+## Contexto relacionado
+- Canon técnico: `docs/Carcosa_Libro_Tecnico_CANON.md`
+- Guía AI data: `docs/AI_DATA_GUIDE.md`
+- Plantilla delegación Nemotron: `docs/NEMOTRON_DELEGATION_TEMPLATE.md`
+- Estado bots/rewards: `documentos/estado_bots_rewards_2026-03-06.md`
+- Guía corridas: `docs/RUNS_ORGANIZATION.md`
+- Reporte consolidado finetune: `documentos/reporte_consolidado_finetune_20k_2026-03-06.md`
