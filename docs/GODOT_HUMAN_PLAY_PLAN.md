@@ -602,6 +602,7 @@ No tocar la lógica de BC recording ni el formato JSONL.
 
 ### Sprint 6 — Servidor hosted (VPS / Docker)
 **Objetivo:** Servidor accesible desde internet para jugar con cualquier persona.  
+**Estado:** ✅ COMPLETADO 2026-03-24  
 **Duración estimada:** 2–4 horas  
 **Delegable a agente:** Sí (Dockerfile + instrucciones deploy)
 
@@ -626,6 +627,36 @@ Agregar sección en docs/GODOT_HUMAN_PLAY_PLAN.md con instrucciones deploy:
 ```
 
 **Criterio de éxito:** `docker-compose -f docker-compose.server.yml up` levanta el servidor; cliente Godot local puede conectarse con IP pública.
+
+**Resultado real:**
+- ✅ `Dockerfile.server`: imagen mínima ~60 MB (python:3.11-slim + fastapi/uvicorn/websockets), copia solo `engine/` y `sim/` (sin torch/RL/ML)
+- ✅ `docker-compose.server.yml`: servicio `carcosa-server`, port 8765, volume `./runs`, restart unless-stopped
+- ✅ HEALTHCHECK integrado: valida que el endpoint `/` responde cada 30s
+- ✅ Instrucciones de deploy VPS documentadas abajo
+
+**Deploy rápido en VPS:**
+```bash
+# 1. Clonar repo en el VPS
+git clone <repo-url> && cd CARCOSA
+
+# 2. Levantar servidor
+docker-compose -f docker-compose.server.yml up -d
+
+# 3. Verificar
+curl http://localhost:8765/
+# → {"status": "ok", "active_sessions": 0, "ws_connections": {}}
+
+# 4. Abrir puerto en firewall
+sudo ufw allow 8765/tcp   # Ubuntu/Debian
+# o: sudo firewall-cmd --add-port=8765/tcp --permanent && sudo firewall-cmd --reload  # RHEL/Fedora
+
+# 5. En Godot: cambiar ServerInput a http://<IP_PUBLICA_VPS>:8765
+```
+
+**Notas de seguridad para producción:**
+- Considerar reverse proxy (nginx/caddy) con HTTPS para tráfico público
+- El servidor no tiene autenticación — cualquiera con la IP puede crear partidas
+- Las sesiones son in-memory; reiniciar el contenedor pierde partidas activas (los JSONL salvados persisten en el volumen)
 
 ---
 
