@@ -1,7 +1,19 @@
 ﻿{
-  "meditate_critical": -4,
-  "move_for_better_delta": 1,
+  "meditate_critical": -3,
+  "move_for_better_delta": 2,
   "search_local_min_remaining": 2,
   "vial_margin": 2,
-  "endgame_force_umbral": true
+  "endgame_force_umbral": true,
+  "king_flee_round_threshold": 9,
+  "king_flee_sanity": 0,
+  "late_game_meditate_bonus": 1,
+  "search_sanity_min": -2,
+  "role_sanity_bias": {
+    "SCOUT": 1,
+    "BRAWLER": 1,
+    "PSYCHIC": 0,
+    "HEALER": 0,
+    "HIGH_ROLLER": 0,
+    "TANK": -1
+  }
 }

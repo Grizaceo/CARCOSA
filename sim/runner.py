@@ -477,7 +477,7 @@ def main():
     ap.add_argument("--max-steps", type=int, default=2000)
     ap.add_argument("--out", type=str, default=None)
     ap.add_argument("--policy", type=str, default="GOAL", 
-                    choices=["GOAL", "HABITANTEDECARCOSA", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM", "MCTS"],
+                    choices=["GOAL", "HABITANTEDECARCOSA", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM", "MCTS", "BCNN", "HYBRID"],
                     help="Player policy to use")
     
     # MCTS Args
