@@ -18,6 +18,7 @@ runs/
 runs_v*/
 runs_archive/
 data/
+datasets/
 
 # ─── Reports (generados automáticamente) ─────────────────────────────────────
 reports/*/
