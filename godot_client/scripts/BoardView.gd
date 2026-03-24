@@ -57,9 +57,10 @@ func _render(state: Dictionary) -> String:
 
 	# ── Meta ───────────────────────────────────────────────────────────────────
 	lines.append("──────────────────────────────")
-	lines.append("Ronda: %d   Fase: %s" % [
+	lines.append("Ronda: %d   Fase: %s   Rey: piso %d" % [
 		state.get("round", 0),
 		state.get("phase", "?"),
+		state.get("king_floor", 1),
 	])
 	if state.get("game_over", false):
 		lines.append("RESULTADO: %s" % state.get("outcome", "?"))

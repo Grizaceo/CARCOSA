@@ -30,6 +30,8 @@ var _pending_actor: String = ""
 var _pending_actions: Array = []
 # AcceptDialog creado en tiempo de ejecución para no modificar la escena
 var _hotseat_dialog: AcceptDialog = null
+# Mapeo de PID canónico (P1, P2...) → nombre de display del lobby
+var _player_display_names: Dictionary = {}
 
 
 # ── Ciclo de vida ─────────────────────────────────────────────────────────────
@@ -103,9 +105,16 @@ func _get_player_names() -> Array:
 
 func _on_start_pressed() -> void:
 	var seed: int = int(seed_input.value)
-	var player_names: Array = _get_player_names()
-	if player_names.is_empty():
-		player_names = ["J1", "J2", "J3", "J4"]
+	var display_names: Array = _get_player_names()
+	var count: int = display_names.size()
+	# Los PIDs canónicos del engine siempre son P1, P2, P3, P4.
+	# Los nombres del lobby son solo para display en el diálogo hot-seat.
+	var canonical_ids: Array = []
+	_player_display_names = {}
+	for i: int in count:
+		var pid := "P%d" % (i + 1)
+		canonical_ids.append(pid)
+		_player_display_names[pid] = display_names[i] if i < display_names.size() else pid
 	# Sprint 5: aplicar URL de servidor desde el campo del lobby
 	var url := server_url_input.text.strip_edges()
 	if not url.is_empty():
@@ -118,7 +127,7 @@ func _on_start_pressed() -> void:
 	_pending_actor = ""
 	_pending_actions = []
 	GameClient.game_id = ""
-	GameClient.start_game(seed, player_names)
+	GameClient.start_game(seed, canonical_ids)
 
 
 # ── Señales de GameClient ─────────────────────────────────────────────────────
@@ -155,7 +164,8 @@ func _on_legal_actions_ready(actor: String, actions: Array) -> void:
 		_pending_actor = actor
 		_pending_actions = actions
 		action_panel.show_waiting(actor)
-		_hotseat_dialog.dialog_text = "Turno de %s\n¿Listo para jugar?" % actor
+		var display_name: String = _player_display_names.get(actor, actor)
+		_hotseat_dialog.dialog_text = "Turno de %s\n¿Listo para jugar?" % display_name
 		_hotseat_dialog.popup_centered()
 	else:
 		# Modo observador: actor remoto o bot — no mostrar acciones
