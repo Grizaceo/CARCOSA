@@ -1,0 +1,22 @@
+# docker-compose.server.yml — CARCOSA Game Server para juego online (Sprint 6)
+#
+# Uso:
+#   docker-compose -f docker-compose.server.yml up -d        # arrancar
+#   docker-compose -f docker-compose.server.yml logs -f       # ver logs
+#   docker-compose -f docker-compose.server.yml down           # parar
+#
+# El servidor queda accesible en http://<IP>:8765
+# Las partidas se guardan en ./runs/ como JSONL.
+
+services:
+  carcosa-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./runs:/app/runs
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1

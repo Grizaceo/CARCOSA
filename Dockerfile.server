@@ -1,0 +1,35 @@
+# Dockerfile.server — CARCOSA Human Play Game Server (Sprint 6)
+#
+# Imagen mínima para servir sim/game_server.py en un VPS o en LAN.
+# Solo incluye engine/ y sim/ (sin torch, RL, ni herramientas de training).
+#
+# Build:  docker build -f Dockerfile.server -t carcosa-server .
+# Run:    docker run -p 8765:8765 -v ./runs:/app/runs carcosa-server
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Dependencias mínimas para el servidor de juego (sin torch/RL/ML)
+RUN pip install --no-cache-dir \
+    fastapi>=0.110.0 \
+    "uvicorn[standard]>=0.29.0" \
+    websockets>=12.0
+
+# Copiar solo engine y sim (todo lo que el server necesita)
+COPY engine/ /app/engine/
+COPY sim/ /app/sim/
+
+# Directorio para persistir partidas JSONL
+RUN mkdir -p /app/runs
+VOLUME /app/runs
+
+EXPOSE 8765
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/')" || exit 1
+
+CMD ["uvicorn", "sim.game_server:app", "--host", "0.0.0.0", "--port", "8765"]
