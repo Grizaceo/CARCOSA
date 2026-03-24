@@ -7,6 +7,7 @@
 extends Node
 
 # Sprint 5: BASE_URL es variable para que el lobby pueda cambiarla (LAN / VPS)
+# Sprint 7: valor inicial leído de res://config.json (necesario en Android donde 127.0.0.1 no funciona)
 var base_url: String = "http://127.0.0.1:8765"
 
 var game_id: String = ""
@@ -29,6 +30,24 @@ signal error_occurred(message: String)
 
 
 # ── Ciclo de vida ─────────────────────────────────────────────────────────────
+
+# Sprint 7: carga res://config.json al iniciar para permitir BASE_URL configurable en Android.
+func _ready() -> void:
+	_load_config()
+
+
+func _load_config() -> void:
+	"""Lee config.json y aplica server_url si existe. Silencioso si el archivo no existe."""
+	var f := FileAccess.open("res://config.json", FileAccess.READ)
+	if f == null:
+		return
+	var json := JSON.new()
+	if json.parse(f.get_as_text()) == OK and json.data is Dictionary:
+		var cfg: Dictionary = json.data
+		if cfg.has("server_url") and (cfg["server_url"] as String) != "":
+			base_url = cfg["server_url"]
+	f.close()
+
 
 func _process(_delta: float) -> void:
 	if _ws == null:

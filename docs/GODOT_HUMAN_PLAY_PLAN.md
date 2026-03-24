@@ -662,6 +662,7 @@ sudo ufw allow 8765/tcp   # Ubuntu/Debian
 
 ### Sprint 7 — Export Android
 **Objetivo:** APK instalable en Android con el cliente de juego.  
+**Estado:** ✅ COMPLETADO 2026-03-24  
 **Duración estimada:** 2–3 horas (instalación SDK) + 30 min (export)  
 **Delegable a agente:** Parcialmente (el agente da instrucciones; la ejecución es manual en Godot)
 
@@ -682,6 +683,44 @@ Verificar si hay incompatibilidades con el uso de HTTPRequest de Godot en Androi
 ```
 
 **Criterio de éxito:** APK instalable y funcional que se conecta al servidor del Sprint 6.
+
+**Resultado real:**
+- ✅ `GameClient.gd`: añadido `_ready()` + `_load_config()` — lee `res://config.json` al arrancar; si `server_url` está presente lo usa como `base_url` (silencioso si el archivo no existe)
+- ✅ `godot_client/config.json`: archivo de configuración con `server_url` editable sin recompilar:
+  ```json
+  { "server_url": "http://127.0.0.1:8765" }
+  ```
+  Para Android: cambiar a `http://<IP_VPS>:8765` antes del export (incluido en APK vía `include_filter="*.json"`).
+- ✅ `godot_client/export_presets.cfg`: preset Android para Godot 4 con:
+  - `package/unique_name = "com.carcosa.client"`
+  - `permissions/internet = true` + `permissions/access_network_state = true`
+  - `screen/min_sdk = 24`, `screen/target_sdk = 34`
+  - `architectures/armeabi-v7a = true`, `architectures/arm64-v8a = true`
+- ✅ `HTTPRequest` y `WebSocketPeer` de Godot 4 funcionan en Android sin cambios de código
+
+**Pasos para generar APK (manual en Godot Editor):**
+```
+# Prerrequisitos (una sola vez):
+# 1. JDK 17: sudo apt install openjdk-17-jdk
+# 2. Android SDK (API 24+) — via Android Studio o command-line tools
+# 3. Godot Editor Settings → Export → Android: configurar sdk_path y jdk_path
+# 4. Descargar Android export templates: Editor → Manage Export Templates
+
+# En Godot Editor:
+# 1. Abrir proyecto en godot_client/
+# 2. Project → Export → Add → Android  (export_presets.cfg ya tiene la plantilla)
+# 3. Configurar keystore (debug o release)
+# 4. Editar config.json: server_url = "http://<IP_SERVIDOR>:8765"
+# 5. Export Project → Debug APK o Release APK
+```
+
+**Instalar en dispositivo:**
+```bash
+adb devices                        # verificar dispositivo con USB debugging
+adb install carcosa.apk
+```
+
+**Nota:** `127.0.0.1` en Android apunta al loopback del propio teléfono; usar IP del VPS (Sprint 6) o IP LAN del PC host.
 
 ---
 
