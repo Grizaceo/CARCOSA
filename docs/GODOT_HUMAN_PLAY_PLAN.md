@@ -378,7 +378,7 @@ El servidor FastAPI ya es stateless por diseño (`game_id` como clave de sesión
 ### Ruta de evolución de la arquitectura
 
 ```
-Sprint 1-4                Sprint 5-6               Sprint 7+
+Sprint 1-4 ✅(1-2)        Sprint 5-6               Sprint 7+
 ────────────────────      ────────────────────      ────────────────────
 PC local (hot-seat)  →   LAN / VPS online     →   App Android store
 HTTP polling             WebSocket bidireccional    Google Play (opcional)
@@ -424,6 +424,7 @@ transition_record(state, action, next_state, actor: str) -> dict  # verificar fi
 
 ### Sprint 1 — Servidor Python mínimo (5 endpoints)
 **Objetivo:** `sim/game_server.py` funcional, testeable con curl.  
+**Estado:** ✅ COMPLETADO 2026-03-23  
 **Duración estimada:** 2–3 horas  
 **Delegable a agente:** Sí (implementación pura Python)
 
@@ -463,6 +464,7 @@ curl -X POST http://localhost:8765/start -H "Content-Type: application/json" -d 
 
 ### Sprint 2 — Cliente Godot: texto + botones (board mínimo)
 **Objetivo:** Ciclo completo jugable en Godot, sin gráficos — texto y botones.  
+**Estado:** ✅ COMPLETADO 2026-03-23  
 **Duración estimada:** 4–6 horas  
 **Delegable a agente:** Parcialmente (scaffolding del proyecto; el wiring de UI requiere test manual)
 
