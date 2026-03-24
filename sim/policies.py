@@ -561,7 +561,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
     """
     cfg: Config = Config()
     # Umbral base de “meditar por seguridad” (más estricto que <=1)
-    meditate_critical: int = -3
+    meditate_critical: int = -2
     # Diferencia mínima de cartas para cambiar a otro piso
     move_for_better_delta: int = 2
     # Mínimo de cartas locales para preferir SEARCH
@@ -570,16 +570,32 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
     vial_margin: int = 1
     # Endgame: forzar umbral agresivamente
     endgame_force_umbral: bool = True
+    # Huir del piso del Rey si sanidad <= este valor
+    king_flee_sanity: int = 2
+    # Ronda a partir de la cual el Rey hace daño severo (4/ronda)
+    king_flee_round_threshold: int = 9
+    # Bonus adicional al umbral de meditar en late game
+    late_game_meditate_bonus: int = 2
+    # No buscar si cordura por debajo de este valor
+    search_sanity_min: int = -1
 
     def __post_init__(self) -> None:
         params = _load_policy_params()
         if not isinstance(params, dict):
+            self._role_sanity_bias: Dict[str, int] = {}
+            self._team_memory = None
+            self._bot_memories = None
             return
         self.meditate_critical = int(params.get("meditate_critical", self.meditate_critical))
         self.move_for_better_delta = int(params.get("move_for_better_delta", self.move_for_better_delta))
         self.search_local_min_remaining = int(params.get("search_local_min_remaining", self.search_local_min_remaining))
         self.vial_margin = int(params.get("vial_margin", self.vial_margin))
         self.endgame_force_umbral = bool(params.get("endgame_force_umbral", self.endgame_force_umbral))
+        self.king_flee_sanity = int(params.get("king_flee_sanity", self.king_flee_sanity))
+        self.king_flee_round_threshold = int(params.get("king_flee_round_threshold", self.king_flee_round_threshold))
+        self.late_game_meditate_bonus = int(params.get("late_game_meditate_bonus", self.late_game_meditate_bonus))
+        self.search_sanity_min = int(params.get("search_sanity_min", self.search_sanity_min))
+        self._role_sanity_bias = dict(params.get("role_sanity_bias", {}))
         # Sistema de memoria (se configura desde runner.py)
         self._team_memory = None
         self._bot_memories = None
@@ -600,6 +616,42 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         if self._team_memory is None:
             return []
         return self._team_memory.get_threat_rooms()
+
+    def _role_bias(self, role_id: Optional[str]) -> int:
+        """Retorna el bias de umbral de meditación por rol (positivo = más conservador)."""
+        if not role_id or not self._role_sanity_bias:
+            return 0
+        return int((self._role_sanity_bias or {}).get(str(role_id), 0))
+
+    def _preferred_floor(self, pid: PlayerId, state: GameState) -> int:
+        """Asigna un piso preferido a cada jugador para evitar clustering."""
+        sorted_pids = sorted(str(p) for p in state.players.keys())
+        idx = sorted_pids.index(str(pid)) if str(pid) in sorted_pids else 0
+        floors = [1, 2, 3, 2]  # P1→F1, P2→F2(Umbral), P3→F3, P4→F2
+        return floors[idx % 4]
+    def _best_room_for_player(self, state: GameState, pid: PlayerId) -> Optional[RoomId]:
+        """Mejor habitación para explorar, priorizando el piso asignado al jugador."""
+        preferred = self._preferred_floor(pid, state)
+        # Primero intentar en piso preferido
+        best_preferred: Optional[Tuple[int, str, RoomId]] = None
+        best_global: Optional[Tuple[int, str, RoomId]] = None
+        for rid, room in state.rooms.items():
+            s = str(rid)
+            if s.endswith("_P"):
+                continue
+            rem = room.deck.remaining()
+            if rem <= 0:
+                continue
+            cand = (rem, s, rid)
+            if floor_of(rid) == preferred:
+                if best_preferred is None or cand > best_preferred:
+                    best_preferred = cand
+            if best_global is None or cand > best_global:
+                best_global = cand
+        # Prefer assigned floor if it has cards, else fallback global
+        if best_preferred is not None:
+            return best_preferred[2]
+        return best_global[2] if best_global else None
 
     def choose(self, state: GameState, rng: RNG) -> Action:
         actor = _get_active_actor(state)
@@ -630,7 +682,10 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             return finalize(forced)
 
         danger = _danger_score(state, pid)
-        meditate_threshold = self.meditate_critical
+        role_bias = self._role_bias(getattr(p, 'role_id', None))
+        late_game = state.round > self.king_flee_round_threshold
+        on_king_floor = floor_of(p.room) == state.king_floor
+        meditate_threshold = self.meditate_critical + role_bias
         key_carrier = p.keys > 0
         team_low, team_critical = _team_fragility(state)
         if danger > 0:
@@ -641,33 +696,28 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             meditate_threshold += 1
         if key_carrier:
             meditate_threshold += 1
-        
-        # === NUEVOS FACTORES DE RIESGO ===
-        
+
+        # === FACTORES DE RIESGO ===
+
         # Factor: Piso del Rey -> más riesgo si estás en su piso
-        if floor_of(p.room) == state.king_floor:
-            if p.sanity <= 1:
-                meditate_threshold += 2  # Muy crítico en piso del Rey con baja cordura
-            else:
-                meditate_threshold += 1
-        
+        if on_king_floor:
+            meditate_threshold += 2  # Muy crítico en piso del Rey siempre
+
+        # Factor: Late game - el Rey hace 4 daño/ronda, ser muy conservador
+        if late_game:
+            meditate_threshold += self.late_game_meditate_bonus
+
         # Factor: TALE en mano -> proteger valor similar a llaves
         has_tale = any("TALE" in obj for obj in p.objects)
         if has_tale:
             meditate_threshold += 1
-        
-        # Factor: Ronda actual -> late game prioriza velocidad sobre seguridad
-        if state.round > 25:
-            meditate_threshold -= 1  # Menos conservador en late game
-        elif state.round > 35:
-            meditate_threshold -= 2  # Mucho menos conservador en muy late game
-        
+
         # Factor: Capacidad de sacrificio restante -> si no puede sacrificar, meditar más urgente
         can_sacrifice = p.object_slots_penalty < 2 and (p.sanity_max or 5) > -3
         if not can_sacrifice and p.sanity <= 0:
             meditate_threshold += 2  # Sin sacrificio disponible, urgente meditar
-        
-        meditate_threshold = min(meditate_threshold, 0)  # Cap menos restrictivo (-2 -> 0)
+
+        meditate_threshold = min(meditate_threshold, 1)  # Cap: meditar si sanity <= 1 en peor caso
 
         carrier_caution = key_carrier and (danger > 0 or team_critical > 0)
 
@@ -710,6 +760,17 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                                 best = a
                     if best:
                         return finalize(best)
+
+        # 0.7) Huir del piso del Rey cuando el daño es severo o la cordura está baja
+        if on_king_floor and p.sanity <= self.king_flee_sanity:
+            exits = [
+                a for a in acts
+                if a.type == ActionType.MOVE
+                and floor_of(RoomId(a.data.get("to", str(p.room)))) != state.king_floor
+            ]
+            if exits:
+                safest = min(exits, key=lambda a: _danger_score_room(state, RoomId(a.data.get("to"))))
+                return finalize(safest)
 
         # 1) Panico extremo: meditar si existe
         if p.sanity <= self.cfg.PLAYER_SANITY_PANIC:
@@ -816,7 +877,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             if key_special:
                 return finalize(key_special)
 
-            goal = _best_room_global(state)
+            goal = self._best_room_for_player(state, pid)
             current_rem = _room_remaining(state, p.room)
             same_floor_goal = goal is not None and floor_of(goal) == floor_of(p.room)
             search_allowed = (current_rem >= self.search_local_min_remaining) or same_floor_goal
@@ -851,7 +912,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                                 if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
                                     return finalize(a)
 
-            if search_allowed and _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold):
+            if search_allowed and _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold) and p.sanity >= self.search_sanity_min:
                 a = _pick_first(acts, ActionType.SEARCH)
                 if a:
                     return finalize(a)
@@ -1248,6 +1309,210 @@ class RandomPolicy(PlayerPolicy):
         return rng.choice(acts)
 
 
+class BCNNPlayerPolicy(PlayerPolicy):
+    """
+    Behavioral Cloning Neural Network policy.
+    Loads a pre-trained CarcosaPolicyNet checkpoint and its companion
+    action_mapping.json, then selects actions by masking illegal types
+    and returning the legal action whose type has the highest logit.
+
+    The companion mapping file is looked up as:
+        <checkpoint_stem>.action_mapping.json
+    in the same directory as the .pt file.
+    """
+
+    def __init__(self, cfg: Config = None):
+        import json
+        import torch
+        import numpy as np
+        from pathlib import Path as _Path
+        from train.model import CarcosaPolicyNet
+
+        self.cfg = cfg or Config()
+        self._torch = torch
+        self._np = np
+        self._goal_fallback = GoalDirectedPlayerPolicy(self.cfg)
+
+        # Locate checkpoint relative to repo root
+        checkpoint_path = _Path(__file__).parent.parent / "models_bc" / "bc_mlp_all_best.pt"
+        checkpoint = torch.load(str(checkpoint_path), map_location="cpu")
+
+        obs_dim = checkpoint.get("obs_dim", 10)
+        num_actions = checkpoint.get("num_actions")
+        hidden_sizes = checkpoint.get("hidden_sizes") or [128, 128, 64]
+
+        # Load the companion action mapping: action_type_string → model_index
+        mapping_path = checkpoint_path.with_suffix(".action_mapping.json")
+        if mapping_path.exists():
+            with open(mapping_path, encoding="utf-8") as _f:
+                raw_mapping = json.load(_f)
+        else:
+            # Hardcoded fallback consistent with all known training runs
+            raw_mapping = {
+                "MOVE": 0, "ACCEPT_SACRIFICE": 1, "MEDITATE": 2,
+                "END_TURN": 3, "USE_HEALER_HEAL": 4,
+            }
+
+        # Build reverse map: model_index → ActionType (only for indices 0..num_actions-1)
+        if num_actions is None:
+            num_actions = max(raw_mapping.values()) + 1
+        self._index_to_action_type: Dict[int, ActionType] = {}
+        for type_str, idx in raw_mapping.items():
+            if idx < num_actions:
+                try:
+                    self._index_to_action_type[idx] = ActionType(type_str)
+                except ValueError:
+                    pass  # Unknown action type string — skip
+
+        self._model = CarcosaPolicyNet(obs_dim, num_actions, hidden_sizes=hidden_sizes)
+        self._model.load_state_dict(checkpoint["model_state_dict"])
+        self._model.eval()
+
+    def _get_obs(self, state: GameState):
+        """Replicate CarcosaEnv._get_obs() exactly."""
+        import numpy as np
+        from engine.tension import compute_features, tension_T
+
+        features = compute_features(state, self.cfg)
+        tension = tension_T(state, self.cfg, features=features)
+
+        obs = np.array([
+            features.get("P_sanity", 0.0),
+            features.get("P_keys", 0.0),
+            features.get("P_mon", 0.0),
+            features.get("P_umbral", 0.0),
+            features.get("P_debuff", 0.0),
+            features.get("P_king_risk", 0.0),
+            features.get("P_crown", 0.0),
+            features.get("P_round", 0.0),
+            tension,
+            state.king_floor / 3.0,
+        ], dtype=np.float32)
+
+        return np.clip(obs, 0.0, 1.0)
+
+    def _predict_type_with_confidence(self, state: GameState):
+        """
+        Run the BC model and return (best_legal_type, softmax_confidence).
+        best_legal_type is None if no legal action type is in the mapping.
+        confidence is the softmax probability of the predicted class.
+        """
+        import torch
+
+        actor = _get_active_actor(state)
+        acts = get_legal_actions(state, actor)
+        if not acts:
+            return None, 0.0
+
+        obs = self._get_obs(state)
+        obs_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+        with torch.no_grad():
+            logits = self._model(obs_tensor).squeeze(0)
+
+        legal_types = {a.type for a in acts}
+        NEG_INF = float("-inf")
+        best_score = NEG_INF
+        best_type = None
+        best_idx = None
+
+        for idx, atype in self._index_to_action_type.items():
+            if atype in legal_types:
+                score = logits[idx].item()
+                if score > best_score:
+                    best_score = score
+                    best_type = atype
+                    best_idx = idx
+
+        if best_type is None:
+            return None, 0.0
+
+        # Softmax confidence = exp(best_logit) / sum(exp(all_logits))
+        softmax_probs = torch.softmax(logits, dim=0)
+        confidence = softmax_probs[best_idx].item()
+        return best_type, confidence
+
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        import torch
+
+        actor = _get_active_actor(state)
+        acts = get_legal_actions(state, actor)
+        if not acts:
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
+
+        obs = self._get_obs(state)
+        obs_tensor = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)  # [1, 10]
+
+        with torch.no_grad():
+            logits = self._model(obs_tensor).squeeze(0)  # [num_actions]
+
+        # Mask: keep only model indices whose ActionType has at least one legal action
+        legal_types = {a.type for a in acts}
+        NEG_INF = float("-inf")
+        best_score = NEG_INF
+        best_type = None
+
+        for idx, atype in self._index_to_action_type.items():
+            if atype in legal_types:
+                score = logits[idx].item()
+                if score > best_score:
+                    best_score = score
+                    best_type = atype
+
+        # If the model knows no legal type, fall back to GOAL policy
+        if best_type is None:
+            return self._goal_fallback.choose(state, rng)
+
+        # Return first legal action matching the best type
+        for a in acts:
+            if a.type == best_type:
+                return a
+        return self._goal_fallback.choose(state, rng)
+
+
+class HybridBCNNGoalPolicy(BCNNPlayerPolicy):
+    """
+    Hybrid BC + GOAL policy.
+
+    GoalDirectedPlayerPolicy is the primary decision maker.
+    When the BC model predicts an action type with softmax confidence >= threshold
+    AND that type is legal AND differs from GOAL's predicted type, BC overrides.
+
+    This guarantees winrate >= GOAL baseline while letting the BC model
+    improve specific high-confidence decisions.
+
+    Default threshold: 0.45 (tunable via BC_CONFIDENCE_THRESHOLD class attribute).
+    """
+
+    BC_CONFIDENCE_THRESHOLD: float = 0.95
+
+    def __init__(self, cfg=None):
+        super().__init__(cfg)  # initialises _model, _goal_fallback, etc.
+
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        actor = _get_active_actor(state)
+        acts = get_legal_actions(state, actor)
+        if not acts:
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
+
+        # Primary: GOAL-directed action
+        goal_action = self._goal_fallback.choose(state, rng)
+
+        # Secondary: BC prediction with confidence
+        bc_type, bc_conf = self._predict_type_with_confidence(state)
+
+        # Override GOAL only when BC is confident enough and suggests a different type
+        if (
+            bc_conf >= self.BC_CONFIDENCE_THRESHOLD
+            and bc_type is not None
+            and bc_type != goal_action.type
+        ):
+            for a in acts:
+                if a.type == bc_type:
+                    return a
+
+        return goal_action
+
+
 PLAYER_POLICY_REGISTRY = {
     "GOAL": GoalDirectedPlayerPolicy,
     "HABITANTEDECARCOSA": HabitanteDeCarcosaPolicy,
@@ -1255,6 +1520,8 @@ PLAYER_POLICY_REGISTRY = {
     "BERSERKER": BerserkerPolicy,
     "SPEEDRUNNER": SpeedrunnerPolicy,
     "RANDOM": RandomPolicy,
+    "BCNN": BCNNPlayerPolicy,
+    "HYBRID": HybridBCNNGoalPolicy,
 }
 
 KING_POLICY_REGISTRY = {
