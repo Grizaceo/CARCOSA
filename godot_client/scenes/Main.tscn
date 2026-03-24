@@ -57,6 +57,11 @@ min_value = 1.0
 max_value = 999999.0
 value = 1.0
 
+[node name="RandomSeedBtn" type="Button" parent="LobbyPanel/MarginContainer/VBox/SeedRow"]
+layout_mode = 2
+text = "?"
+tooltip_text = "Seed aleatoria"
+
 ; ── Selector de cantidad de jugadores ─────────────────────────────────────────
 [node name="PlayerCountRow" type="HBoxContainer" parent="LobbyPanel/MarginContainer/VBox"]
 layout_mode = 2
@@ -137,10 +142,14 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 script = ExtResource("2_board")
 
-[node name="Content" type="Label" parent="GamePanel/HSplit/BoardView"]
+[node name="Content" type="RichTextLabel" parent="GamePanel/HSplit/BoardView"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "..."
+size_flags_vertical = 3
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+text = ""
 
 ; ── ActionPanel (ScrollContainer con script ActionPanel.gd) ───────────────────
 [node name="ActionPanel" type="ScrollContainer" parent="GamePanel/HSplit"]
@@ -164,6 +173,39 @@ theme_override_font_sizes/font_size = 14
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 4
+
+[node name="EventLogPanel" type="PanelContainer" parent="GamePanel"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 130)
+
+[node name="Margin" type="MarginContainer" parent="GamePanel/EventLogPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_bottom = 4
+
+[node name="VBox" type="VBoxContainer" parent="GamePanel/EventLogPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="EventLogHeader" type="Label" parent="GamePanel/EventLogPanel/Margin/VBox"]
+layout_mode = 2
+text = "Historial"
+theme_override_font_sizes/font_size = 11
+modulate = Color(0.45, 0.45, 0.45, 1.0)
+
+[node name="EventLogScroll" type="ScrollContainer" parent="GamePanel/EventLogPanel/Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="EventLogText" type="RichTextLabel" parent="GamePanel/EventLogPanel/Margin/VBox/EventLogScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+text = "[color=#444]— inicia una partida —[/color]"
 
 [node name="SaveButton" type="Button" parent="GamePanel"]
 layout_mode = 2

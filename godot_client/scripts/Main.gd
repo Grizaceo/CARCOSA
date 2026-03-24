@@ -21,6 +21,8 @@ extends Control
 @onready var result_label: Label = $ResultPanel/VBox/ResultLabel
 @onready var new_game_button: Button = $ResultPanel/VBox/NewGameButton
 @onready var error_label: Label = $ErrorLabel
+@onready var event_log_text: RichTextLabel = $GamePanel/EventLogPanel/Margin/VBox/EventLogScroll/EventLogText
+@onready var random_seed_btn: Button = $LobbyPanel/MarginContainer/VBox/SeedRow/RandomSeedBtn
 
 var _active_actor: String = ""
 var _game_over: bool = false
@@ -32,6 +34,11 @@ var _pending_actions: Array = []
 var _hotseat_dialog: AcceptDialog = null
 # Mapeo de PID canónico (P1, P2...) → nombre de display del lobby
 var _player_display_names: Dictionary = {}
+# Historial de eventos
+var _prev_state: Dictionary = {}
+var _prev_state_hash: String = ""
+var _event_log_entries: Array = []
+const MAX_LOG_ENTRIES := 80
 
 
 # ── Ciclo de vida ─────────────────────────────────────────────────────────────
@@ -45,6 +52,7 @@ func _ready() -> void:
 	save_button.pressed.connect(_on_save_pressed)
 	new_game_button.pressed.connect(_on_new_game_pressed)
 	player_count_input.value_changed.connect(_on_player_count_changed)
+	random_seed_btn.pressed.connect(_on_random_seed_pressed)
 
 	# AcceptDialog para confirmación hot-seat (creado dinámicamente)
 	_hotseat_dialog = AcceptDialog.new()
@@ -127,6 +135,11 @@ func _on_start_pressed() -> void:
 	_pending_actor = ""
 	_pending_actions = []
 	GameClient.game_id = ""
+	_prev_state = {}
+	_prev_state_hash = ""
+	_event_log_entries.clear()
+	if is_instance_valid(event_log_text):
+		event_log_text.text = "[color=#444]— iniciando partida —[/color]"
 	GameClient.start_game(seed, canonical_ids)
 
 
@@ -146,6 +159,14 @@ func _on_state_updated(state: Dictionary) -> void:
 
 	board_view.update_state(state)
 	status_label.text = _build_status(state)
+
+	# Historial: comparar hash del estado y registrar diferencias
+	var state_hash := JSON.stringify(state)
+	if state_hash != _prev_state_hash:
+		if not _prev_state.is_empty():
+			_generate_log_events(_prev_state, state)
+		_prev_state = state.duplicate(true)
+		_prev_state_hash = state_hash
 
 	if _game_over:
 		action_panel.clear_actions()
@@ -221,3 +242,78 @@ func _build_status(state: Dictionary) -> String:
 		state.get("phase", "?"),
 		state.get("active_actor", "?"),
 	]
+
+
+func _on_random_seed_pressed() -> void:
+	seed_input.value = (randi() % 999998) + 1
+
+
+func _add_log_entry(text: String, color: String = "888888") -> void:
+	_event_log_entries.append("[color=#%s]%s[/color]" % [color, text])
+	if _event_log_entries.size() > MAX_LOG_ENTRIES:
+		_event_log_entries.remove_at(0)
+	if is_instance_valid(event_log_text):
+		event_log_text.text = "\n".join(_event_log_entries)
+	await get_tree().process_frame
+	if is_instance_valid(event_log_text):
+		var scroll := event_log_text.get_parent() as ScrollContainer
+		if is_instance_valid(scroll):
+			scroll.scroll_vertical = 999999
+
+
+func _generate_log_events(prev: Dictionary, curr: Dictionary) -> void:
+	var prev_round: int = prev.get("round", 0)
+	var curr_round: int = curr.get("round", 0)
+	var prev_phase: String = prev.get("phase", "")
+	var curr_phase: String = curr.get("phase", "")
+
+	if curr_round != prev_round:
+		_add_log_entry("══ Ronda %d ══" % curr_round, "fff176")
+	elif curr_phase != prev_phase:
+		_add_log_entry("Fase: %s → %s" % [prev_phase, curr_phase], "ce93d8")
+
+	var prev_players: Dictionary = prev.get("players", {})
+	var curr_players: Dictionary = curr.get("players", {})
+	for pid: String in curr_players:
+		var pp: Dictionary = prev_players.get(pid, {})
+		var cp: Dictionary = curr_players[pid]
+		var prev_san: int = pp.get("sanity", cp.get("sanity", 0))
+		var curr_san: int = cp.get("sanity", 0)
+		var prev_keys: int = pp.get("keys", cp.get("keys", 0))
+		var curr_keys: int = cp.get("keys", 0)
+		var prev_room: String = str(pp.get("room", cp.get("room", "")))
+		var curr_room: String = str(cp.get("room", ""))
+		var prev_objs: Array = pp.get("objects", [])
+		var curr_objs: Array = cp.get("objects", [])
+
+		if curr_san <= 0 and prev_san > 0:
+			_add_log_entry("✗ %s eliminado" % pid, "ef5350")
+		elif curr_san < prev_san:
+			_add_log_entry("  %s -%d cord (%d/%d)" % [pid, prev_san - curr_san, curr_san, cp.get("sanity_max", 10)], "ef9a9a")
+		elif curr_san > prev_san:
+			_add_log_entry("  %s +%d cord" % [pid, curr_san - prev_san], "a5d6a7")
+
+		if curr_keys > prev_keys:
+			_add_log_entry("  K+ %s obtiene llave" % pid, "ffcc80")
+		elif curr_keys < prev_keys:
+			_add_log_entry("  K- %s usa llave" % pid, "ffb74d")
+
+		if curr_room != prev_room and not prev_room.is_empty():
+			_add_log_entry("  %s → %s" % [pid, curr_room], "64b5f6")
+
+		for obj: String in curr_objs:
+			if obj not in prev_objs:
+				_add_log_entry("  %s + %s" % [pid, obj], "80cbc4")
+		for obj: String in prev_objs:
+			if obj not in curr_objs:
+				_add_log_entry("  %s - %s" % [pid, obj], "b0bec5")
+
+	var prev_king: int = prev.get("king_floor", 1)
+	var curr_king: int = curr.get("king_floor", 1)
+	if curr_king != prev_king:
+		_add_log_entry("★ Rey → piso %d" % curr_king, "ce93d8")
+
+	if curr.get("game_over", false) and not prev.get("game_over", false):
+		var outcome: String = curr.get("outcome", "?")
+		var won: bool = "WIN" in outcome.to_upper()
+		_add_log_entry("★ FIN: %s" % outcome, "69f0ae" if won else "ef5350")
