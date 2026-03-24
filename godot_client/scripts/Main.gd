@@ -1,6 +1,7 @@
 # scripts/Main.gd
 # Controlador principal: maneja lobby → juego → resultado.
 # Sprint 3: hot-seat multi-jugador con AcceptDialog + configuración de nombres.
+# Sprint 5: campo de URL de servidor configurable (LAN / VPS).
 extends Control
 
 # ── Referencias de escena ─────────────────────────────────────────────────────
@@ -10,6 +11,8 @@ extends Control
 @onready var player_count_input: SpinBox = $LobbyPanel/MarginContainer/VBox/PlayerCountRow/PlayerCountInput
 @onready var player_names_container: VBoxContainer = $LobbyPanel/MarginContainer/VBox/PlayerNamesContainer
 @onready var start_button: Button = $LobbyPanel/MarginContainer/VBox/StartButton
+# Sprint 5: campo de URL del servidor (LAN / VPS)
+@onready var server_url_input: LineEdit = $LobbyPanel/MarginContainer/VBox/ServerRow/ServerInput
 @onready var status_label: Label = $GamePanel/StatusLabel
 @onready var board_view = $GamePanel/HSplit/BoardView
 @onready var action_panel = $GamePanel/HSplit/ActionPanel
@@ -103,6 +106,10 @@ func _on_start_pressed() -> void:
 	var player_names: Array = _get_player_names()
 	if player_names.is_empty():
 		player_names = ["J1", "J2", "J3", "J4"]
+	# Sprint 5: aplicar URL de servidor desde el campo del lobby
+	var url := server_url_input.text.strip_edges()
+	if not url.is_empty():
+		GameClient.base_url = url
 	start_button.disabled = true
 	start_button.text = "Conectando..."
 	error_label.hide()
