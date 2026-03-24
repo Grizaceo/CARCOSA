@@ -563,6 +563,7 @@ python train/train_bc.py --data data/human_bc.csv --epochs 20 --batch-size 32 --
 
 ### Sprint 5 — WebSocket + modo online LAN
 **Objetivo:** Dos PCs en la misma red pueden jugar juntas.  
+**Estado:** ✅ COMPLETADO 2026-03-24  
 **Duración estimada:** 4–6 horas  
 **Delegable a agente:** Sí
 
@@ -587,6 +588,15 @@ No tocar la lógica de BC recording ni el formato JSONL.
 ```
 
 **Criterio de éxito:** Dos instancias de Godot en distintas PCs (misma LAN) ven el estado actualizarse en tiempo real cuando el otro jugador actúa.
+
+**Resultado real:**
+- ✅ `sim/game_server.py`: endpoint `WS /ws/{game_id}/{player_id}`; `/act` es ahora `async` y hace `_broadcast()` a todos los WS conectados
+- ✅ `_broadcast()` helper: envía JSON a cada WebSocket de la sesión, descarta conexiones muertas
+- ✅ El WS envía el estado actual al conectar (no hace falta fetch inicial manual)
+- ✅ `GameClient.gd`: `WebSocketPeer` en `_process()`, reconexión automática si cae el WS; `BASE_URL` → variable `base_url` mutable
+- ✅ `Main.gd` + `Main.tscn`: campo `ServerRow/ServerInput` con default `http://127.0.0.1:8765`; se aplica a `GameClient.base_url` al arrancar
+- ✅ `requirements.txt`: añadido `websockets>=12.0`
+- ✅ `health` endpoint ahora reporta número de conexiones WS activas por sesión
 
 ---
 

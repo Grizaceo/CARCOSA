@@ -80,6 +80,22 @@ step = 1.0
 layout_mode = 2
 theme_override_constants/separation = 6
 
+; ── Sprint 5: URL del servidor (configurable para LAN / VPS) ─────────────────
+[node name="ServerRow" type="HBoxContainer" parent="LobbyPanel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ServerLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox/ServerRow"]
+layout_mode = 2
+text = "Servidor:"
+vertical_alignment = 1
+
+[node name="ServerInput" type="LineEdit" parent="LobbyPanel/MarginContainer/VBox/ServerRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "http://127.0.0.1:8765"
+placeholder_text = "http://IP:8765"
+
 [node name="StartButton" type="Button" parent="LobbyPanel/MarginContainer/VBox"]
 layout_mode = 2
 text = "Nueva partida"
@@ -87,8 +103,7 @@ theme_override_font_sizes/font_size = 16
 
 [node name="HintLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox"]
 layout_mode = 2
-text = "Servidor esperado en: http://127.0.0.1:8765
-Asegúrate de correr:  uvicorn sim.game_server:app --port 8765"
+text = "Inicia el servidor:  uvicorn sim.game_server:app --host 0.0.0.0 --port 8765\nPara LAN: cambia la URL al IP del host (ej. http://192.168.1.10:8765)"
 horizontal_alignment = 1
 autowrap_mode = 3
 modulate = Color(0.7, 0.7, 0.7, 1.0)

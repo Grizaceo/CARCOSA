@@ -2,9 +2,10 @@ pytest>=7.0.0
 pandas>=2.0.0
 scikit-learn>=1.0.0
 
-# Human play server (Sprint 1)
+# Human play server (Sprint 1 + Sprint 5)
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
+websockets>=12.0
 
 # Core numeric / data
 numpy>=1.23.0
