@@ -76,6 +76,14 @@ def _active_actor(state: GameState) -> str:
     """Devuelve el actor que debe actuar en este momento."""
     if state.phase == "KING":
         return "KING"
+    # CANON Fix #A: Sacrifice Interrupt — el actor activo puede ser distinto del turn_pos
+    pending_sacrifice = state.flags.get("PENDING_SACRIFICE_CHECK")
+    if pending_sacrifice:
+        if isinstance(pending_sacrifice, list):
+            if pending_sacrifice:
+                return str(pending_sacrifice[0])
+        else:
+            return str(pending_sacrifice)
     return str(state.turn_order[state.turn_pos])
 
 
@@ -101,7 +109,12 @@ def _state_summary(state: GameState) -> Dict[str, Any]:
             for pid, p in state.players.items()
         },
         "monsters": [
-            {"id": str(m.monster_id), "room": str(m.room), "floor": m.floor}
+            {
+                "id": str(m.monster_id),
+                "room": str(m.room),
+                # Floor is encoded in room name: "F1_R2" → floor 1
+                "floor": int(str(m.room).split("_")[0][1:]) if str(m.room).startswith("F") else 1,
+            }
             for m in state.monsters
         ],
     }

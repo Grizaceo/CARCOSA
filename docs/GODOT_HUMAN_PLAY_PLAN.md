@@ -378,7 +378,7 @@ El servidor FastAPI ya es stateless por diseño (`game_id` como clave de sesión
 ### Ruta de evolución de la arquitectura
 
 ```
-Sprint 1-4 ✅(1-2)        Sprint 5-6               Sprint 7+
+Sprint 1-4 ✅              Sprint 5-6               Sprint 7+
 ────────────────────      ────────────────────      ────────────────────
 PC local (hot-seat)  →   LAN / VPS online     →   App Android store
 HTTP polling             WebSocket bidireccional    Google Play (opcional)
@@ -522,6 +522,7 @@ No modificar sim/game_server.py en este sprint.
 
 ### Sprint 4 — Verificación BC pipeline
 **Objetivo:** Confirmar que las partidas humanas generadas alimentan correctamente el entrenamiento BC.  
+**Estado:** ✅ COMPLETADO 2026-03-24  
 **Duración estimada:** 1 hora  
 **Delegable a agente:** Sí (es verificación + script)
 
@@ -538,6 +539,25 @@ runs/human_*.jsonl y runs/[partida_de_bot].jsonl y parchear sim/game_server.py.
 ```
 
 **Criterio de éxito:** `train_bc.py` procesa datos humanos sin modificaciones adicionales.
+
+**Resultado real:**
+- ✅ Creado `tools/simulate_human_games.py` — verifica pipeline completo vía HTTP (como Godot)
+- ✅ Corregido `sim/game_server.py`:
+  - `_state_summary()`: `MonsterState` no tiene `.floor` → derivado de string de room (`F{N}_...`)
+  - `_active_actor()`: maneja flag `PENDING_SACRIFICE_CHECK` correctamente
+- ✅ Simuladas 8 partidas (seeds 100–514), formato JSONL 100% compatible con runs de bot
+- ✅ Export vía Docker (`carcosa:app`): `data/human_bc_test.csv` — 328 registros, todas columnas OK
+- ✅ Training vía Docker: `models_bc/human_test/bc_mlp_all_best.pt` generado sin errores
+- ✅ Pipeline humano es drop-in compatible con pipeline de bot (mismo formato, agrega `policy=human`)
+
+**Notas para uso real:**
+```bash
+# Para datos reales post-sesión de juego humano:
+python tools/simulate_human_games.py --games 10 --seed 1000
+# o con JSONL reales de partidas:
+python tools/ai_ready_export.py --input runs/human_*/human.jsonl --mode bc --output data/human_bc.csv --filter-outcome WIN
+python train/train_bc.py --data data/human_bc.csv --epochs 20 --batch-size 32 --device cpu --save-dir models_bc/human_v1
+```
 
 ---
 
