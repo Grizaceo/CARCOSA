@@ -17,6 +17,13 @@ func show_actions(actor: String, actions: Array) -> void:
 	_rebuild_buttons()
 
 
+func show_waiting(actor: String) -> void:
+	_actor = ""
+	_actions = []
+	title_label.text = "⏳  Esperando turno de %s…" % actor
+	_rebuild_buttons()
+
+
 func clear_actions() -> void:
 	_actor = ""
 	_actions = []

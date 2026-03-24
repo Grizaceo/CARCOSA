@@ -10,6 +10,9 @@ const BASE_URL: String = "http://127.0.0.1:8765"
 
 var game_id: String = ""
 var current_state: Dictionary = {}
+# IDs de los jugadores en esta máquina (hot-seat).
+# Actualizado al llamar start_game().
+var local_player_ids: Array = []
 
 signal state_updated(state: Dictionary)
 signal legal_actions_ready(actor: String, actions: Array)
@@ -19,8 +22,9 @@ signal error_occurred(message: String)
 
 # ── API pública ───────────────────────────────────────────────────────────────
 
-func start_game(seed: int) -> void:
-	_post("/start", {"seed": seed}, _on_start_response)
+func start_game(seed: int, player_ids: Array = []) -> void:
+	local_player_ids = player_ids.duplicate() if not player_ids.is_empty() else ["P1", "P2", "P3", "P4"]
+	_post("/start", {"seed": seed, "players": local_player_ids}, _on_start_response)
 
 
 func fetch_state() -> void:
