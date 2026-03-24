@@ -496,6 +496,7 @@ La UI puede ser completamente texto/colores — sin sprites todavía.
 
 ### Sprint 3 — Hot-seat + grabación BC
 **Objetivo:** Soporte para 2–4 jugadores en la misma máquina, auto-save al terminar.  
+**Estado:** ✅ COMPLETADO 2026-03-23  
 **Duración estimada:** 2–3 horas  
 **Delegable a agente:** Sí
 

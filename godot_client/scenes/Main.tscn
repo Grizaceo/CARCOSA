@@ -57,6 +57,29 @@ min_value = 1.0
 max_value = 999999.0
 value = 1.0
 
+; ── Selector de cantidad de jugadores ─────────────────────────────────────────
+[node name="PlayerCountRow" type="HBoxContainer" parent="LobbyPanel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PlayerCountLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox/PlayerCountRow"]
+layout_mode = 2
+text = "Jugadores:"
+vertical_alignment = 1
+
+[node name="PlayerCountInput" type="SpinBox" parent="LobbyPanel/MarginContainer/VBox/PlayerCountRow"]
+layout_mode = 2
+size_flags_horizontal = 1
+min_value = 1.0
+max_value = 4.0
+value = 2.0
+step = 1.0
+
+; ── Nombres de jugadores (poblado dinámicamente por Main.gd) ─────────────────
+[node name="PlayerNamesContainer" type="VBoxContainer" parent="LobbyPanel/MarginContainer/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
 [node name="StartButton" type="Button" parent="LobbyPanel/MarginContainer/VBox"]
 layout_mode = 2
 text = "Nueva partida"
