@@ -11,10 +11,8 @@ from typing import List, Optional
 
 class CarcosaPolicyNet(nn.Module):
     """
-    Policy Network MLP para CARCOSA.
-    
-    Arquitectura simple pero efectiva para behavioral cloning.
-    Mapea observación (10 features) a logits de acciones.
+    Arquitectura para behavioral cloning y RL.
+    Mapea observación (24 features) a logits de acciones.
     """
     
     def __init__(
@@ -34,7 +32,7 @@ class CarcosaPolicyNet(nn.Module):
         super().__init__()
         
         if hidden_sizes is None:
-            hidden_sizes = [128, 128, 64]
+            hidden_sizes = [512, 512, 256]
         
         layers = []
         prev_size = obs_dim

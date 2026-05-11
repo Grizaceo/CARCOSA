@@ -157,11 +157,10 @@ def _pick_move_to(actions: List[Action], dest: RoomId) -> Optional[Action]:
 ARMORY_STREAK_LIMIT = 2
 STALL_KEY_STEPS = 24
 
+_POLICY_TRACKING = {}
 
 def _policy_flags(state: GameState) -> dict:
-    if state.flags is None:
-        state.flags = {}
-    return state.flags
+    return _POLICY_TRACKING.setdefault(id(state), {})
 
 
 def _policy_update_stall(state: GameState, keys_total: int) -> int:
@@ -211,13 +210,13 @@ def _choose_sacrifice_action(acts: List[Action], state: GameState, pid: PlayerId
     )
     close_to_win = _keys_total(state) >= max(0, cfg.KEYS_TO_WIN - 1)
 
-    prefer_sacrifice = False
-    if p.keys > 0:
-        prefer_sacrifice = True
-    if team_critical >= 1 or team_low >= 3 or other_key_critical:
-        prefer_sacrifice = True
-    if close_to_win:
-        prefer_sacrifice = True
+    prefer_sacrifice = True
+    
+    # Solo ACEPTAR el -5 si el costo de sacrificar es demasiado alto
+    # (ej. max_sanity <= 0 y no hay items basura) y no llevamos llaves.
+    if p.keys == 0 and p.sanity_max <= 0 and p.object_slots_penalty >= 2:
+        if not team_critical >= 1 and not other_key_critical and not close_to_win:
+            prefer_sacrifice = False
 
     if not prefer_sacrifice and acc_action is not None:
         return acc_action
@@ -763,14 +762,20 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
 
         # 0.7) Huir del piso del Rey cuando el daño es severo o la cordura está baja
         if on_king_floor and p.sanity <= self.king_flee_sanity:
-            exits = [
-                a for a in acts
-                if a.type == ActionType.MOVE
-                and floor_of(RoomId(a.data.get("to", str(p.room)))) != state.king_floor
-            ]
-            if exits:
-                safest = min(exits, key=lambda a: _danger_score_room(state, RoomId(a.data.get("to"))))
-                return finalize(safest)
+            move_acts = [a for a in acts if a.type == ActionType.MOVE]
+            if move_acts:
+                # 1. Salida directa a otro piso
+                exits = [a for a in move_acts if floor_of(RoomId(a.data.get("to"))) != state.king_floor]
+                if exits:
+                    safest = min(exits, key=lambda a: _danger_score_room(state, RoomId(a.data.get("to"))))
+                    return finalize(safest)
+                # 2. Si no hay salida directa, moverse hacia un corredor para escapar luego
+                corridor_moves = [a for a in move_acts if is_corridor(RoomId(a.data.get("to")))]
+                if corridor_moves:
+                    return finalize(rng.choice(corridor_moves))
+                # 3. Sino, a la habitación menos peligrosa
+                safest_room = min(move_acts, key=lambda a: _danger_score_room(state, RoomId(a.data.get("to"))))
+                return finalize(safest_room)
 
         # 1) Panico extremo: meditar si existe
         if p.sanity <= self.cfg.PLAYER_SANITY_PANIC:
@@ -806,9 +811,13 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                     if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
                         return finalize(a)
 
+            # Si no hay camino claro, moverse aleatoriamente (pero no SEARCH)
             move_actions = [a for a in acts if a.type == ActionType.MOVE]
             if move_actions:
                 return finalize(rng.choice(move_actions))
+            
+            # En endgame, NUNCA buscar a menos que sea una llave segura, es mejor terminar turno
+            return finalize(Action(actor=actor, type=ActionType.END_TURN, data={}))
 
         # 2.5) Guardrail para portadores de llaves en riesgo: curar o escapar primero
         if carrier_caution:
@@ -1480,10 +1489,10 @@ class HybridBCNNGoalPolicy(BCNNPlayerPolicy):
     This guarantees winrate >= GOAL baseline while letting the BC model
     improve specific high-confidence decisions.
 
-    Default threshold: 0.45 (tunable via BC_CONFIDENCE_THRESHOLD class attribute).
+    Default threshold: 0.60 (tunable via BC_CONFIDENCE_THRESHOLD class attribute).
     """
 
-    BC_CONFIDENCE_THRESHOLD: float = 0.95
+    BC_CONFIDENCE_THRESHOLD: float = 0.60
 
     def __init__(self, cfg=None):
         super().__init__(cfg)  # initialises _model, _goal_fallback, etc.

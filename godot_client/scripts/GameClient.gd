@@ -80,13 +80,13 @@ func start_game(seed: int, player_ids: Array = []) -> void:
 func fetch_state() -> void:
 	if game_id.is_empty():
 		return
-	_get("/state/" + game_id, _on_state_response)
+	_http_get("/state/" + game_id, _on_state_response)
 
 
 func fetch_legal_actions(actor: String) -> void:
 	if game_id.is_empty():
 		return
-	_get(
+	_http_get(
 		"/legal/" + game_id + "/" + actor,
 		func(data: Dictionary) -> void: _on_legal_response(actor, data)
 	)
@@ -123,7 +123,7 @@ func _connect_ws() -> void:
 	# Derivar URL WS desde base_url: http(s):// → ws(s)://
 	var ws_base := base_url.replace("https://", "wss://").replace("http://", "ws://")
 	# Usar el primer jugador local como player_id para la suscripción
-	var pid := local_player_ids[0] if not local_player_ids.is_empty() else "P1"
+	var pid: String = local_player_ids[0] if not local_player_ids.is_empty() else "P1"
 	_ws_url = ws_base + "/ws/" + game_id + "/" + pid
 	_ws = WebSocketPeer.new()
 	_ws_connected = false
@@ -209,7 +209,7 @@ func _post(path: String, body: Dictionary, callback: Callable) -> void:
 		error_occurred.emit("POST request failed (err %d): %s" % [err, path])
 
 
-func _get(path: String, callback: Callable) -> void:
+func _http_get(path: String, callback: Callable) -> void:
 	var http := HTTPRequest.new()
 	add_child(http)
 	http.request_completed.connect(

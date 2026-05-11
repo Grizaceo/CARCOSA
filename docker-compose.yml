@@ -32,3 +32,60 @@ services:
     volumes:
       - .:/app
     command: python tools/ai_ready_export.py --mode summary
+
+  # ── CARCOSA Game Server ──────────────────────────────────────────────────
+  carcosa-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./runs:/app/runs
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  # ── CARCOSA Godot Client ─────────────────────────────────────────────────
+  # Dos modos de uso:
+  #
+  # 1) Headless + VNC (default, sin DISPLAY):
+  #    docker compose up godot-client
+  #    → Conectarse con VNC viewer a localhost:5900 (password: carcosa)
+  #
+  # 2) X11 forwarding (Windows + WSLg o VcXsrv):
+  #    DISPLAY=:0 docker compose up godot-client
+  #    → La ventana de Godot aparece directamente en el escritorio
+  #
+  # Requiere que el server esté corriendo:
+  #    docker compose up -d carcosa-server
+  #
+  # Para dos jugadores hot-seat en el mismo PC se levanta un solo cliente.
+  # Para splitscreen real se necesitarían dos containers con DISPLAY distintos.
+
+  godot-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.godot
+    # Depende del server — espera a que levante
+    depends_on:
+      carcosa-server:
+        condition: service_started
+    environment:
+      # URL del server dentro de la red Docker
+      - SERVER_URL=http://carcosa-server:8765
+      # DISPLAY se inyecta desde el host para modo X11
+      # Si no se setea, usa modo headless + VNC automáticamente
+      # - DISPLAY=${DISPLAY:-}
+      - VNC_PASSWORD=carcosa
+    ports:
+      # VNC acceso al display virtual
+      - "5900:5900"
+    # Volumen compartido con el server para leer runs si hace falta
+    volumes:
+      - ./runs:/app/runs:ro
+    # Necesario para X11 forwarding (descomentar si usás modo X11):
+    # volumes:
+    #   - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    profiles:
+      - client

@@ -60,6 +60,10 @@ class CarcosaEnv(gym.Env):
         ActionType.END_TURN,
         ActionType.SACRIFICE,
         ActionType.ACCEPT_SACRIFICE,
+        ActionType.DISCARD_SANIDAD,
+        ActionType.ESCAPE_TRAPPED,
+        ActionType.USE_OBJECT,
+        ActionType.USE_HEALER_HEAL,
         ActionType.USE_MOTEMEY_BUY_START,
         ActionType.USE_MOTEMEY_BUY_CHOOSE,
         ActionType.USE_MOTEMEY_SELL,
@@ -76,6 +80,7 @@ class CarcosaEnv(gym.Env):
         ActionType.USE_SALON_BELLEZA,
         ActionType.PEEK_ROOM_DECK,
         ActionType.SKIP_PEEK,
+        ActionType.KING_ENDROUND,
     ]
     
     def __init__(
@@ -95,6 +100,7 @@ class CarcosaEnv(gym.Env):
         penalty_miss_info: float = -0.008,
         penalty_illegal_intent: float = -0.02,
         penalty_critical_sanity: float = -0.08,
+        penalty_empty_search: float = -2.0,
         critical_sanity_threshold: int = -4,
         reward_phase2_umbral_progress: float = 0.45,
         penalty_phase2_umbral_regress: float = -0.30,
@@ -141,6 +147,7 @@ class CarcosaEnv(gym.Env):
         self.penalty_miss_info = penalty_miss_info
         self.penalty_illegal_intent = penalty_illegal_intent
         self.penalty_critical_sanity = penalty_critical_sanity
+        self.penalty_empty_search = penalty_empty_search
         self.critical_sanity_threshold = critical_sanity_threshold
         self.reward_phase2_umbral_progress = reward_phase2_umbral_progress
         self.penalty_phase2_umbral_regress = penalty_phase2_umbral_regress
@@ -163,9 +170,9 @@ class CarcosaEnv(gym.Env):
         self.curriculum_keys_start = max(0, int(curriculum_keys_start))
         self.curriculum_far_player_prob = max(0.0, min(1.0, float(curriculum_far_player_prob)))
         
-        # Observation space: 10 features [0, 1]
+        # Observation space: 24 features [-1.0, 1.0]
         self.observation_space = spaces.Box(
-            low=0.0, high=1.0, shape=(10,), dtype=np.float32
+            low=-1.0, high=1.0, shape=(24,), dtype=np.float32
         )
         
         # Action space: Discrete con número fijo de acciones
@@ -234,11 +241,11 @@ class CarcosaEnv(gym.Env):
         return sum(self._distance_to_umbral(state, player.room) for player in state.players.values())
         
     def _get_obs(self) -> np.ndarray:
-        """Extrae observación del estado actual."""
+        """Extrae observación del estado actual (18 features)."""
         features = compute_features(self.state, self.cfg)
         tension = tension_T(self.state, self.cfg, features=features)
         
-        obs = np.array([
+        base_obs = [
             features.get("P_sanity", 0.0),
             features.get("P_keys", 0.0),
             features.get("P_mon", 0.0),
@@ -248,10 +255,82 @@ class CarcosaEnv(gym.Env):
             features.get("P_crown", 0.0),
             features.get("P_round", 0.0),
             tension,
-            self.state.king_floor / 3.0,
-        ], dtype=np.float32)
+            self.state.king_floor / 3.0 if self.state else 0.0,
+        ]
+
+        local_obs = [0.0] * 14
+        if self.state and not self.state.game_over and self.state.phase != "KING":
+            actor_str = str(self.state.turn_order[self.state.turn_pos])
+            if actor_str in self.state.players:
+                p = self.state.players[actor_str]
+                
+                actor_sanity = max(-5.0, min(5.0, float(p.sanity))) / 5.0
+                actor_keys = float(p.keys) / 4.0
+                
+                dist_umbral = self._distance_to_umbral(self.state, p.room)
+                actor_dist_umbral = min(1.0, dist_umbral / 10.0)
+                
+                actor_floor = float(floor_of(p.room)) / 3.0
+                
+                from engine.boxes import active_deck_for_room
+                deck = active_deck_for_room(self.state, p.room)
+                cards_left = float(deck.remaining()) / 15.0 if deck else 0.0
+                
+                king_floor_match = 1.0 if floor_of(p.room) == self.state.king_floor else 0.0
+                
+                from sim.policies import _danger_score_room
+                danger = sum(2 for m in self.state.monsters if m.room == p.room)
+                near = set(neighbors(p.room))
+                danger += sum(1 for m in self.state.monsters if m.room in near)
+                local_danger = min(1.0, float(danger) / 4.0)
+                
+                has_stairs = 1.0 if any("TREASURE_STAIRS" in item for item in p.objects) else 0.0
+
+                # --- NUEVAS EXTENDED FEATURES (6) ---
+                # 1. Distancia a la llave conocida más cercana
+                hints = self._active_key_hints(self.state)
+                if hints:
+                    def dist_to(target_room):
+                        if str(p.room) == str(target_room): return 0
+                        queue = deque([(p.room, 0)])
+                        visited = {p.room}
+                        while queue:
+                            curr, d = queue.popleft()
+                            for nb in self._room_neighbors_with_stairs(self.state, curr):
+                                if nb in visited: continue
+                                if str(nb) == str(target_room): return d + 1
+                                visited.add(nb)
+                                queue.append((nb, d + 1))
+                        return 999
+                    
+                    min_dist = min(dist_to(h["room_id"]) for h in hints)
+                    dist_key_norm = min(1.0, float(min_dist) / 10.0)
+                else:
+                    dist_key_norm = 1.0
+                
+                # 2. ¿Hay una llave conocida en esta habitación?
+                key_here = 1.0 if any(h["room_id"] == str(p.room) for h in hints) else 0.0
+                
+                # 3. Mazo vacío en sala actual
+                deck_empty = 1.0 if (deck and deck.remaining() == 0) else 0.0
+                
+                # 4. Proporción de equipo en riesgo crítico (sanity < -2)
+                critical_team = sum(1 for pl in self.state.players.values() if pl.sanity < -2) / len(self.state.players)
+                
+                # 5. Riesgo del Rey (en su piso y con poca vida)
+                king_risk = 1.0 if (king_floor_match > 0 and p.sanity <= 0) else 0.0
+                
+                # 6. Progreso de llaves faltantes (normalizado: 0=tienen todas, 1=tienen 0)
+                keys_missing = (4.0 - sum(pl.keys for pl in self.state.players.values())) / 4.0
+
+                local_obs = [
+                    actor_sanity, actor_keys, actor_dist_umbral, actor_floor,
+                    cards_left, king_floor_match, local_danger, has_stairs,
+                    dist_key_norm, key_here, deck_empty, critical_team, king_risk, keys_missing
+                ]
         
-        return np.clip(obs, 0.0, 1.0)
+        obs = np.array(base_obs + local_obs, dtype=np.float32)
+        return np.clip(obs, -1.0, 1.0)
     
     def _get_legal_action_mask(self) -> np.ndarray:
         """Retorna máscara binaria de acciones legales."""
@@ -532,12 +611,9 @@ class CarcosaEnv(gym.Env):
         if hint_action is not None:
             return hint_action
 
-        peek_action = self._pick_action_for_type(legal_actions, ActionType.PEEK_ROOM_DECK, actor)
-        if peek_action is not None:
-            return peek_action
-
         for preferred_type in (
             ActionType.SEARCH,
+            ActionType.PEEK_ROOM_DECK,
             ActionType.MOVE,
             ActionType.MEDITATE,
             ActionType.END_TURN,
@@ -969,10 +1045,8 @@ class CarcosaEnv(gym.Env):
                 for player in next_state.players.values()
                 if player.sanity <= self.critical_sanity_threshold
             )
-            if curr_critical > 0:
-                reward += self.penalty_critical_sanity * curr_critical
             if curr_critical > prev_critical:
-                reward += 0.5 * self.penalty_critical_sanity * (curr_critical - prev_critical)
+                reward += self.penalty_critical_sanity * (curr_critical - prev_critical)
 
             if phase2_active:
                 prev_team_umbral_dist = self._team_umbral_distance(prev_state)
@@ -1007,6 +1081,14 @@ class CarcosaEnv(gym.Env):
 
         if illegal_action_intent and actor in prev_state.players:
             reward += self.penalty_illegal_intent
+
+        # Penalizar búsqueda en mazo vacío
+        if action.type == ActionType.SEARCH and actor in prev_state.players:
+            from engine.boxes import active_deck_for_room
+            p_room = prev_state.players[actor].room
+            deck = active_deck_for_room(prev_state, p_room)
+            if deck is None or deck.remaining() == 0:
+                reward += self.penalty_empty_search
 
         info_reward = self._register_observations(observations, actor, prev_state.round)
         info_reward += self._compute_info_usage_reward(

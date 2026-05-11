@@ -54,6 +54,7 @@ _sessions: Dict[str, Dict[str, Any]] = {}
 
 class StartRequest(BaseModel):
     seed: int = 1
+    players: list[str] = ["P1", "P2", "P3", "P4"]
 
 
 class ActRequest(BaseModel):
@@ -121,6 +122,77 @@ def _state_summary(state: GameState) -> Dict[str, Any]:
     }
 
 
+# ── Auto-advance ──────────────────────────────────────────────────────────────
+
+def _single_step(session: Dict[str, Any], actor: str, action_type: str, action_data: Dict[str, Any], policy_label: str) -> GameState:
+    """Ejecuta un step, registra la transición, retorna el nuevo estado."""
+    state: GameState = session["state"]
+    rng: RNG = session["rng"]
+    cfg: Config = session["cfg"]
+    step_idx: int = session["step_idx"]
+
+    at = ActionType(action_type)
+    action = Action(actor=actor, type=at, data=action_data)
+    next_state = step(state, action, rng, cfg)
+
+    action_dict: Dict[str, Any] = {"actor": actor, "type": action_type, "data": action_data}
+    if action_type == "KING_ENDROUND" and rng.last_king_d6 is not None:
+        action_dict["d6"] = rng.last_king_d6
+
+    record = transition_record(state, action_dict, next_state, cfg, step_idx)
+    record["policy"] = policy_label
+
+    session["records"].append(record)
+    session["state"] = next_state
+    session["step_idx"] = step_idx + 1
+    return next_state
+
+
+def _auto_advance_until_human(game_id: str) -> None:
+    """
+    Avanza el estado automáticamente mientras el actor activo NO sea humano.
+    Maneja tanto bots (policy=GOAL) como fases del KING.
+    """
+    from sim.policies import get_king_policy, get_player_policy
+
+    session = _get_session(game_id)
+    human_ids: set = session.get("human_ids", set())
+    cfg: Config = session["cfg"]
+    rng: RNG = session["rng"]
+
+    kpol = get_king_policy(getattr(cfg, "KING_POLICY", "RANDOM"), cfg)
+    ppol = get_player_policy("GOAL", cfg)
+
+    max_iter: int = 100  # safety valve
+    it: int = 0
+
+    while it < max_iter:
+        state: GameState = session["state"]
+        if state.game_over:
+            break
+
+        actor: str = _active_actor(state)
+        # ¿Es humano? → parar y esperar input
+        if actor in human_ids:
+            break
+
+        # ¿KING?
+        if actor == "KING":
+            action = kpol.choose(state, rng)
+            legal = get_legal_actions(state, "KING")
+            if action not in legal:
+                action = legal[0] if legal else Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+            _single_step(session, "KING", action.type.value, action.data, "bot_king")
+        else:
+            # Bot
+            action = ppol.choose(state, rng)
+            legal = get_legal_actions(state, actor)
+            if action not in legal:
+                action = legal[0] if legal else Action(actor=actor, type=ActionType.END_TURN, data={})
+            _single_step(session, actor, action.type.value, action.data, "bot")
+        it += 1
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.post("/start")
@@ -128,26 +200,42 @@ def start_game(req: StartRequest) -> Dict[str, Any]:
     """
     Inicia una nueva partida. Retorna game_id + estado inicial.
 
+    Si hay menos de 4 jugadores humanos, los slots restantes se rellenan con
+    bots (policy=GOAL) que el servidor avanza automáticamente.
+
     Ejemplo:
         curl -X POST http://localhost:8765/start \\
              -H 'Content-Type: application/json' \\
-             -d '{"seed": 1}'
+             -d '{"seed": 1, "players": ["P1", "P2"]}'
     """
     game_id = str(uuid.uuid4())[:8]
     cfg = Config()
+    # Siempre crear estado completo (4 jugadores). El engine lo requiere.
+    # Los slots no humanos se manejan como bots.
     state = make_smoke_state(seed=req.seed, cfg=cfg)
-    # RNG independiente para el gameplay (igual que run_episode en runner.py)
-    rng = RNG(req.seed)
+    # RNG independiente para gameplay (igual que runner.py)
+    game_rng = RNG(req.seed)
+
+    # Detectar qué jugadores son humanos y cuáles bots
+    human_ids: set = set(req.players)
+    all_ids = [str(pid) for pid in state.players.keys()]
+    bot_ids = [pid for pid in all_ids if pid not in human_ids]
 
     _sessions[game_id] = {
         "state": state,
-        "rng": rng,
+        "rng": game_rng,
         "cfg": cfg,
         "seed": req.seed,
         "records": [],
         "step_idx": 0,
+        "human_ids": human_ids,
+        "bot_ids": set(bot_ids),
     }
-    return {"game_id": game_id, "state": _state_summary(state)}
+
+    # Avanzar automáticamente si el primer turno es de un bot o de KING
+    _auto_advance_until_human(game_id)
+
+    return {"game_id": game_id, "state": _state_summary(_sessions[game_id]["state"])}
 
 
 @app.get("/state/{game_id}")
@@ -180,7 +268,8 @@ def get_legal(game_id: str, actor: str) -> Dict[str, Any]:
 def act(req: ActRequest) -> Dict[str, Any]:
     """
     Aplica una acción al estado actual y registra la transición.
-    Retorna el nuevo estado, done y outcome.
+    Después, avanza automáticamente por bots y fases KING hasta
+    que toque el siguiente humano (o game over).
 
     Ejemplo:
         curl -X POST http://localhost:8765/act \\
@@ -190,47 +279,32 @@ def act(req: ActRequest) -> Dict[str, Any]:
     """
     session = _get_session(req.game_id)
     state: GameState = session["state"]
-    rng: RNG = session["rng"]
-    cfg: Config = session["cfg"]
-    step_idx: int = session["step_idx"]
 
     if state.game_over:
         raise HTTPException(status_code=400, detail="Game is already over")
 
     try:
-        action_type = ActionType(req.action_type)
+        ActionType(req.action_type)
     except ValueError:
         raise HTTPException(
             status_code=400,
             detail="Unknown action type: " + req.action_type,
         )
 
-    action = Action(actor=req.actor, type=action_type, data=req.action_data)
+    # Ejecutar la acción del humano
+    next_state = _single_step(session, req.actor, req.action_type, req.action_data, "human")
 
-    try:
-        next_state = step(state, action, rng, cfg)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # Avanzar automáticamente hasta que toque otro humano
+    _auto_advance_until_human(req.game_id)
 
-    # transition_record espera action como Dict (no como Action object)
-    action_dict: Dict[str, Any] = {
-        "actor": req.actor,
-        "type": req.action_type,
-        "data": req.action_data,
-    }
-    record = transition_record(state, action_dict, next_state, cfg, step_idx)
-    record["policy"] = "human"
-
-    session["records"].append(record)
-    session["state"] = next_state
-    session["step_idx"] = step_idx + 1
-
+    # El estado final es el que quedó después del auto-advance
+    final_state: GameState = session["state"]
     return {
         "game_id": req.game_id,
-        "state": _state_summary(next_state),
-        "done": bool(next_state.game_over),
-        "outcome": next_state.outcome,
-        "step": step_idx,
+        "state": _state_summary(final_state),
+        "done": bool(final_state.game_over),
+        "outcome": final_state.outcome,
+        "step": session["step_idx"],
     }
 
 

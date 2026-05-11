@@ -91,9 +91,11 @@ class Config:
     MCTS_DEPTH: int = 50
     MCTS_TOP_K: int = 5
     MCTS_DETERMINIZE: bool = False
-    TIMEOUT_OUTCOME: str = "TIMEOUT"
     # Si True y no quedan cartas en habitaciones (no pasillos) => LOSE_DECK
     LOSE_ON_DECK_EXHAUSTION: bool = False
+
+    # Memoria de equipo (rondas para decaer)
+    MEMORY_DECAY_ROUNDS: int = 5
 
     # --- Heurística jugadores ---
     PLAYER_SANITY_PANIC: int = -4

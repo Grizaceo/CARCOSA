@@ -174,14 +174,20 @@ def main():
             if args.dry_run:
                 print("[DRY] would run simulations into", version_dir, "seeds=", seeds_cfg)
             else:
+                # Extraer mcts_rollouts de policy_kwargs si existe
+                mcts_rollouts = cfg["simulation"].get("policy_kwargs", {}).get("mcts_sims")
+                cmd_base = ["tools/run_versioned.py", "--max-steps", str(cfg["simulation"]["max_steps"]), "--version-dir", version_dir]
+                if mcts_rollouts:
+                    cmd_base.extend(["--mcts-rollouts", str(mcts_rollouts)])
+
                 # If default 1-5 requested and matches common case, use --all-seeds
                 default_all = seeds_cfg == [1, 2, 3, 4, 5]
                 if default_all:
-                    run_subprocess(["tools/run_versioned.py", "--all-seeds", "--max-steps", str(cfg["simulation"]["max_steps"]), "--version-dir", version_dir])
+                    run_subprocess(cmd_base + ["--n-seeds", "5"])
                 else:
                     # run per-seed to allow arbitrary seeds
                     for sd in seeds_cfg:
-                        run_subprocess(["tools/run_versioned.py", "--seed", str(sd), "--max-steps", str(cfg["simulation"]["max_steps"]), "--version-dir", version_dir])
+                        run_subprocess(cmd_base + ["--seed", str(sd)])
             summary["paths"]["runs_dir"] = version_dir
             summary["simulation"] = {
                 "policy": cfg["simulation"].get("policy"),

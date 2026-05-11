@@ -38,16 +38,20 @@ def get_git_branch():
         return "unknown"
 
 
-def run_seed(seed: int, session_dir: Path, max_steps: int, policy: str):
+def run_seed(seed: int, session_dir: Path, max_steps: int, policy: str, mcts_rollouts: int = None):
     out_file = str(session_dir / f"seed{seed}.jsonl")
+    cmd = [
+        sys.executable, "-m", "sim.runner",
+        "--seed", str(seed),
+        "--max-steps", str(max_steps),
+        "--policy", policy,
+        "--out", out_file,
+        ]
+    if mcts_rollouts is not None:
+        cmd.extend(["--mcts-rollouts", str(mcts_rollouts)])
+
     result = subprocess.run(
-        [
-            sys.executable, "-m", "sim.runner",
-            "--seed", str(seed),
-            "--max-steps", str(max_steps),
-            "--policy", policy,
-            "--out", out_file,
-        ],
+        cmd,
         capture_output=True, text=True
     )
     for line in result.stdout.strip().splitlines():
@@ -70,6 +74,7 @@ def main():
     parser.add_argument("--tag", type=str, default=None, help="Sufijo descriptivo del directorio")
     parser.add_argument("--version-dir", type=str, default=None,
                         help="Directorio de sesión explícito (compatibilidad con experiment.py)")
+    parser.add_argument("--mcts-rollouts", type=int, default=None, help="MCTS rollouts si policy=MCTS")
     args = parser.parse_args()
 
     # Determinar seeds
@@ -115,7 +120,7 @@ def main():
     print(f"{'='*60}\n")
 
     for seed in seeds:
-        run_seed(seed, session_dir, args.max_steps, args.policy)
+        run_seed(seed, session_dir, args.max_steps, args.policy, args.mcts_rollouts)
 
     print(f"\n{'='*60}")
     print(f"Listo. {len(seeds)} runs guardados en: {session_dir}/")
