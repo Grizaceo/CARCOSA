@@ -15,15 +15,17 @@ Endpoints:
     POST /act                → aplicar una acción
     POST /save/{id}          → guardar JSONL compatible con BC pipeline
     GET  /                   → health check
+    WS   /ws/{id}/{pid}      → WebSocket para actualizaciones de estado en tiempo real
 """
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -48,6 +50,9 @@ app.add_middleware(
 
 # Almacén de sesiones en memoria: {game_id -> session_dict}
 _sessions: Dict[str, Dict[str, Any]] = {}
+
+# WebSocket connections per session: {game_id -> set of WebSocket}
+_ws_connections: Dict[str, set] = {}
 
 
 # ── Request models ─────────────────────────────────────────────────────────────
@@ -122,6 +127,24 @@ def _state_summary(state: GameState) -> Dict[str, Any]:
     }
 
 
+# ── WebSocket broadcast helper ───────────────────────────────────────────────────
+
+async def _broadcast(game_id: str, message: Dict[str, Any]) -> None:
+    """Send JSON message to all WebSocket connections for a game session."""
+    connections = _ws_connections.get(game_id, set())
+    dead_connections = set()
+    
+    for ws in connections:
+        try:
+            await ws.send_text(json.dumps(message))
+        except Exception:
+            dead_connections.add(ws)
+    
+    # Remove dead connections
+    if dead_connections:
+        _ws_connections[game_id] = connections - dead_connections
+
+
 # ── Auto-advance ──────────────────────────────────────────────────────────────
 
 def _single_step(session: Dict[str, Any], actor: str, action_type: str, action_data: Dict[str, Any], policy_label: str) -> GameState:
@@ -148,7 +171,7 @@ def _single_step(session: Dict[str, Any], actor: str, action_type: str, action_d
     return next_state
 
 
-def _auto_advance_until_human(game_id: str) -> None:
+async def _auto_advance_until_human(game_id: str) -> None:
     """
     Avanza el estado automáticamente mientras el actor activo NO sea humano.
     Maneja tanto bots (policy=GOAL) como fases del KING.
@@ -190,6 +213,14 @@ def _auto_advance_until_human(game_id: str) -> None:
             if action not in legal:
                 action = legal[0] if legal else Action(actor=actor, type=ActionType.END_TURN, data={})
             _single_step(session, actor, action.type.value, action.data, "bot")
+        
+        # Broadcast state after each bot action
+        if game_id in _ws_connections:
+            await _broadcast(game_id, {
+                "type": "state_update",
+                "state": _state_summary(session["state"]),
+                "active_player": _active_actor(session["state"]),
+            })
         it += 1
 
 
@@ -265,7 +296,7 @@ def get_legal(game_id: str, actor: str) -> Dict[str, Any]:
 
 
 @app.post("/act")
-def act(req: ActRequest) -> Dict[str, Any]:
+async def act(req: ActRequest) -> Dict[str, Any]:
     """
     Aplica una acción al estado actual y registra la transición.
     Después, avanza automáticamente por bots y fases KING hasta
@@ -293,9 +324,25 @@ def act(req: ActRequest) -> Dict[str, Any]:
 
     # Ejecutar la acción del humano
     next_state = _single_step(session, req.actor, req.action_type, req.action_data, "human")
+    
+    # Broadcast state update after human action
+    if req.game_id in _ws_connections:
+        await _broadcast(req.game_id, {
+            "type": "state_update",
+            "state": _state_summary(session["state"]),
+            "active_player": _active_actor(session["state"]),
+        })
 
     # Avanzar automáticamente hasta que toque otro humano
-    _auto_advance_until_human(req.game_id)
+    await _auto_advance_until_human(req.game_id)
+
+    # Broadcast final state after auto-advance
+    if req.game_id in _ws_connections:
+        await _broadcast(req.game_id, {
+            "type": "state_update",
+            "state": _state_summary(session["state"]),
+            "active_player": _active_actor(session["state"]),
+        })
 
     # El estado final es el que quedó después del auto-advance
     final_state: GameState = session["state"]
@@ -332,4 +379,46 @@ def save_game(game_id: str) -> Dict[str, Any]:
 @app.get("/")
 def health() -> Dict[str, Any]:
     """Health check básico."""
-    return {"status": "ok", "active_sessions": len(_sessions)}
+    return {
+        "status": "ok",
+        "active_sessions": len(_sessions),
+        "ws_connections": {gid: len(conns) for gid, conns in _ws_connections.items()},
+    }
+
+
+# ── WebSocket endpoint ─────────────────────────────────────────────────────────
+
+@app.websocket("/ws/{game_id}/{player_id}")
+async def websocket_endpoint(websocket: WebSocket, game_id: str, player_id: str):
+    """
+    WebSocket endpoint for real-time game state updates.
+    
+    Client (Godot) connects to /ws/{game_id}/{player_id} after receiving game_id
+    from /start. Server sends state_update messages when game state changes.
+    """
+    await websocket.accept()
+    
+    # Register connection
+    if game_id not in _ws_connections:
+        _ws_connections[game_id] = set()
+    _ws_connections[game_id].add(websocket)
+    
+    session = _sessions.get(game_id)
+    if session:
+        # Send current state immediately upon connection
+        await websocket.send_text(json.dumps({
+            "type": "state_update",
+            "state": _state_summary(session["state"]),
+            "active_player": _active_actor(session["state"]),
+        }))
+    
+    try:
+        while True:
+            # Keep connection alive (clients don't need to send messages)
+            data = await websocket.receive_text()
+            # Ignore any messages from client for now
+    except Exception:
+        pass
+    finally:
+        # Remove dead connection
+        _ws_connections.get(game_id, set()).discard(websocket)
