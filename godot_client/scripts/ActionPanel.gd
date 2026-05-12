@@ -6,6 +6,8 @@ extends ScrollContainer
 @onready var title_label: Label = $VBox/TitleLabel
 @onready var buttons_container: VBoxContainer = $VBox/ButtonsContainer
 
+@export var player_num: int = 1
+
 var _actor: String = ""
 var _actions: Array = []
 
@@ -125,16 +127,38 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	var n := -1
-	match event.keycode:
-		KEY_1: n = 0
-		KEY_2: n = 1
-		KEY_3: n = 2
-		KEY_4: n = 3
-		KEY_5: n = 4
-		KEY_6: n = 5
-		KEY_7: n = 6
-		KEY_8: n = 7
-		KEY_9: n = 8
+	
+	if player_num == 1:
+		match event.keycode:
+			KEY_1: n = 0
+			KEY_2: n = 1
+			KEY_3: n = 2
+			KEY_4: n = 3
+			KEY_5: n = 4
+			KEY_6: n = 5
+			KEY_7: n = 6
+			KEY_8: n = 7
+			KEY_9: n = 8
+	elif player_num == 2:
+		match event.keycode:
+			KEY_U: n = 0
+			KEY_I: n = 1
+			KEY_O: n = 2
+			KEY_J: n = 3
+			KEY_K: n = 4
+			KEY_L: n = 5
+			KEY_M: n = 6
+			# Numpad como alternativa
+			KEY_KP_1: n = 0
+			KEY_KP_2: n = 1
+			KEY_KP_3: n = 2
+			KEY_KP_4: n = 3
+			KEY_KP_5: n = 4
+			KEY_KP_6: n = 5
+			KEY_KP_7: n = 6
+			KEY_KP_8: n = 7
+			KEY_KP_9: n = 8
+			
 	if n >= 0 and n < _actions.size():
 		get_viewport().set_input_as_handled()
 		_on_action_pressed(n)

@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://carcosa_main_v1"]
+[gd_scene load_steps=5 format=3 uid="uid://carcosa_main_v1"]
 
 [ext_resource type="Script" path="res://scripts/Main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/BoardView.gd" id="2_board"]
 [ext_resource type="Script" path="res://scripts/ActionPanel.gd" id="3_action"]
+[ext_resource type="PackedScene" path="res://scenes/ActionPanel.tscn" id="4_action_panel"]
 
 ; ── Raíz ──────────────────────────────────────────────────────────────────────
 [node name="Main" type="Control"]
@@ -142,7 +143,18 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 script = ExtResource("2_board")
 
-[node name="Content" type="RichTextLabel" parent="GamePanel/HSplit/BoardView"]
+[node name="ScrollContent" type="VBoxContainer" parent="GamePanel/HSplit/BoardView"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 20
+
+[node name="BoardContainer" type="VBoxContainer" parent="GamePanel/HSplit/BoardView/ScrollContent"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 16
+
+[node name="Content" type="RichTextLabel" parent="GamePanel/HSplit/BoardView/ScrollContent"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -152,27 +164,17 @@ scroll_active = false
 text = ""
 
 ; ── ActionPanel (ScrollContainer con script ActionPanel.gd) ───────────────────
-[node name="ActionPanel" type="ScrollContainer" parent="GamePanel/HSplit"]
+[node name="ActionsContainer" type="HBoxContainer" parent="GamePanel/HSplit"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-script = ExtResource("3_action")
+theme_override_constants/separation = 10
 
-[node name="VBox" type="VBoxContainer" parent="GamePanel/HSplit/ActionPanel"]
+[node name="ActionPanel1" parent="GamePanel/HSplit/ActionsContainer" instance=ExtResource("4_action_panel")]
 layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 6
 
-[node name="TitleLabel" type="Label" parent="GamePanel/HSplit/ActionPanel/VBox"]
+[node name="ActionPanel2" parent="GamePanel/HSplit/ActionsContainer" instance=ExtResource("4_action_panel")]
 layout_mode = 2
-text = "Acciones"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 14
-
-[node name="ButtonsContainer" type="VBoxContainer" parent="GamePanel/HSplit/ActionPanel/VBox"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 4
 
 [node name="EventLogPanel" type="PanelContainer" parent="GamePanel"]
 layout_mode = 2

@@ -15,7 +15,8 @@ extends Control
 @onready var server_url_input: LineEdit = $LobbyPanel/MarginContainer/VBox/ServerRow/ServerInput
 @onready var status_label: Label = $GamePanel/StatusLabel
 @onready var board_view = $GamePanel/HSplit/BoardView
-@onready var action_panel = $GamePanel/HSplit/ActionPanel
+@onready var action_panel_1 = $GamePanel/HSplit/ActionsContainer/ActionPanel1
+@onready var action_panel_2 = $GamePanel/HSplit/ActionsContainer/ActionPanel2
 @onready var save_button: Button = $GamePanel/SaveButton
 @onready var result_panel: Control = $ResultPanel
 @onready var result_label: Label = $ResultPanel/VBox/ResultLabel
@@ -27,11 +28,7 @@ extends Control
 var _active_actor: String = ""
 var _game_over: bool = false
 var _last_outcome: String = ""
-# Datos del jugador pendiente de confirmación en hot-seat
-var _pending_actor: String = ""
-var _pending_actions: Array = []
-# AcceptDialog creado en tiempo de ejecución para no modificar la escena
-var _hotseat_dialog: AcceptDialog = null
+# (Variables de hot-seat eliminadas)
 # Mapeo de PID canónico (P1, P2...) → nombre de display del lobby
 var _player_display_names: Dictionary = {}
 # Historial de eventos
@@ -48,18 +45,18 @@ func _ready() -> void:
 	result_panel.hide()
 	error_label.hide()
 
+	# Parse autoplay CLI args BEFORE connecting signals
+	_parse_autoplay_args()
+
 	start_button.pressed.connect(_on_start_pressed)
 	save_button.pressed.connect(_on_save_pressed)
 	new_game_button.pressed.connect(_on_new_game_pressed)
 	player_count_input.value_changed.connect(_on_player_count_changed)
 	random_seed_btn.pressed.connect(_on_random_seed_pressed)
 
-	# AcceptDialog para confirmación hot-seat (creado dinámicamente)
-	_hotseat_dialog = AcceptDialog.new()
-	_hotseat_dialog.title = "Hot-Seat"
-	_hotseat_dialog.get_ok_button().text = "¡Listo!"
-	_hotseat_dialog.confirmed.connect(_on_hotseat_confirmed)
-	add_child(_hotseat_dialog)
+	# Configurar números de jugador en paneles
+	action_panel_1.player_num = 1
+	action_panel_2.player_num = 2
 
 	# Construir inputs de nombres con el valor inicial del SpinBox
 	_rebuild_player_inputs(int(player_count_input.value))
@@ -68,6 +65,46 @@ func _ready() -> void:
 	GameClient.legal_actions_ready.connect(_on_legal_actions_ready)
 	GameClient.game_saved.connect(_on_game_saved)
 	GameClient.error_occurred.connect(_on_error)
+	
+	# Autoplay signal
+	GameClient.autoplay_finished.connect(_on_autoplay_finished)
+
+
+# ── Autoplay CLI parsing ───────────────────────────────────────────────────
+
+var _autoplay_mode: bool = false
+var _autoplay_seed: int = 1
+var _autoplay_speed: float = 0.5
+
+func _parse_autoplay_args() -> void:
+	var args = OS.get_cmdline_args()
+	var i := 0
+	while i < args.size():
+		match args[i]:
+			"--autoplay":
+				_autoplay_mode = true
+			"--seed":
+				if i + 1 < args.size():
+					_autoplay_seed = int(args[i + 1])
+					i += 1
+			"--speed":
+				if i + 1 < args.size():
+					_autoplay_speed = float(args[i + 1])
+					i += 1
+		i += 1
+	
+	if _autoplay_mode:
+		# Delay start to ensure everything is ready
+		call_deferred("_start_autoplay_game")
+
+
+func _start_autoplay_game() -> void:
+	# Skip lobby, start game immediately with autoplay
+	_on_start_pressed()
+
+
+func _on_autoplay_finished(outcome: String, turns: int) -> void:
+	_add_log_entry("★ Autoplay terminado: %s (%d turnos)" % [outcome, turns], "69f0ae")
 
 
 # ── Configuración de jugadores en lobby ───────────────────────────────────────
@@ -112,9 +149,11 @@ func _get_player_names() -> Array:
 # ── Botones de lobby ──────────────────────────────────────────────────────────
 
 func _on_start_pressed() -> void:
-	var seed: int = int(seed_input.value)
+	# Use autoplay args if provided
+	var seed: int = _autoplay_mode ? _autoplay_seed : int(seed_input.value)
 	var display_names: Array = _get_player_names()
-	var count: int = display_names.size()
+	var count: int = _autoplay_mode ? 4 : display_names.size()  # Default to 4 players in autoplay
+	
 	# Los PIDs canónicos del engine siempre son P1, P2, P3, P4.
 	# Los nombres del lobby son solo para display en el diálogo hot-seat.
 	var canonical_ids: Array = []
@@ -123,6 +162,7 @@ func _on_start_pressed() -> void:
 		var pid := "P%d" % (i + 1)
 		canonical_ids.append(pid)
 		_player_display_names[pid] = display_names[i] if i < display_names.size() else pid
+	
 	# Sprint 5: aplicar URL de servidor desde el campo del lobby
 	var url := server_url_input.text.strip_edges()
 	if not url.is_empty():
@@ -132,8 +172,6 @@ func _on_start_pressed() -> void:
 	error_label.hide()
 	_game_over = false
 	_last_outcome = ""
-	_pending_actor = ""
-	_pending_actions = []
 	GameClient.game_id = ""
 	_prev_state = {}
 	_prev_state_hash = ""
@@ -141,6 +179,10 @@ func _on_start_pressed() -> void:
 	if is_instance_valid(event_log_text):
 		event_log_text.text = "[color=#444]— iniciando partida —[/color]"
 	GameClient.start_game(seed, canonical_ids)
+	
+	# Enable autoplay if flag is set
+	if _autoplay_mode:
+		GameClient.enable_autoplay(true, _autoplay_speed)
 
 
 # ── Señales de GameClient ─────────────────────────────────────────────────────
@@ -150,7 +192,7 @@ func _on_state_updated(state: Dictionary) -> void:
 	start_button.text = "Nueva partida"
 	_active_actor = state.get("active_actor", "")
 	_game_over = state.get("game_over", false)
-	_last_outcome = state.get("outcome", "")
+	_last_outcome = str(state.get("outcome", ""))
 
 	# Primera actualización → pasar de lobby a juego
 	if lobby_panel.visible:
@@ -169,7 +211,8 @@ func _on_state_updated(state: Dictionary) -> void:
 		_prev_state_hash = state_hash
 
 	if _game_over:
-		action_panel.clear_actions()
+		action_panel_1.clear_actions()
+		action_panel_2.clear_actions()
 		# Auto-save al terminar la partida
 		GameClient.save_session()
 	else:
@@ -180,24 +223,25 @@ func _on_legal_actions_ready(actor: String, actions: Array) -> void:
 	if actor != _active_actor or _game_over:
 		return
 
+	# Skip in autoplay mode
+	if _autoplay_mode:
+		return
+
+	# Limpiar o poner en espera ambos paneles
+	action_panel_1.show_waiting(actor)
+	action_panel_2.show_waiting(actor)
+
 	if actor in GameClient.local_player_ids:
-		# Hot-seat: guardar datos y pedir confirmación antes de revelar acciones
-		_pending_actor = actor
-		_pending_actions = actions
-		action_panel.show_waiting(actor)
-		var display_name: String = _player_display_names.get(actor, actor)
-		_hotseat_dialog.dialog_text = "Turno de %s\n¿Listo para jugar?" % display_name
-		_hotseat_dialog.popup_centered()
+		# Enrutar al panel correspondiente
+		if actor == "P1":
+			action_panel_1.show_actions(actor, actions)
+		elif actor == "P2":
+			action_panel_2.show_actions(actor, actions)
+		else:
+			action_panel_1.show_actions(actor, actions)
 	else:
-		# Modo observador: actor remoto o bot — no mostrar acciones
-		action_panel.show_waiting(actor)
-
-
-func _on_hotseat_confirmed() -> void:
-	if not _pending_actor.is_empty() and not _game_over:
-		action_panel.show_actions(_pending_actor, _pending_actions)
-		_pending_actor = ""
-		_pending_actions = []
+		# Modo observador
+		pass
 
 
 func _on_save_pressed() -> void:
@@ -221,8 +265,6 @@ func _on_new_game_pressed() -> void:
 	lobby_panel.show()
 	start_button.disabled = false
 	start_button.text = "Nueva partida"
-	_pending_actor = ""
-	_pending_actions = []
 
 
 func _on_error(message: String) -> void:
