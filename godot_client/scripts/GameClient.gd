@@ -69,6 +69,22 @@ func _process(_delta: float) -> void:
 					_connect_ws()
 
 
+# ── Autoplay Configuration ───────────────────────────────────────────────────
+
+var autoplay_enabled: bool = false
+var autoplay_speed: float = 0.5  # segundos entre acciones
+var autoplay_max_turns: int = 1000
+var autoplay_turn_count: int = 0
+
+signal autoplay_state(state: Dictionary, actor: String)
+signal autoplay_finished(outcome: String, turns: int)
+
+func enable_autoplay(enabled: bool, speed: float = 0.5, max_turns: int = 1000) -> void:
+    autoplay_enabled = enabled
+    autoplay_speed = max(0.01, speed)
+    autoplay_max_turns = max_turns
+    autoplay_turn_count = 0
+
 # ── API pública ───────────────────────────────────────────────────────────────
 
 func start_game(seed: int, player_ids: Array = []) -> void:
@@ -176,6 +192,40 @@ func _on_state_response(data: Dictionary) -> void:
 func _on_legal_response(actor: String, data: Dictionary) -> void:
 	var actions: Array = data.get("actions", [])
 	legal_actions_ready.emit(actor, actions)
+	
+	# Autoplay logic
+	if autoplay_enabled and actor in local_player_ids:
+		_maybe_autoplay_step(actor, actions)
+
+
+func _maybe_autoplay_step(actor: String, actions: Array) -> void:
+	# Increment turn counter
+	autoplay_turn_count += 1
+	
+	# Check max turns
+	if autoplay_turn_count >= autoplay_max_turns:
+		autoplay_enabled = false
+		autoplay_finished.emit(current_state.get("outcome", "TIMEOUT"), autoplay_turn_count)
+		return
+	
+	if actions.is_empty():
+		return
+	
+	# Select and execute action
+	var chosen = actions.pick_random()  # Random strategy for now
+	
+	# Emit state for UI update before action
+	autoplay_state.emit(current_state, actor)
+	
+	# Schedule action with delay for visual observation (no await)
+	if autoplay_speed > 0:
+		var timer := get_tree().create_timer(autoplay_speed)
+		timer.timeout.connect(func():
+			if autoplay_enabled:
+				send_action(actor, chosen.get("type", ""), chosen.get("data", {}))
+		)
+	else:
+		send_action(actor, chosen.get("type", ""), chosen.get("data", {}))
 
 
 func _on_act_response(data: Dictionary) -> void:
