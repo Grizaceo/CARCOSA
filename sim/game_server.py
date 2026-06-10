@@ -125,6 +125,7 @@ def _state_summary(state: GameState) -> Dict[str, Any]:
             for m in state.monsters
         ],
         "king_floor": state.king_floor,
+        "action_log": list(state.action_log),
     }
 
 
