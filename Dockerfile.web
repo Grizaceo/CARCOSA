@@ -24,7 +24,10 @@ COPY sim/ ./sim/
 COPY engine/ ./engine/
 
 # Copiar frontend estático
-COPY docs/playtest-html/ ./static/
+COPY docs/playtest-html/index.html ./static/
+COPY docs/playtest-html/PLAN.md ./static/
+COPY docs/playtest-html/css/ ./static/css/
+COPY docs/playtest-html/js/ ./static/js/
 
 # Verificar archivos estáticos
 RUN ls -la /app/static/ && ls -la /app/static/css/ && ls -la /app/static/js/
