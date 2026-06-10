@@ -869,6 +869,7 @@ document.addEventListener("DOMContentLoaded", () => {
      * Procesa un log enviado por el servidor y lo renderiza de forma amigable.
      */
     function processServerLog(log) {
+        console.log("[PROCESS_LOG] processServerLog called", log);
         if (log.event) {
             if (log.event === "CARD_REVEALED") {
                 let entity = null;
