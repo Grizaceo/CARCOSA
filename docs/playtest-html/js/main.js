@@ -1685,7 +1685,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 const currTop = currRoom.deck.top;
                 if (currTop > prevTop) {
                     // A card was drawn - reveal it
-                    const drawnIndex = currTop - 1;
+                    // The drawn card was at the OLD top index (prevTop), not currTop - 1
+                    const drawnIndex = prevTop;
                     if (currRoom.deck.cards && drawnIndex < currRoom.deck.cards.length) {
                         const card = currRoom.deck.cards[drawnIndex];
                         // Try to find which player drew it
