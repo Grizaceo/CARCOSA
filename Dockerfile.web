@@ -26,6 +26,9 @@ COPY engine/ ./engine/
 # Copiar frontend estático
 COPY docs/playtest-html/ ./static/
 
+# Verificar archivos estáticos
+RUN ls -la /app/static/ && ls -la /app/static/css/ && ls -la /app/static/js/
+
 # Copiar script de parcheo
 COPY patch_static.py /app/patch_static.py
 
