@@ -26,29 +26,12 @@ COPY engine/ ./engine/
 # Copiar frontend estático
 COPY docs/playtest-html/ ./static/
 
-# Parchear game_server.py para servir static files
-RUN python -c "
-import sys
-sys.path.insert(0, '/app')
-with open('/app/sim/game_server.py', 'r') as f:
-    content = f.read()
-if 'StaticFiles' not in content:
-    content = content.replace(
-        'from fastapi import FastAPI, HTTPException, WebSocket',
-        'from fastapi import FastAPI, HTTPException, WebSocket\nfrom fastapi.staticfiles import StaticFiles'
-    )
-    content = content.replace(
-        'app = FastAPI(title=\"CARCOSA Game Server\", version=\"1.0.0\")',
-        '''app = FastAPI(title=\"CARCOSA Game Server\", version=\"1.0.0\")
+# Copiar script de parcheo
+COPY patch_static.py /app/patch_static.py
 
-# Servir frontend estático en /
-app.mount(\"/\", StaticFiles(directory=\"/app/static\", html=True), name=\"static\")'''
-    )
-    with open('/app/sim/game_server.py', 'w') as f:
-        f.write(content)
-print('Patched game_server.py')
-"
+# Ejecutar parcheo
+RUN python /app/patch_static.py
 
 EXPOSE 8080
 
-CMD uvicorn sim.game_server:app --host 0.0.0.0 --port \${PORT:-8080} --workers 1
+CMD uvicorn sim.game_server:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1
