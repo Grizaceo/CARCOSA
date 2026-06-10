@@ -124,6 +124,18 @@ def _state_summary(state: GameState) -> Dict[str, Any]:
             }
             for m in state.monsters
         ],
+        "rooms": {
+            str(rid): {
+                "special_card_id": r.special_card_id,
+                "special_revealed": r.special_revealed,
+                "special_destroyed": r.special_destroyed,
+                "deck": {
+                    "cards": [str(c) for c in r.deck.cards],
+                    "top": r.deck.top,
+                } if r.deck else None
+            }
+            for rid, r in state.rooms.items()
+        },
         "king_floor": state.king_floor,
         "action_log": list(state.action_log),
     }
