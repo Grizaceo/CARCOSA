@@ -24,15 +24,6 @@ app.mount("/static", StaticFiles(directory="/app/static"), name="static")
 # Servir index.html en root
 @app.get("/")
 async def serve_index():
-    return FileResponse("/app/static/index.html")
-
-# Catch-all para SPA routing (client-side routing)
-@app.get("/{full_path:path}")
-async def serve_spa(full_path: str):
-    # Si es ruta de API, dejar que FastAPI maneje el 404
-    if full_path.startswith(("start", "state/", "legal/", "act", "save/", "ws/")):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Not Found")
     return FileResponse("/app/static/index.html")'''
     )
 
