@@ -22,3 +22,7 @@ tools/
 *.yml
 get-pip.py
 run.ps1
+
+# Permitir docs/playtest-html para web deploy
+!docs/playtest-html/
+!docs/playtest-html/**
