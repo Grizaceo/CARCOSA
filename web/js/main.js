@@ -1569,6 +1569,7 @@ document.addEventListener("DOMContentLoaded", () => {
      * This supplements the server's action_log with inferred events.
      */
     function inferEventsFromStateDiff(prevState, currState) {
+        console.log("[INFER] inferEventsFromStateDiff called", { prevState: !!prevState, currState: !!currState });
         if (!prevState || !currState) return;
 
         // 1. Detect room changes for players (room swaps, special room reveals)
