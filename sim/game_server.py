@@ -27,6 +27,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from engine.actions import Action, ActionType
@@ -384,6 +385,31 @@ def health() -> Dict[str, Any]:
         "active_sessions": len(_sessions),
         "ws_connections": {gid: len(conns) for gid, conns in _ws_connections.items()},
     }
+
+
+# ── Static file serving ──────────────────────────────────────────────────────
+# Sirve frontend estático (index.html + assets)
+STATIC_DIR = "/app/static"
+
+@app.get("/", include_in_schema=False)
+async def serve_index():
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+@app.get("/static/css/style.css", include_in_schema=False)
+async def serve_css():
+    return FileResponse(os.path.join(STATIC_DIR, "css", "style.css"), media_type="text/css")
+
+@app.get("/static/js/api.js", include_in_schema=False)
+async def serve_api_js():
+    return FileResponse(os.path.join(STATIC_DIR, "js", "api.js"), media_type="application/javascript")
+
+@app.get("/static/js/renderer.js", include_in_schema=False)
+async def serve_renderer_js():
+    return FileResponse(os.path.join(STATIC_DIR, "js", "renderer.js"), media_type="application/javascript")
+
+@app.get("/static/js/main.js", include_in_schema=False)
+async def serve_main_js():
+    return FileResponse(os.path.join(STATIC_DIR, "js", "main.js"), media_type="application/javascript")
 
 
 # ── WebSocket endpoint ─────────────────────────────────────────────────────────
