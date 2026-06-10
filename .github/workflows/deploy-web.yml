@@ -1,0 +1,29 @@
+name: Deploy Web to Render
+
+on:
+  push:
+    branches: [feat/html-canvas-playtest]
+    paths:
+      - 'web/**'
+      - 'docs/playtest-html/**'
+      - 'Dockerfile.web'
+      - 'patch_static.py'
+      - 'sim/game_server.py'
+      - '.dockerignore'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger Render Deploy
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          curl -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${REND...Y}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": "clear"}"
