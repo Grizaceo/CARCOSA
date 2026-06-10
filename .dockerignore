@@ -9,7 +9,7 @@ runs/
 .gitattributes
 *.md
 LICENSE
-docs/
+# docs/  # Excluido excepto playtest-html que se necesita para web
 documentos/
 configs/
 models/
