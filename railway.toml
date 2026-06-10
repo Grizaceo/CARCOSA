@@ -1,0 +1,9 @@
+# railway.toml - Configuración Railway para CARCOSA
+[build]
+  dockerfilePath = "Dockerfile.railway"
+
+[deploy]
+  healthcheckPath = "/"
+  healthcheckTimeout = 30
+  restartPolicyType = "on_failure"
+  restartPolicyMaxRetries = 3
