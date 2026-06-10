@@ -41,6 +41,17 @@ from sim.runner import make_smoke_state
 
 app = FastAPI(title="CARCOSA Game Server", version="1.0.0")
 
+# Custom exception handler for HTTPException to ensure proper error responses
+from fastapi.responses import JSONResponse
+from fastapi import Request
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
 # Permitir requests desde Godot (localhost) y herramientas de test
 app.add_middleware(
     CORSMiddleware,
@@ -324,6 +335,16 @@ async def act(req: ActRequest) -> Dict[str, Any]:
     """
     session = _get_session(req.game_id)
     state: GameState = session["state"]
+
+    # Validar que el actor pertenece a esta partida
+    human_ids: set = session.get("human_ids", set())
+    bot_ids: set = session.get("bot_ids", set())
+    valid_actors = human_ids | bot_ids
+    if req.actor not in valid_actors:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Actor '{req.actor}' no pertenece a esta partida. Actores válidos: {sorted(valid_actors)}"
+        )
 
     if state.game_over:
         raise HTTPException(status_code=400, detail="Game is already over")

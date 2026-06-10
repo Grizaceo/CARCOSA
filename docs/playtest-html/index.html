@@ -30,6 +30,19 @@
                 <span class="pill king" id="kingPill">REY EN PISO -</span>
             </div>
 
+            <!-- Connection Status Bar -->
+            <div id="connectionStatusBar" class="connection-status-bar disconnected">
+                <span class="dot"></span>
+                <span class="text">Desconectado</span>
+            </div>
+        </header>
+
+        <!-- Active Game Info Bar -->
+        <div id="activeGameInfoBar" class="active-game-bar hidden">
+            <span class="game-id-label">🟢 Partida activa: <strong id="activeGameId"></strong></span>
+            <span class="role-label" id="activeGameRole"></span>
+            <button id="btnLeaveGame" class="btn-leave-game" title="Salir de la partida">Salir</button>
+        </div>
         </header>
 
         <!-- MAIN MAIN VIEWS CONTAINER -->
@@ -37,12 +50,26 @@
             <!-- LOBBY VIEW -->
             <div id="lobbyView" class="lobby-card">
                 <h2>Configurar Expedición</h2>
+            
+                <!-- Connection Status in Lobby -->
+                <div id="lobbyConnectionStatus" class="lobby-connection-status disconnected">
+                    <span class="dot"></span>
+                    <span class="text">Sin partida activa</span>
+                </div>
+
+                <!-- Active Game Info in Lobby -->
+                <div id="lobbyActiveGameInfo" class="lobby-active-game hidden">
+                    <span>🟢 Conectado a partida: <strong id="lobbyActiveGameId"></strong></span>
+                    <span class="role-badge" id="lobbyActiveGameRole"></span>
+                    <button id="btnLeaveGameLobby" class="btn-leave-game">Salir</button>
+                </div>
+
                 <form id="startForm">
                     <div class="form-group">
                         <label for="serverUrl">Servidor FastAPI (CARCOSA Core Server)</label>
                         <input type="url" id="serverUrl" class="form-control" value="https://carcosa-duiq.onrender.com" required>
                     </div>
-                    
+                
                     <div class="form-group">
                         <label for="seed">Semilla del Caos (RNG Seed)</label>
                         <input type="number" id="seed" class="form-control" value="1" min="1" required>
@@ -74,9 +101,34 @@
                     </div>
 
                     <button type="submit" id="btnStart" class="btn btn-primary" style="margin-top: 10px;">
-                        👁️ Entrar en Carcosa
+                        👁️ Crear Nueva Partida
                     </button>
                 </form>
+
+                <!-- Join Existing Game Section -->
+                <div id="joinExistingGame" class="lobby-section hidden">
+                    <h3>Unirse a Partida Existente</h3>
+                    <div class="form-group">
+                        <label for="joinGameId">Game ID</label>
+                        <input type="text" id="joinGameId" class="form-control" placeholder="Game ID (ej: a1b2c3d4)" pattern="[a-f0-9]{8}" maxlength="8">
+                    </div>
+                    <div class="form-group">
+                        <label for="joinSeed">Semilla (opcional)</label>
+                        <input type="number" id="joinSeed" class="form-control" placeholder="1" min="1">
+                    </div>
+                    <button type="button" id="btnJoinGame" class="btn btn-secondary">Unirse</button>
+                    <p class="hint" style="margin-top: 8px;">O comparte este enlace:</p>
+                    <div class="share-url-container">
+                        <code id="shareUrl" class="share-url-code"></code>
+                        <button id="btnCopyShareUrl" class="btn-copy" title="Copiar al portapapeles">📋</button>
+                    </div>
+                </div>
+
+                <div class="lobby-divider">
+                    <span>o</span>
+                </div>
+
+                <button type="button" id="btnShowCreateForm" class="btn btn-secondary" style="display: none;">Crear Nueva Partida</button>
             </div>
 
             <!-- GAME INTERFACE VIEW -->

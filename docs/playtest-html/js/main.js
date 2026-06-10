@@ -209,9 +209,13 @@ class CarcosaAudio {
 
 document.addEventListener("DOMContentLoaded", () => {
 
+    // Lobby state
+    let currentGameId = null;
+    let isHost = false;
+    let isJoining = false;
+
     let api = null;
     let renderer = null;
-    let currentGameId = null;
     let activeActor = null;
     let currentGameState = null;
     let isHotseatMode = true; // Por defecto hotseat (todos los humanos se controlan en esta pantalla)
@@ -219,9 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let renderedLogCount = 0; // Contador de logs renderizados en pantalla
     let currentLegalActions = []; // Acciones legales del jugador activo actual
     let hoveredRoomId = null; // ID de la habitación que el ratón está sobrevolando actualmente
-
-    // Instanciar sintetizador
-    const audio = new CarcosaAudio();
+    let previousGameState = null; // Estado anterior para detectar cambios
 
 
     // Base de datos de todas las entidades del juego con sus descripciones mecánicas oficiales
@@ -585,7 +587,27 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnStart = document.getElementById("btnStart");
     const serverUrlInput = document.getElementById("serverUrl");
     const seedInput = document.getElementById("seed");
-    
+
+    // Lobby sync elements
+    const connectionStatusBar = document.getElementById("connectionStatusBar");
+    const activeGameInfoBar = document.getElementById("activeGameInfoBar");
+    const activeGameIdEl = document.getElementById("activeGameId");
+    const activeGameRoleEl = document.getElementById("activeGameRole");
+    const btnLeaveGame = document.getElementById("btnLeaveGame");
+    const lobbyConnectionStatus = document.getElementById("lobbyConnectionStatus");
+    const lobbyActiveGameInfo = document.getElementById("lobbyActiveGameInfo");
+    const lobbyActiveGameIdEl = document.getElementById("lobbyActiveGameId");
+    const lobbyActiveGameRoleEl = document.getElementById("lobbyActiveGameRole");
+    const btnLeaveGameLobby = document.getElementById("btnLeaveGameLobby");
+    const joinExistingGame = document.getElementById("joinExistingGame");
+    const joinGameIdInput = document.getElementById("joinGameId");
+    const joinSeedInput = document.getElementById("joinSeed");
+    const btnJoinGame = document.getElementById("btnJoinGame");
+    const shareUrlCode = document.getElementById("shareUrl");
+    const btnCopyShareUrl = document.getElementById("btnCopyShareUrl");
+    const btnShowCreateForm = document.getElementById("btnShowCreateForm");
+    const lobbyActiveGame = document.getElementById("lobbyActiveGameInfo");
+
     const roundPill = document.getElementById("roundPill");
     const phasePill = document.getElementById("phasePill");
     const kingPill = document.getElementById("kingPill");
@@ -735,11 +757,105 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // Iniciar Partida
-    startForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
+    // Botón Nueva Partida en pantalla de Game Over
+    btnNewGame.addEventListener("click", () => {
+        gameOverOverlay.classList.add("hidden");
+        gameView.classList.add("hidden");
+        lobbyView.classList.remove("hidden");
+        btnStart.disabled = false;
+        btnStart.textContent = "Crear Nueva Partida";
+        if (api) {
+            api.disconnectWS();
+        }
+        currentGameId = null;
+        currentGameState = null;
+    });
+
+    /**
+    // LOBBY SYNC LOGIC
+    // ==========================================================================
+
+    // Initialize lobby from URL params and localStorage
+    function initLobby() {
+        const params = new URLSearchParams(window.location.search);
+        const urlGameId = params.get("game");
+        const urlSeed = params.get("seed");
+
+        // Check for saved game in localStorage
+        const savedGameId = localStorage.getItem("carcosa_game_id");
         
-        const serverUrl = serverUrlInput.value.trim();
+        if (urlGameId) {
+            // Join mode: pre-fill game_id
+            joinGameIdInput.value = urlGameId;
+            if (urlSeed) joinSeedInput.value = urlSeed;
+            showJoinSection();
+        } else if (savedGameId) {
+            // Restore saved game
+            showActiveGame(savedGameId);
+        }
+
+        // Update share URL if we have a game_id
+        if (currentGameId) {
+            updateShareUrl();
+        }
+    }
+
+    function showJoinSection() {
+        startForm.classList.add("hidden");
+        joinExistingGame.classList.remove("hidden");
+        btnShowCreateForm.style.display = "block";
+        isJoining = true;
+    }
+
+    function showCreateForm() {
+        startForm.classList.remove("hidden");
+        joinExistingGame.classList.add("hidden");
+        btnShowCreateForm.style.display = "none";
+        isJoining = false;
+    }
+
+    function showActiveGame(gameId, host = false) {
+        currentGameId = gameId;
+        isHost = host;
+        
+        // Update header connection status
+        connectionStatusBar.classList.add("connected");
+        connectionStatusBar.classList.remove("disconnected");
+        connectionStatusBar.querySelector(".text").textContent = `Conectado a #${gameId} ${host ? "(Host)" : "(Invitado)"}`;
+        activeGameInfoBar.classList.remove("hidden");
+        activeGameIdEl.textContent = gameId;
+        activeGameRoleEl.textContent = host ? "Host" : "Invitado";
+        activeGameRoleEl.className = "role-label " + (host ? "host" : "guest");
+
+        // Update lobby connection status
+        lobbyConnectionStatus.classList.add("connected");
+        lobbyConnectionStatus.classList.remove("disconnected");
+        lobbyConnectionStatus.querySelector(".text").textContent = `Conectado a partida #${gameId}`;
+        lobbyActiveGameInfo.classList.remove("hidden");
+        lobbyActiveGameIdEl.textContent = gameId;
+        lobbyActiveGameRoleEl.textContent = host ? "Host" : "Invitado";
+        lobbyActiveGameRoleEl.className = "role-badge " + (host ? "host" : "guest");
+
+        // Hide create form, show join section if not host
+        if (!host) {
+            showJoinSection();
+            joinGameIdInput.value = gameId;
+        } else {
+            showCreateForm();
+        }
+        
+        updateShareUrl();
+    }
+
+    function updateShareUrl() {
+        if (currentGameId) {
+            const seed = seedInput.value || joinSeedInput.value || "1";
+            const url = `${window.location.origin}${window.location.pathname}?game=${currentGameId}&seed=${seed}`;
+            shareUrlCode.textContent = url;
+        }
+    }
+
+    async function createGame() {
         const seed = parseInt(seedInput.value) || 1;
         
         // Obtener jugadores humanos configurados
@@ -760,19 +876,26 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        const serverUrl = serverUrlInput.value.trim();
         api = new CarcosaAPI(serverUrl);
         btnStart.disabled = true;
-        btnStart.textContent = "Iniciando...";
+        btnStart.textContent = "Creando...";
 
         // Disparar audio hum de tensión ambiente
         audio.init();
         audio.playAmbience();
 
-
         try {
             // Llamar API para iniciar juego
             const data = await api.startGame(seed, humanPlayers);
             currentGameId = data.game_id;
+            isHost = true;
+            
+            // Guardar en localStorage
+            localStorage.setItem("carcosa_game_id", currentGameId);
+            
+            showActiveGame(currentGameId, true);
+            
             renderedLogCount = 0; // Reset log count
             logContent.innerHTML = ""; // Limpiar pantalla de logs
             
@@ -781,7 +904,7 @@ document.addEventListener("DOMContentLoaded", () => {
             gameView.classList.remove("hidden");
             
             // Agregar log inicial
-            addLog("SISTEMA", `Nueva partida iniciada. ID: ${currentGameId}. Semilla: ${seed}`, "game-event");
+            addLog("SISTEMA", `Nueva partida creada. ID: ${currentGameId}. Semilla: ${seed}`, "game-event");
             addLog("SISTEMA", `Jugadores locales humanos: ${humanPlayers.join(", ")}`, "game-event");
             
             // Actualizar estado del juego
@@ -797,25 +920,145 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (error) {
             alert(`No se pudo conectar con el servidor de CARCOSA en ${serverUrl}. Asegúrate de que el servidor FastAPI esté corriendo en ese puerto.\n\nError: ${error.message}`);
             btnStart.disabled = false;
-            btnStart.textContent = "Entrar en Carcosa";
+            btnStart.textContent = "Crear Nueva Partida";
         }
-    });
+    }
 
-    // Botón Nueva Partida en pantalla de Game Over
-    btnNewGame.addEventListener("click", () => {
-        gameOverOverlay.classList.add("hidden");
-        gameView.classList.add("hidden");
-        lobbyView.classList.remove("hidden");
-        btnStart.disabled = false;
-        btnStart.textContent = "Entrar en Carcosa";
+    async function joinGame() {
+        const gameId = joinGameIdInput.value.trim().toLowerCase();
+        if (!gameId) return alert("Ingresa un Game ID válido");
+        if (gameId.length !== 8) return alert("El Game ID debe tener 8 caracteres");
+
+        const serverUrl = serverUrlInput.value.trim();
+        const seed = parseInt(joinSeedInput.value) || 1;
+
+        // Obtener jugadores humanos configurados (para el invitado, usamos los mismos que el host)
+        humanPlayers = [];
+        for (let i = 1; i <= 4; i++) {
+            const btn = document.getElementById(`typeP${i}`);
+            const pid = `P${i}`;
+            if (btn.dataset.type === "human") {
+                humanPlayers.push(pid);
+            }
+        }
+
+        if (humanPlayers.length === 0) {
+            alert("Debes elegir al menos un jugador Humano para jugar localmente.");
+            return;
+        }
+
+        api = new CarcosaAPI(serverUrl);
+        btnJoinGame.disabled = true;
+        btnJoinGame.textContent = "Uniendo...";
+
+        try {
+            // Validar que la partida existe
+            const stateData = await api.getState(gameId);
+            
+            currentGameId = gameId;
+            isHost = false;
+            
+            // Guardar en localStorage
+            localStorage.setItem("carcosa_game_id", currentGameId);
+            
+            showActiveGame(currentGameId, false);
+            
+            renderedLogCount = 0;
+            logContent.innerHTML = "";
+            
+            // Cambiar vista de Lobby a Juego
+            lobbyView.classList.add("hidden");
+            gameView.classList.remove("hidden");
+            
+            // Disparar audio
+            audio.init();
+            audio.playAmbience();
+            
+            // Agregar log inicial
+            addLog("SISTEMA", `Unido a partida #${currentGameId}. Semilla: ${seed}`, "game-event");
+            addLog("SISTEMA", `Jugadores locales humanos: ${humanPlayers.join(", ")}`, "game-event");
+            
+            // Actualizar estado del juego
+            updateState(stateData.state);
+
+            // Conectar WebSocket para recibir cambios en tiempo real
+            // El invitado usa su primer jugador humano
+            const localPlayerId = humanPlayers[0] || "P1";
+            api.connectWS(currentGameId, localPlayerId, (wsData) => {
+                if (wsData.type === "state_update") {
+                    updateState(wsData.state);
+                }
+            });
+
+        } catch (error) {
+            alert(`No se pudo unir a la partida: ${error.message}`);
+            btnJoinGame.disabled = false;
+            btnJoinGame.textContent = "Unirse";
+        }
+    }
+
+    function leaveGame() {
+        // Limpiar estado
+        currentGameId = null;
+        isHost = false;
+        isJoining = false;
+        localStorage.removeItem("carcosa_game_id");
+        
+        // Desconectar WebSocket
         if (api) {
             api.disconnectWS();
+            api = null;
         }
-        currentGameId = null;
-        currentGameState = null;
+        
+        // Reset UI
+        connectionStatusBar.classList.remove("connected");
+        connectionStatusBar.classList.add("disconnected");
+        connectionStatusBar.querySelector(".text").textContent = "Desconectado";
+        activeGameInfoBar.classList.add("hidden");
+        
+        lobbyConnectionStatus.classList.remove("connected");
+        lobbyConnectionStatus.classList.add("disconnected");
+        lobbyConnectionStatus.querySelector(".text").textContent = "Sin partida activa";
+        lobbyActiveGameInfo.classList.add("hidden");
+        
+        // Mostrar formulario crear
+        showCreateForm();
+        shareUrlCode.textContent = "";
+        
+        // Volver al lobby si estábamos en juego
+        if (!gameView.classList.contains("hidden")) {
+            gameView.classList.add("hidden");
+            lobbyView.classList.remove("hidden");
+        }
+    }
+
+    // Event listeners for lobby sync
+    btnStart.addEventListener("click", async (e) => {
+        e.preventDefault();
+        await createGame();
     });
 
-    let previousGameState = null; // Estado anterior para detectar cambios
+    btnJoinGame.addEventListener("click", async () => {
+        await joinGame();
+    });
+
+    btnLeaveGame.addEventListener("click", leaveGame);
+    btnLeaveGameLobby.addEventListener("click", leaveGame);
+
+    btnShowCreateForm.addEventListener("click", showCreateForm);
+
+    btnCopyShareUrl.addEventListener("click", () => {
+        const url = shareUrlCode.textContent;
+        if (url) {
+            navigator.clipboard.writeText(url).then(() => {
+                btnCopyShareUrl.textContent = "✓";
+                setTimeout(() => btnCopyShareUrl.textContent = "📋", 2000);
+            });
+        }
+    });
+
+    // Initialize lobby on load
+    initLobby();
 
     /**
      * Actualiza el estado local y redibuja la interfaz.
