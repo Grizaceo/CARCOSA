@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CARCOSA — Playtest Terminal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- HEADER -->
+        <header>
+            <div class="logo">
+                <h1>CARCOSA</h1>
+                <p>PLAYTEST WEB TERMINAL // CANON V0.4.0</p>
+            </div>
+            <div class="header-status">
+                <button type="button" id="btnAudioToggle" class="btn-header-audio" title="Activar/Desactivar Audio" aria-pressed="false">
+                    <span class="audio-waves" id="audioWaves">
+                        <span></span><span></span><span></span><span></span>
+                    </span>
+                    <span id="audioText">MUDO</span>
+                </button>
+                <button type="button" id="btnGrimorioToggle" class="btn-header-grimorio" title="Abrir Grimorio" aria-haspopup="dialog" aria-expanded="false">
+                    📖 Grimorio
+                </button>
+                <span class="pill king" id="kingPill">REY EN PISO -</span>
+            </div>
+
+        </header>
+
+        <!-- MAIN MAIN VIEWS CONTAINER -->
+        <main class="main-content">
+            <!-- LOBBY VIEW -->
+            <div id="lobbyView" class="lobby-card">
+                <h2>Configurar Expedición</h2>
+                <form id="startForm">
+                    <div class="form-group">
+                        <label for="serverUrl">Servidor FastAPI (CARCOSA Core Server)</label>
+                        <input type="url" id="serverUrl" class="form-control" value="http://127.0.0.1:8765" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="seed">Semilla del Caos (RNG Seed)</label>
+                        <input type="number" id="seed" class="form-control" value="1" min="1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Alineación de Almas Perdidas</label>
+                        <div class="player-config-list">
+                            <div class="player-config-item">
+                                <span class="player-name" style="color: #FF4A6B;">P1 (Scout)</span>
+                                <button type="button" class="player-type-toggle human" id="typeP1" data-type="human">HUMANO</button>
+                            </div>
+                            <div class="player-config-item">
+                                <span class="player-name" style="color: #4B96FF;">P2 (High Roller)</span>
+                                <button type="button" class="player-type-toggle bot" id="typeP2" data-type="bot">BOT</button>
+                            </div>
+                            <div class="player-config-item">
+                                <span class="player-name" style="color: #3CE39A;">P3 (Tank)</span>
+                                <button type="button" class="player-type-toggle bot" id="typeP3" data-type="bot">BOT</button>
+                            </div>
+                            <div class="player-config-item">
+                                <span class="player-name" style="color: #F6C844;">P4 (Brawler)</span>
+                                <button type="button" class="player-type-toggle bot" id="typeP4" data-type="bot">BOT</button>
+                            </div>
+                        </div>
+                        <small style="color: var(--text-muted); font-size: 0.75rem;">
+                            * Los jugadores configurados como BOT serán manejados automáticamente por la IA de tensión del servidor.
+                        </small>
+                    </div>
+
+                    <button type="submit" id="btnStart" class="btn btn-primary" style="margin-top: 10px;">
+                        👁️ Entrar en Carcosa
+                    </button>
+                </form>
+            </div>
+
+            <!-- GAME INTERFACE VIEW -->
+            <div id="gameView" class="game-layout hidden">
+                <!-- Left Visual Board Area -->
+                <div class="board-container">
+                    <div class="board-header">
+                        <div class="game-meta-pills">
+                            <span class="pill round" id="roundPill">RONDA 1</span>
+                            <span class="pill phase" id="phasePill">FASE: PLAYER</span>
+                        </div>
+                        <div style="font-weight: 600; font-size: 0.95rem;">
+                            Turno Activo: <span id="activeActorSpan" style="color: var(--color-yellow); font-family: var(--font-mono);">P1</span>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Visual Renderer -->
+                    <div class="canvas-wrapper">
+                        <canvas id="boardCanvas" width="800" height="800">Tablero interactivo 2D de Carcosa</canvas>
+                        
+                        <!-- Game Over Overlay (Hidden by default) -->
+                        <div id="gameOverOverlay" class="game-over-overlay hidden">
+                            <div id="gameOverBox" class="game-over-box">
+                                <h2 id="gameOverTitle">VICTORIA CANÓNICA</h2>
+                                <div id="gameOverDetails" class="game-over-details">
+                                    Detalles de la partida aquí...
+                                </div>
+                                <button id="btnNewGame" class="btn btn-primary">
+                                    🔄 Iniciar Nueva Expedición
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar Info & Controls -->
+                <aside class="sidebar" aria-label="Estadísticas y Bitácora">
+                    <!-- Almas Perdidas info -->
+                    <section class="card" style="flex-grow: 0;">
+                        <div class="card-title">
+                            <span>Almas Perdidas</span>
+                        </div>
+                        <div id="playersStatusList" class="players-status-list">
+                            <!-- Player status cards generated dynamically -->
+                        </div>
+                    </section>
+
+                    <!-- Actions Panel -->
+                    <section class="card actions-panel">
+                        <div class="card-title">
+                            <span>Acciones Disponibles</span>
+                            <span class="active-glow"></span>
+                        </div>
+                        <div id="actionsGrid" class="actions-grid">
+                            <!-- Action buttons generated dynamically -->
+                        </div>
+                    </section>
+
+                    <!-- Log Panel -->
+                    <section class="card log-panel">
+                        <div class="card-title">
+                            <span>Bitácora de Sucesos</span>
+                        </div>
+                        <div id="logContent" class="log-content">
+                            <!-- Event log entries -->
+                        </div>
+                    </section>
+                </aside>
+            </div>
+        </main>
+    </div>
+
+    <!-- DICE ROLLER OVERLAY -->
+    <div id="diceRollerOverlay" class="dice-roller-overlay hidden">
+        <div class="dice-roller-box">
+            <div class="dice-title" id="diceRollPurpose">LANZANDO DADOS...</div>
+            <div class="dice-container">
+                <div class="die neon-die-1" id="die1">1</div>
+                <div class="die neon-die-2" id="die2">1</div>
+            </div>
+            <div class="dice-result">
+                Resultado: <span id="diceRollResultValue">-</span>
+                <div class="dice-sub-details" id="diceRollSubDetails">-</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CARD REVEAL OVERLAY -->
+    <div id="cardRevealOverlay" class="card-reveal-overlay hidden">
+        <div class="card-reveal-box" id="cardRevealBox">
+            <div class="card-reveal-glitch-layer"></div>
+            <div class="card-reveal-header">
+                <span class="card-reveal-icon" id="cardRevealIcon">🃏</span>
+                <span class="card-reveal-type" id="cardRevealType">EVENTO</span>
+            </div>
+            <h2 class="card-reveal-title" id="cardRevealTitle">EL REPARADOR</h2>
+            <div class="card-reveal-divider"></div>
+            <p class="card-reveal-desc" id="cardRevealDesc">El terrible texto se despliega ante ti.</p>
+            <div class="card-reveal-footer">Haz click en cualquier parte para cerrar</div>
+        </div>
+    </div>
+
+    <!-- GRIMORIO DRAWER -->
+    <div id="grimorioDrawer" class="grimorio-drawer hidden">
+        <div class="grimorio-header">
+            <h2>📖 Grimorio de Carcosa</h2>
+            <button id="btnCloseGrimorio" class="btn-close-grimorio" aria-label="Cerrar Grimorio">&times;</button>
+        </div>
+        <div class="grimorio-search-container">
+            <input type="text" id="grimorioSearch" class="form-control" placeholder="Buscar hechizos, monstruos, objetos...">
+            <div class="grimorio-filters">
+                <button class="filter-btn active" data-filter="all">Todos</button>
+                <button class="filter-btn" data-filter="object">Objetos</button>
+                <button class="filter-btn" data-filter="monster">Monstruos</button>
+                <button class="filter-btn" data-filter="state">Estados</button>
+                <button class="filter-btn" data-filter="event">Eventos</button>
+            </div>
+        </div>
+        <div class="grimorio-content" id="grimorioContent">
+            <!-- List generated dynamically from ENTITY_DB -->
+        </div>
+    </div>
+    <div id="grimorioOverlay" class="grimorio-overlay hidden"></div>
+
+    <!-- JS Source Files -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/renderer.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
+

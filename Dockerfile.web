@@ -23,11 +23,11 @@ RUN pip install --no-cache-dir \
 COPY sim/ ./sim/
 COPY engine/ ./engine/
 
-# Copiar frontend estático
-COPY docs/playtest-html/index.html ./static/
-COPY docs/playtest-html/PLAN.md ./static/
-COPY docs/playtest-html/css/ ./static/css/
-COPY docs/playtest-html/js/ ./static/js/
+# Copiar frontend estático (desde web/ que no está en .dockerignore)
+COPY web/index.html ./static/
+COPY web/PLAN.md ./static/
+COPY web/css/ ./static/css/
+COPY web/js/ ./static/js/
 
 # Verificar archivos estáticos
 RUN ls -la /app/static/ && ls -la /app/static/css/ && ls -la /app/static/js/
