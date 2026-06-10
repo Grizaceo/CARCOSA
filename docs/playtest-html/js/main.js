@@ -1572,7 +1572,12 @@ document.addEventListener("DOMContentLoaded", () => {
      * This supplements the server's action_log with inferred events.
      */
     function inferEventsFromStateDiff(prevState, currState) {
-        console.log("[INFER] inferEventsFromStateDiff called", { prevState: !!prevState, currState: !!currState });
+        console.log("[INFER] inferEventsFromStateDiff called", { 
+            prevState: !!prevState, 
+            currState: !!currState,
+            prevRooms: prevState ? Object.keys(prevState.rooms || {}) : [],
+            currRooms: currState ? Object.keys(currState.rooms || {}) : []
+        });
         if (!prevState || !currState) return;
 
         // 1. Detect room changes for players (room swaps, special room reveals)
@@ -1683,10 +1688,12 @@ document.addEventListener("DOMContentLoaded", () => {
             if (currRoom.deck && prevRoom.deck) {
                 const prevTop = prevRoom.deck.top;
                 const currTop = currRoom.deck.top;
+                console.log("[INFER] Checking card draw", { roomId, prevTop, currTop, cards: currRoom.deck.cards });
                 if (currTop > prevTop) {
                     // A card was drawn - reveal it
                     // The drawn card was at the OLD top index (prevTop), not currTop - 1
                     const drawnIndex = prevTop;
+                    console.log("[INFER] Card drawn detected", { roomId, prevTop, currTop, drawnIndex });
                     if (currRoom.deck.cards && drawnIndex < currRoom.deck.cards.length) {
                         const card = currRoom.deck.cards[drawnIndex];
                         // Try to find which player drew it
@@ -1697,6 +1704,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                 break;
                             }
                         }
+                        console.log("[INFER] Emitting CARD_REVEALED", { drawingPlayer, roomId, card: currRoom.deck.cards[drawnIndex] });
                         processServerLog({
                             event: "CARD_REVEALED",
                             player: drawingPlayer,
