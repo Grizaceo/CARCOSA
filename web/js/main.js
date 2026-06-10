@@ -821,8 +821,10 @@ document.addEventListener("DOMContentLoaded", () => {
      * Actualiza el estado local y redibuja la interfaz.
      */
     function updateState(state) {
+        console.log("[UPDATE] updateState called", { hasPrevState: !!previousGameState });
         // Detectar eventos inferidos comparando con estado anterior
         if (previousGameState) {
+            console.log("[UPDATE] Calling inferEventsFromStateDiff");
             inferEventsFromStateDiff(previousGameState, state);
         }
         previousGameState = JSON.parse(JSON.stringify(state)); // Deep clone para próxima comparación
