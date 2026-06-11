@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: carcosa
+    runtime: docker
+    dockerfilePath: ./Dockerfile.web
+    plan: free
+    region: frankfurt
+    branch: feat/html-canvas-playtest
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://carcosa_games_db_user:***@dpg-d8kvfshkh4rs73fjricg-a.oregon-postgres.render.com:5432/carcosa_games_db
