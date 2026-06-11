@@ -47,13 +47,19 @@ async def init_db_pool():
     global _db_pool
     database_url = os.getenv("DATABASE_URL")
     if database_url:
-        # Render PostgreSQL requires SSL/TLS
-        # Parse URL and add ssl=require if not present
-        if "sslmode=" not in database_url:
-            separator = "&" if "?" in database_url else "?"
-            database_url = f"{database_url}{separator}sslmode=require"
+        # Render PostgreSQL requires SSL/TLS - use ssl parameter explicitly
+        # Remove sslmode from URL if present (asyncpg uses ssl parameter)
+        if "sslmode=" in database_url:
+            # Remove sslmode parameter from URL
+            import urllib.parse
+            parsed = urllib.parse.urlparse(database_url)
+            query_params = urllib.parse.parse_qs(parsed.query)
+            query_params.pop('sslmode', None)
+            new_query = urllib.parse.urlencode(query_params, doseq=True)
+            database_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
         
-        _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5)
+        # Use ssl="require" parameter for asyncpg (Render PostgreSQL requires SSL)
+        _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5, ssl="require")
         # Create table if not exists
         async with _db_pool.acquire() as conn:
             await conn.execute("""
@@ -72,7 +78,7 @@ async def init_db_pool():
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_carcosa_games_created_at ON carcosa_games(created_at DESC)
             """)
-        print(f"[DB] PostgreSQL pool initialized: {database_url[:50]}...")
+        print(f"[DB] PostgreSQL pool initialized with SSL: {database_url[:50]}...")
     else:
         print("[DB] DATABASE_URL not set, using filesystem fallback")
 
