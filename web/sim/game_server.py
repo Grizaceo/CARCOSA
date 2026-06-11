@@ -46,6 +46,16 @@ _db_pool: Optional[asyncpg.Pool] = None
 async def init_db_pool():
     global _db_pool
     database_url = os.getenv("DATABASE_URL")
+    
+    # Force internal URL format for Render PostgreSQL internal connections
+    if database_url and "oregon-postgres.render.com" in database_url:
+        # Convert external URL to internal format
+        database_url = database_url.replace(
+            "@dpg-d8kvfshkh4rs73fjricg-a.oregon-postgres.render.com:5432/",
+            "@dpg-d8kvfshkh4rs73fjricg-a/"
+        )
+        print(f"[DB] Converted to internal URL format: {database_url[:80]}...")
+    
     print(f"[DB] DATABASE_URL from env: {database_url[:80] if database_url else 'NOT SET'}...")
     if database_url:
         # Render PostgreSQL internal connections need SSL but hostname verification fails
