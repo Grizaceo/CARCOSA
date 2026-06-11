@@ -58,10 +58,16 @@ async def init_db_pool():
             new_query = urllib.parse.urlencode(query_params, doseq=True)
             database_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
         
-        # Use ssl="require" parameter for asyncpg (Render PostgreSQL requires SSL)
-        print(f"[DB] Connecting to PostgreSQL with SSL: {database_url[:50]}...")
+        # Render PostgreSQL internal connections need SSL but hostname verification fails
+        # Create custom SSL context that doesn't verify hostname
+        import ssl
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        
+        print(f"[DB] Connecting to PostgreSQL with custom SSL: {database_url[:50]}...")
         try:
-            _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5, ssl="require")
+            _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5, ssl=ssl_context)
             # Test connection
             async with _db_pool.acquire() as conn:
                 await conn.execute("SELECT 1")
@@ -88,7 +94,7 @@ async def init_db_pool():
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_carcosa_games_created_at ON carcosa_games(created_at DESC)
             """)
-        print(f"[DB] PostgreSQL pool initialized with SSL: {database_url[:50]}...")
+        print(f"[DB] PostgreSQL pool initialized with custom SSL: {database_url[:50]}...")
     else:
         print("[DB] DATABASE_URL not set, using filesystem fallback")
 
