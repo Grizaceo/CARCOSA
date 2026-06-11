@@ -42,10 +42,10 @@ from sim.runner import make_smoke_state
 # PostgreSQL connection pool
 import asyncpg
 _db_pool: Optional[asyncpg.Pool] = None
-
 async def init_db_pool():
     global _db_pool
     database_url = os.getenv("DATABASE_URL")
+    print(f"[DB] DATABASE_URL from env: {database_url[:50] if database_url else 'NOT SET'}...")
     if database_url:
         # Render PostgreSQL requires SSL/TLS - use ssl parameter explicitly
         # Remove sslmode from URL if present (asyncpg uses ssl parameter)
@@ -59,7 +59,17 @@ async def init_db_pool():
             database_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
         
         # Use ssl="require" parameter for asyncpg (Render PostgreSQL requires SSL)
-        _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5, ssl="require")
+        print(f"[DB] Connecting to PostgreSQL with SSL: {database_url[:50]}...")
+        try:
+            _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5, ssl="require")
+            # Test connection
+            async with _db_pool.acquire() as conn:
+                await conn.execute("SELECT 1")
+            print("[DB] PostgreSQL connection test successful")
+        except Exception as e:
+            print(f"[DB] PostgreSQL connection FAILED: {e}")
+            raise
+        
         # Create table if not exists
         async with _db_pool.acquire() as conn:
             await conn.execute("""
