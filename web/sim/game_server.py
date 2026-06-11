@@ -47,6 +47,12 @@ async def init_db_pool():
     global _db_pool
     database_url = os.getenv("DATABASE_URL")
     if database_url:
+        # Render PostgreSQL requires SSL/TLS
+        # Parse URL and add ssl=require if not present
+        if "sslmode=" not in database_url:
+            separator = "&" if "?" in database_url else "?"
+            database_url = f"{database_url}{separator}sslmode=require"
+        
         _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5)
         # Create table if not exists
         async with _db_pool.acquire() as conn:
