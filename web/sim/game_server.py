@@ -46,7 +46,7 @@ _db_pool: Optional[asyncpg.Pool] = None
 async def init_db_pool():
     global _db_pool
     database_url = os.getenv("DATABASE_URL")
-    print(f"[DB] DATABASE_URL from env: {database_url[:50] if database_url else 'NOT SET'}...")
+    print(f"[DB] DATABASE_URL from env: {database_url[:80] if database_url else 'NOT SET'}...")
     if database_url:
         # Render PostgreSQL internal connections need SSL but hostname verification fails
         # Create custom SSL context that doesn't verify hostname
@@ -64,7 +64,7 @@ async def init_db_pool():
             new_query = urllib.parse.urlencode(query_params, doseq=True)
             database_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
         
-        print(f"[DB] Connecting to PostgreSQL with custom SSL: {database_url[:50]}...")
+        print(f"[DB] Connecting to PostgreSQL with custom SSL: {database_url[:80]}...")
         try:
             _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5, ssl=ssl_context)
             # Test connection
@@ -72,8 +72,8 @@ async def init_db_pool():
                 await conn.execute("SELECT 1")
             print("[DB] PostgreSQL connection test successful")
         except Exception as e:
-            print(f"[DB] PostgreSQL connection FAILED: {e}")
-            print("[DB] Falling back to filesystem mode")
+            print(f"[DB] PostgreSQL connection FAILED: {type(e).__name__}: {e}")
+            print(f"[DB] Falling back to filesystem mode")
             _db_pool = None
             return
         
@@ -97,7 +97,7 @@ async def init_db_pool():
                 """)
             print(f"[DB] PostgreSQL pool initialized with custom SSL: {database_url[:50]}...")
         except Exception as e:
-            print(f"[DB] Table creation FAILED: {e}")
+            print(f"[DB] Table creation FAILED: {type(e).__name__}: {e}")
             print("[DB] Falling back to filesystem mode")
             _db_pool = None
     else:
