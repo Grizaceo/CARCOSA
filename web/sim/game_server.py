@@ -42,28 +42,27 @@ from sim.runner import make_smoke_state
 # PostgreSQL connection pool
 import asyncpg
 _db_pool: Optional[asyncpg.Pool] = None
+
 async def init_db_pool():
     global _db_pool
     database_url = os.getenv("DATABASE_URL")
     print(f"[DB] DATABASE_URL from env: {database_url[:50] if database_url else 'NOT SET'}...")
     if database_url:
-        # Render PostgreSQL requires SSL/TLS - use ssl parameter explicitly
-        # Remove sslmode from URL if present (asyncpg uses ssl parameter)
-        if "sslmode=" in database_url:
-            # Remove sslmode parameter from URL
-            import urllib.parse
-            parsed = urllib.parse.urlparse(database_url)
-            query_params = urllib.parse.parse_qs(parsed.query)
-            query_params.pop('sslmode', None)
-            new_query = urllib.parse.urlencode(query_params, doseq=True)
-            database_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
-        
         # Render PostgreSQL internal connections need SSL but hostname verification fails
         # Create custom SSL context that doesn't verify hostname
         import ssl
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
+        
+        # Remove sslmode from URL if present
+        if "sslmode=" in database_url:
+            import urllib.parse
+            parsed = urllib.parse.urlparse(database_url)
+            query_params = urllib.parse.parse_qs(parsed.query)
+            query_params.pop('sslmode', None)
+            new_query = urllib.parse.urlencode(query_params, doseq=True)
+            database_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
         
         print(f"[DB] Connecting to PostgreSQL with custom SSL: {database_url[:50]}...")
         try:
@@ -74,29 +73,36 @@ async def init_db_pool():
             print("[DB] PostgreSQL connection test successful")
         except Exception as e:
             print(f"[DB] PostgreSQL connection FAILED: {e}")
-            raise
+            print("[DB] Falling back to filesystem mode")
+            _db_pool = None
+            return
         
         # Create table if not exists
-        async with _db_pool.acquire() as conn:
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS carcosa_games (
-                    id TEXT PRIMARY KEY,
-                    seed INTEGER NOT NULL,
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    completed_at TIMESTAMPTZ,
-                    outcome TEXT,
-                    rounds INTEGER,
-                    jsonl_data TEXT NOT NULL,
-                    human_players TEXT[] NOT NULL
-                )
-            """)
-            # Index for faster queries
-            await conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_carcosa_games_created_at ON carcosa_games(created_at DESC)
-            """)
-        print(f"[DB] PostgreSQL pool initialized with custom SSL: {database_url[:50]}...")
+        try:
+            async with _db_pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS carcosa_games (
+                        id TEXT PRIMARY KEY,
+                        seed INTEGER NOT NULL,
+                        created_at TIMESTAMPTZ DEFAULT NOW(),
+                        completed_at TIMESTAMPTZ,
+                        outcome TEXT,
+                        rounds INTEGER,
+                        jsonl_data TEXT NOT NULL,
+                        human_players TEXT[] NOT NULL
+                    )
+                """)
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_carcosa_games_created_at ON carcosa_games(created_at DESC)
+                """)
+            print(f"[DB] PostgreSQL pool initialized with custom SSL: {database_url[:50]}...")
+        except Exception as e:
+            print(f"[DB] Table creation FAILED: {e}")
+            print("[DB] Falling back to filesystem mode")
+            _db_pool = None
     else:
         print("[DB] DATABASE_URL not set, using filesystem fallback")
+
 
 app = FastAPI(title="CARCOSA Game Server", version="1.0.0")
 
