@@ -535,6 +535,12 @@ document.addEventListener("DOMContentLoaded", () => {
             icon: "👾",
             desc: "Monstruo inmovilizador. Teje telarañas en su habitación. Toda alma perdida que entre en su zona queda inmediatamente ATRAPADA (TRAPPED)."
         },
+        "ICE_SERVANT": {
+            name: "Sirviente de Hielo",
+            type: "monster",
+            icon: "❄️",
+            desc: "Sirviente de la Reina Helada. Limita a 1 acción por turno a todas las almas en su piso. Se revela con la Reina Helada."
+        },
         // PRESAGIOS
         "OMEN:ARAÑA": {
             name: "Presagio de la Araña",
@@ -559,6 +565,24 @@ document.addEventListener("DOMContentLoaded", () => {
             type: "omen",
             icon: "⚠️",
             desc: "Despierta el Presagio del Tue Tue. El Tue Tue se activa para iniciar su cacería y la Tensión general sube en +1."
+        },
+        "TUE_TUE_REV_1": {
+            name: "Tue-Tue (1ª Revelación)",
+            type: "event",
+            icon: "🐦",
+            desc: "1ª revelación: -1 cordura (-2 con Vanidad). El Tue-Tue observa desde las sombras."
+        },
+        "TUE_TUE_REV_2": {
+            name: "Tue-Tue (2ª Revelación)",
+            type: "event",
+            icon: "🐦",
+            desc: "2ª revelación: -2 cordura (-3 con Vanidad). El canto del Tue-Tue se intensifica."
+        },
+        "TUE_TUE_REV_3": {
+            name: "Tue-Tue (3ª+ Revelación)",
+            type: "event",
+            icon: "💀",
+            desc: "3ª+ revelación: Fija cordura en -5 (ignora Vanidad/protección). STUN a todos en el piso. Efecto persistente: 1 acción/turno en piso Reina Helada."
         }
     };
     
@@ -685,6 +709,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const gameOverTitle = document.getElementById("gameOverTitle");
     const gameOverDetails = document.getElementById("gameOverDetails");
     const btnNewGame = document.getElementById("btnNewGame");
+    const tueTuePill = document.getElementById("tueTuePill");
 
     // Elementos DOM para Audio y Grimorio
     const btnAudioToggle = document.getElementById("btnAudioToggle");
@@ -1233,6 +1258,15 @@ document.addEventListener("DOMContentLoaded", () => {
         kingPill.textContent = `REY EN PISO ${state.king_floor}`;
         activeActorSpan.textContent = activeActor;
         
+        // P0-5: Tue-Tue counter
+        const tueRevelations = state.tue_tue_revelations || 0;
+        if (tueRevelations > 0) {
+            tueTuePill.textContent = `TUE-TUE: ${tueRevelations}/3`;
+            tueTuePill.style.display = "inline-block";
+        } else {
+            tueTuePill.style.display = "none";
+        }
+        
         // Limpiar marcador de turno en barra de título
         document.title = `CARCOSA - Turno de ${activeActor}`;
         
@@ -1309,6 +1343,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 else if (log.special_id === "SALON_BELLEZA") icon = "🪞";
                 else if (log.special_id === "MONASTERIO_LOCURA") icon = "⛪";
                 addLog("SISTEMA", `🗺️ ¡Se devela una habitación especial! <strong>${escapeHTML(roomName)}</strong> ${icon} ha sido revelada en <strong>${escapeHTML(log.room)}</strong> por ${escapeHTML(log.player)}`, "game-event");
+            } else if (log.event === "TUE_TUE_REVEALED") {
+                // P0-5: Tue-Tue revelación acumulativa
+                const rev = log.revelation_count || 1;
+                const cardKey = rev === 1 ? "TUE_TUE_REV_1" : rev === 2 ? "TUE_TUE_REV_2" : "TUE_TUE_REV_3";
+                const entity = ENTITY_DB[cardKey];
+                if (entity) {
+                    addLog("SISTEMA", `🐦 ${escapeHTML(log.player)} revela: <strong>${escapeHTML(entity.name)}</strong> ${entity.icon}<div class="card-detail-box event-type"><strong>Efecto:</strong> ${entity.desc}</div>`, "game-event");
+                    triggerCardRevealAnimation(cardKey);
+                }
+                if (rev >= 3) {
+                    addLog("SISTEMA", `☠️ ¡3ª+ revelación del Tue-Tue! Cordura fijada en -5. STUN a todos en el piso. Efecto persistente: 1 acción/turno en piso Reina Helada.`, "game-event");
+                }
             } else if (log.event === "ESCAPE_ATTEMPT") {
                 addLog("SISTEMA", `🕸️ Intento de escape: d6=${log.d6} + cordura=${log.sanity} = ${log.total} (${log.success ? "Éxito" : "Fallo"})`, "game-event");
             } else if (log.event === "KING_VANISHED") {
@@ -1602,10 +1648,47 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        // P0-4: Verificar movimiento bloqueado (Reina Helada efecto inmediato)
+        const movementBlocked = state.movement_blocked_players && state.movement_blocked_players.includes(activeActor);
+        
+        // P0-4: Verificar ICE_SERVANT / Reina Helada persistente (1 acción max en piso)
+        let iceServantFloor = null;
+        if (state.monsters) {
+            for (const m of state.monsters) {
+                if (m.monster_id === "ICE_SERVANT" || (m.monster_id && m.monster_id.includes("ICE_SERVANT"))) {
+                    iceServantFloor = m.room.startsWith("F1_") ? 1 : m.room.startsWith("F2_") ? 2 : 3;
+                    break;
+                }
+            }
+        }
+        // También verificar Reina Helada persistente (estado en engine: jugadores en piso reina = 1 acción)
+        const activePlayer = state.players[activeActor];
+        const reinaFloor = state.king_floor; // Nota: en engine, reina_helada persistente usa king_floor logic
+        const hasReinaPersistent = activePlayer && state.king_floor && activePlayer.room.startsWith("F" + state.king_floor + "_");
+        
+        const actionLimited = iceServantFloor !== null || hasReinaPersistent;
+
         try {
             const data = await api.getLegalActions(currentGameId, activeActor);
-            const actions = data.actions;
+            let actions = data.actions;
             currentLegalActions = actions || [];
+            
+            // P0-4: Filtrar acciones MOVE si movimiento bloqueado
+            if (movementBlocked) {
+                actions = actions.filter(a => a.type !== "MOVE" && a.type !== "USE_PORTABLE_STAIRS" && a.type !== "USE_YELLOW_DOORS" && a.type !== "USE_OBJECT" && !(a.type === "USE_OBJECT" && a.data.object_id === "COMPASS"));
+                currentLegalActions = actions;
+            }
+            
+            // P0-4: Limitar a 1 acción si ICE_SERVANT o Reina persistente (except END_TURN)
+            if (actionLimited) {
+                const endTurnAction = actions.find(a => a.type === "END_TURN");
+                const otherActions = actions.filter(a => a.type !== "END_TURN");
+                if (otherActions.length > 1) {
+                    actions = [otherActions[0]];
+                    if (endTurnAction) actions.push(endTurnAction);
+                    currentLegalActions = actions;
+                }
+            }
             
             // Redibujar el tablero pasando las acciones legales para resaltar caminos válidos
             renderer.draw(state, currentLegalActions);

@@ -173,6 +173,9 @@ class CarcosaRenderer {
 
         // 5. Dibujar presencia del Rey de Amarillo
         this.drawKingPresence(state);
+
+        // 6. Dibujar indicador ICE_SERVANT / Reina Helada persistente
+        this.drawIceServantPresence(state);
     }
 
     /**
@@ -485,10 +488,21 @@ class CarcosaRenderer {
                 this.ctx.fillText(player.id, px, py);
 
                 // Si tiene llaves, dibujar indicador arriba
+                let keyY = py - 18;
                 if (player.keys > 0) {
                     this.ctx.fillStyle = "#F6C844";
                     this.ctx.font = "bold 8px sans-serif";
-                    this.ctx.fillText("🔑".repeat(player.keys), px, py - 18);
+                    this.ctx.fillText("🔑".repeat(player.keys), px, keyY);
+                    keyY -= 14;
+                }
+                
+                // Movement blocked indicator (Reina Helada efecto inmediato)
+                const isMovementBlocked = state.movement_blocked_players && state.movement_blocked_players.includes(player.id);
+                if (isMovementBlocked) {
+                    this.ctx.fillStyle = "#06B6D4";
+                    this.ctx.font = "12px sans-serif";
+                    this.ctx.fillText("🧊", px, keyY);
+                    keyY -= 16;
                 }
 
                 // Efectos de aura para estados alterados activos
@@ -600,8 +614,16 @@ class CarcosaRenderer {
                 else if (mId.includes("REINA")) letter = "R";
                 else if (mId.includes("DUENDE")) letter = "D";
                 else if (mId.includes("VIEJO")) letter = "V";
+                else if (mId.includes("ICE_SERVANT")) letter = "I";
                 
                 this.ctx.fillText(letter, mx, my + 1);
+                
+                // ICE_SERVANT: indicador especial ❄️
+                if (mId.includes("ICE_SERVANT")) {
+                    this.ctx.fillStyle = "#06B6D4";
+                    this.ctx.font = "10px sans-serif";
+                    this.ctx.fillText("❄️", mx, my - 18);
+                }
 
                 // Si está stuneado
                 if (m.stunned_remaining_rounds && m.stunned_remaining_rounds > 0) {
@@ -657,5 +679,70 @@ class CarcosaRenderer {
 
             this.ctx.restore();
         }
+    }
+
+    /**
+     * Dibuja indicador de ICE_SERVANT / Reina Helada persistente en el pasillo del piso afectado.
+     */
+    drawIceServantPresence(state) {
+        // Buscar piso con ICE_SERVANT
+        let iceFloor = null;
+        if (state.monsters) {
+            for (const m of state.monsters) {
+                if (m.monster_id && m.monster_id.includes("ICE_SERVANT")) {
+                    iceFloor = m.room.startsWith("F1_") ? 1 : m.room.startsWith("F2_") ? 2 : 3;
+                    break;
+                }
+            }
+        }
+        // También Reina Helada persistente: jugadores en piso del rey tienen 1 acción
+        // (se indica visualmente igual que ICE_SERVANT)
+        let reinaFloor = null;
+        if (state.king_floor && state.monsters) {
+            for (const m of state.monsters) {
+                if (m.monster_id && m.monster_id.includes("REINA_HELADA")) {
+                    reinaFloor = state.king_floor; // La reina está en el piso del rey
+                    break;
+                }
+            }
+        }
+        
+        const floorsToMark = new Set();
+        if (iceFloor) floorsToMark.add(iceFloor);
+        if (reinaFloor) floorsToMark.add(reinaFloor);
+        
+        floorsToMark.forEach(floor => {
+            const corridorId = `F${floor}_P`;
+            const corridor = this.layout[corridorId];
+            if (!corridor) return;
+            
+            this.ctx.save();
+            // X, Y en el extremo derecho del pasillo (opuesto al Rey)
+            let ix = corridor.x + corridor.w - 30;
+            let iy = corridor.y + corridor.h / 2;
+            
+            // Icono de hielo
+            this.ctx.fillStyle = "#06B6D4";
+            this.ctx.shadowBlur = 15;
+            this.ctx.shadowColor = "#06B6D4";
+            
+            this.ctx.beginPath();
+            this.ctx.arc(ix, iy, 9, 0, Math.PI * 2);
+            this.ctx.fill();
+            
+            this.ctx.shadowBlur = 0;
+            this.ctx.fillStyle = "#0B0914";
+            this.ctx.font = "bold 9px 'Outfit'";
+            this.ctx.textAlign = "center";
+            this.ctx.textBaseline = "middle";
+            this.ctx.fillText("❄️", ix, iy);
+            
+            this.ctx.fillStyle = "#06B6D4";
+            this.ctx.font = "bold 8px 'Space Grotesk'";
+            this.ctx.textAlign = "right";
+            this.ctx.fillText("1 ACCIÓN", ix - 14, iy + 1);
+            
+            this.ctx.restore();
+        });
     }
 }
