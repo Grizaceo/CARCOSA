@@ -710,6 +710,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const gameOverDetails = document.getElementById("gameOverDetails");
     const btnNewGame = document.getElementById("btnNewGame");
     const tueTuePill = document.getElementById("tueTuePill");
+    const falseKingPill = document.getElementById("falseKingPill");
+    const kingVanishedPill = document.getElementById("kingVanishedPill");
 
     // Elementos DOM para Audio y Grimorio
     const btnAudioToggle = document.getElementById("btnAudioToggle");
@@ -1267,6 +1269,24 @@ document.addEventListener("DOMContentLoaded", () => {
             tueTuePill.style.display = "none";
         }
         
+        // P2-4: Falso Rey pill
+        if (state.false_king_floor) {
+            falseKingPill.textContent = `FALSO REY: PISO ${state.false_king_floor}`;
+            falseKingPill.style.display = "inline-block";
+        } else {
+            falseKingPill.style.display = "none";
+        }
+        
+        // P2-3: Rey desvanecido pill
+        if (state.king_vanished_turns > 0) {
+            kingVanishedPill.textContent = `REY DESVANECIDO: ${state.king_vanished_turns}`;
+            kingVanishedPill.style.display = "inline-block";
+        } else {
+            kingVanishedPill.style.display = "none";
+        }
+        
+        // P2-2: Anillo activo indicator (en holder stats, ver renderPlayersList)
+        
         // Limpiar marcador de turno en barra de título
         document.title = `CARCOSA - Turno de ${activeActor}`;
         
@@ -1394,6 +1414,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 audio.playMonster();
 
+            // P2-2: Anillo activado
+            } else if (log.event === "RING_ACTIVATED") {
+                const holder = log.player || log.actor;
+                addLog("SISTEMA", `💍 <strong>${escapeHTML(holder)}</strong> activa el Anillo de Amarillo: cura a TODOS al máximo, pero -2 cordura/turno al portador.`, "game-event");
+                audio.playKey();
+
+            // P2-3: Libro Chambers - cuento unido / vanish
+            } else if (log.event === "TALE_ATTACHED") {
+                addLog("SISTEMA", `📖 <strong>${escapeHTML(log.player)}</strong> une Cuento ${escapeHTML(log.tale_id?.replace("TALE_", "") || "?")} al Libro Chambers. Rey desvanecido +1 turno (total: ${log.vanish_turns || 1}).`, "game-event");
+                audio.playKey();
+
+            // P2-4: Falso Rey aparece
+            } else if (log.event === "FALSE_KING_APPEARED") {
+                const floor = log.floor || "?";
+                const holder = log.player || log.actor;
+                addLog("SISTEMA", `👑 ¡FALSO REY aparece en Piso ${floor}! (Corona activada por ${escapeHTML(holder)}). Presencia daño en su piso.`, "game-event");
+                audio.playMonster();
+
+
             }
         } else if (log.type) {
             let desc = "";
@@ -1414,8 +1453,34 @@ document.addEventListener("DOMContentLoaded", () => {
                     desc = `Finaliza su turno`;
                     break;
                 case "KING_ENDROUND":
+                    // P2-5: King Phase Breakdown completo
                     const floor = currentGameState ? currentGameState.king_floor : "?";
-                    desc = `Fin de ronda. El Rey de Amarillo se manifiesta en piso ${floor} (d6=${log.d6 || "N/A"})`;
+                    const d6 = log.d6 || "?";
+                    const d4 = log.d4 || "?";
+                    const presDamage = currentGameState ? (currentGameState.round <= 3 ? 1 : currentGameState.round <= 6 ? 2 : currentGameState.round <= 9 ? 3 : 4) : "?";
+                    
+                    // Logs secuenciales del turno del Rey
+                    addLog("REY", `🏠 Casa: -1 cordura a todos (HOUSE_LOSS)`);
+                    addLog("REY", `🎲 Ruleta d4=${d4}: Rey se manifiesta en Piso ${floor}`);
+                    if (presDamage > 0) addLog("REY", `👑 Presencia (Ronda ${currentGameState?.round || "?"}): -${presDamage} cordura en Piso ${floor}`);
+                    
+                    // Efecto d6
+                    switch(parseInt(d6)) {
+                        case 1: addLog("REY", `⚡ d6=1: Rotación intra-piso (R1→R4→R3→R2)`); break;
+                        case 2: addLog("REY", `☠️ d6=2: -1 cordura a todos (exc. Falso Rey)`); break;
+                        case 3: addLog("REY", `⏱️ d6=3: Acción reducida en Piso ${floor} next round`); break;
+                        case 4: addLog("REY", `🚪 d6=4: Expulsión del Piso ${floor} (exc. Falso Rey)`); break;
+                        case 5: addLog("REY", `🧲 d6=5: Atracción al Piso ${floor} (exc. Falso Rey)`); break;
+                        case 6: addLog("REY", `🤲 d6=6: Robo objeto no soulbound a todos`); break;
+                        default: addLog("REY", `❓ d6=${d6}: Efecto desconocido`);
+                    }
+                    
+                    // Monster phase + status EOR + stair reroll + victory check
+                    addLog("REY", `👾 Fase de Monstruos resuelta`);
+                    addLog("REY", `🎴 Escaleras reroll + rotación cajas`);
+                    addLog("REY", `✅ Victory check`);
+                    
+                    desc = `Fin de ronda completa (ver logs arriba)`;
                     break;
                 case "SACRIFICE":
                     desc = `Realiza un Sacrificio: ${escapeHTML(JSON.stringify(log.data))}`;
@@ -1451,7 +1516,9 @@ document.addEventListener("DOMContentLoaded", () => {
             "PARANOIA": { label: "👁️ Paranoico", class: "status-PARANOIA" },
             "TRAPPED": { label: "🕸️ Atrapado", class: "status-TRAPPED" },
             "TRAPPED_SPIDER": { label: "🕸️ Telaraña", class: "status-TRAPPED" },
-            "STUN": { label: "⚡ Aturdido", class: "status-STUN" }
+            "STUN": { label: "⚡ Aturdido", class: "status-STUN" },
+            "VANIDAD": { label: "💅 Vanidad", class: "status-VANIDAD" },
+            "ILUMINADO": { label: "✨ Iluminado", class: "status-ILUMINADO" }
         };
 
         for (let pid in state.players) {
@@ -1589,17 +1656,100 @@ document.addEventListener("DOMContentLoaded", () => {
             
             card.appendChild(sanityBarContainer);
             
-            // Inventario de Objetos
-            if (p.objects && p.objects.length > 0) {
+            // Inventario de Objetos - P2-1: separar soulbound + charges + slots penalty
+            const soulboundItems = p.soulbound_items || [];
+            const objectCharges = p.object_charges || {};
+            const slotsPenalty = p.object_slots_penalty || 0;
+            
+            // Calcular slots disponibles (base por rol - penalty)
+            const baseSlots = { SCOUT: 3, TANK: 3, HIGH_ROLLER: 3, BRAWLER: 3, HEALER: 3, PSYCHIC: 3, WITCH: 3, DEFAULT: 3 };
+            const baseSlotCount = baseSlots[p.role_id] || 3;
+            const availableSlots = Math.max(0, baseSlotCount - slotsPenalty);
+            
+            // Objetos normales (no soulbound)
+            const normalObjects = (p.objects || []).filter(obj => {
+                const clean = obj.replace("OBJECT:", "");
+                return !soulboundItems.includes(clean) && !["BOOK_CHAMBERS", "CROWN", "RING", "CHAMBERS_BOOK"].includes(clean);
+            });
+            
+            // Objetos soulbound
+            const sbObjects = (p.objects || []).filter(obj => {
+                const clean = obj.replace("OBJECT:", "");
+                return soulboundItems.includes(clean) || ["BOOK_CHAMBERS", "CROWN", "RING", "CHAMBERS_BOOK"].includes(clean);
+            });
+            
+            if (normalObjects.length > 0 || sbObjects.length > 0) {
                 const inv = document.createElement("div");
                 inv.className = "player-inventory";
-                p.objects.forEach(obj => {
-                    const objPill = document.createElement("span");
-                    objPill.className = "inventory-pill";
-                    const cleanObj = obj.replace("OBJECT:", "").replace(/_/g, " ");
-                    objPill.textContent = cleanObj;
-                    inv.appendChild(objPill);
-                });
+                inv.style.marginTop = "4px";
+                
+                // Objetos normales
+                if (normalObjects.length > 0) {
+                    const label = document.createElement("div");
+                    label.style.fontSize = "0.65rem";
+                    label.style.color = "var(--text-muted)";
+                    label.style.marginBottom = "2px";
+                    label.textContent = `Objetos (${normalObjects.length}/${availableSlots})`;
+                    inv.appendChild(label);
+                    
+                    normalObjects.forEach(obj => {
+                        const objPill = document.createElement("span");
+                        objPill.className = "inventory-pill";
+                        const cleanObj = obj.replace("OBJECT:", "").replace(/_/g, " ");
+                        // Mostrar charges si tiene
+                        const charge = objectCharges[cleanObj.toUpperCase().replace(/ /g, "_")] || objectCharges[obj];
+                        const chargeText = (charge !== undefined && charge > 0) ? ` (${charge})` : "";
+                        objPill.textContent = cleanObj + chargeText;
+                        objPill.title = `Slot: ${normalObjects.indexOf(obj)+1}/${availableSlots}`;
+                        inv.appendChild(objPill);
+                    });
+                    
+                    // Slots vacíos
+                    const emptySlots = availableSlots - normalObjects.length;
+                    for (let i = 0; i < emptySlots; i++) {
+                        const emptyPill = document.createElement("span");
+                        emptyPill.className = "inventory-pill";
+                        emptyPill.style.opacity = "0.3";
+                        emptyPill.style.background = "var(--bg-input)";
+                        emptyPill.textContent = "—";
+                        inv.appendChild(emptyPill);
+                    }
+                }
+                
+                // Soulbound items
+                if (sbObjects.length > 0) {
+                    const sbLabel = document.createElement("div");
+                    sbLabel.style.fontSize = "0.65rem";
+                    sbLabel.style.color = "#C084FC";
+                    sbLabel.style.marginTop = "6px";
+                    sbLabel.style.marginBottom = "2px";
+                    sbLabel.textContent = `🔒 Soulbound (${sbObjects.length})`;
+                    inv.appendChild(sbLabel);
+                    
+                    sbObjects.forEach(obj => {
+                        const objPill = document.createElement("span");
+                        objPill.className = "inventory-pill";
+                        objPill.style.borderColor = "#C084FC";
+                        objPill.style.background = "rgba(192, 132, 252, 0.1)";
+                        const cleanObj = obj.replace("OBJECT:", "").replace(/_/g, " ");
+                        const charge = objectCharges[cleanObj.toUpperCase().replace(/ /g, "_")] || objectCharges[obj];
+                        const chargeText = (charge !== undefined && charge > 0) ? ` (${charge})` : "";
+                        objPill.textContent = "🔒 " + cleanObj + chargeText;
+                        inv.appendChild(objPill);
+                    });
+                }
+                
+                card.appendChild(inv);
+            } else if (slotsPenalty > 0) {
+                // Mostrar penalty incluso sin objetos
+                const inv = document.createElement("div");
+                inv.className = "player-inventory";
+                inv.style.marginTop = "4px";
+                const label = document.createElement("div");
+                label.style.fontSize = "0.65rem";
+                label.style.color = "var(--color-danger)";
+                label.textContent = `Slots reducidos: -${slotsPenalty} (${availableSlots}/${baseSlotCount})`;
+                inv.appendChild(label);
                 card.appendChild(inv);
             }
             
