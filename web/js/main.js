@@ -210,6 +210,7 @@ class CarcosaAudio {
 document.addEventListener("DOMContentLoaded", () => {
 
     // Lobby state
+    const audio = new CarcosaAudio();
     let currentGameId = null;
     let isHost = false;
     let isJoining = false;
@@ -225,6 +226,68 @@ document.addEventListener("DOMContentLoaded", () => {
     let hoveredRoomId = null; // ID de la habitación que el ratón está sobrevolando actualmente
     let previousGameState = null; // Estado anterior para detectar cambios
 
+    function escapeHTML(str) {
+        if (!str) return "";
+        return str.toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    // Definición de los 7 roles canónicos (engine/config.py ROLE_POOL)
+    const ROLE_DB = {
+        "SCOUT": {
+            name: "Explorador",
+            icon: "🧭",
+            color: "#FF4A6B",
+            desc: "1 movimiento gratis por turno (free_move_used_this_turn).",
+            ability: "free_move"
+        },
+        "HIGH_ROLLER": {
+            name: "Azaroso",
+            icon: "🎲",
+            color: "#4B96FF",
+            desc: "Double roll 1 vez por turno (double_roll_used_this_turn).",
+            ability: "double_roll"
+        },
+        "TANK": {
+            name: "Protector",
+            icon: "🛡️",
+            color: "#3CE39A",
+            desc: "Escudo temporal (shield) + bloquea meditación de otros en su room.",
+            ability: "shield"
+        },
+        "BRAWLER": {
+            name: "Luchador",
+            icon: "👊",
+            color: "#F6C844",
+            desc: "Contundente gratis (USE_BLUNT cost_override=0).",
+            ability: "blunt_free"
+        },
+        "HEALER": {
+            name: "Curandero",
+            icon: "🩹",
+            color: "#06B6D4",
+            desc: "Sacrifica 1 cordura propia → +2 cordura a otros + estado (SANIDAD/ILUMINADO).",
+            ability: "heal_group"
+        },
+        "PSYCHIC": {
+            name: "Psíquico",
+            icon: "🔮",
+            color: "#C084FC",
+            desc: "Peek hallway: ve cartas superiores de habitaciones adyacentes.",
+            ability: "peek_hallway"
+        },
+        "WITCH": {
+            name: "Bruja",
+            icon: "🧙",
+            color: "#A855F7",
+            desc: "Mecánica única: puede manipular mazos / cartas reveladas.",
+            ability: "deck_manipulation"
+        }
+    };
 
     // Base de datos de todas las entidades del juego con sus descripciones mecánicas oficiales
     const ENTITY_DB = {
@@ -679,6 +742,87 @@ document.addEventListener("DOMContentLoaded", () => {
             audio.playHover();
             renderGrimorio();
         });
+
+    // Generar configuración de roles dinámicamente
+    function generateRoleConfig() {
+        const container = document.getElementById("roleConfigContainer");
+        const drawMode = document.getElementById("roleDrawMode").value;
+        container.innerHTML = "";
+        
+        const roleIds = Object.keys(ROLE_DB);
+        
+        if (drawMode === "RANDOM_UNIQUE") {
+            // Mostrar todos los 7 roles, permitir seleccionar 1-4
+            roleIds.forEach((roleId, index) => {
+                const role = ROLE_DB[roleId];
+                const pid = `P${index + 1}`;
+                const item = document.createElement("div");
+                item.className = "player-config-item";
+                item.dataset.roleId = roleId;
+                item.innerHTML = `
+                    <span class="player-name" style="color: ${role.color};">${pid} (${role.name})</span>
+                    <button type="button" class="player-type-toggle human" id="type${pid}" data-type="human" data-role="${roleId}">HUMANO</button>
+                    <span class="role-desc" style="font-size: 0.7rem; color: var(--text-muted); margin-left: 8px; max-width: 200px;">${role.desc}</span>
+                `;
+                container.appendChild(item);
+            });
+        } else if (drawMode === "FIXED") {
+            // Orden fijo: primeros 4 roles
+            roleIds.slice(0, 4).forEach((roleId, index) => {
+                const role = ROLE_DB[roleId];
+                const pid = `P${index + 1}`;
+                const item = document.createElement("div");
+                item.className = "player-config-item";
+                item.dataset.roleId = roleId;
+                item.innerHTML = `
+                    <span class="player-name" style="color: ${role.color};">${pid} (${role.name})</span>
+                    <button type="button" class="player-type-toggle human" id="type${pid}" data-type="human" data-role="${roleId}">HUMANO</button>
+                    <span class="role-desc" style="font-size: 0.7rem; color: var(--text-muted); margin-left: 8px; max-width: 200px;">${role.desc}</span>
+                `;
+                container.appendChild(item);
+            });
+        } else {
+            // RANDOM_WITH_REPLACEMENT - selector por slot
+            for (let i = 0; i < 4; i++) {
+                const pid = `P${i + 1}`;
+                const item = document.createElement("div");
+                item.className = "player-config-item";
+                item.innerHTML = `
+                    <span class="player-name" style="color: ${renderer.playerColors[pid]};">${pid}</span>
+                    <select class="form-control role-select" id="roleSelect${pid}" style="width: auto; display: inline-block; margin-right: 8px;">
+                        ${roleIds.map(rid => `<option value="${rid}">${ROLE_DB[rid].name}</option>`).join("")}
+                    </select>
+                    <button type="button" class="player-type-toggle human" id="type${pid}" data-type="human">HUMANO</button>
+                `;
+                container.appendChild(item);
+            }
+        }
+        
+        // Re-attach toggle listeners
+        attachPlayerTypeToggles();
+    }
+
+    function attachPlayerTypeToggles() {
+        document.querySelectorAll(".player-type-toggle").forEach(btn => {
+            // Remove old listeners by cloning
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            newBtn.addEventListener("click", () => {
+                if (newBtn.classList.contains("human")) {
+                    newBtn.classList.remove("human");
+                    newBtn.classList.add("bot");
+                    newBtn.textContent = "BOT";
+                    newBtn.dataset.type = "bot";
+                } else {
+                    newBtn.classList.remove("bot");
+                    newBtn.classList.add("human");
+                    newBtn.textContent = "HUMANO";
+                    newBtn.dataset.type = "human";
+                }
+            });
+        });
+    }
+
     });
 
     function renderGrimorio() {
@@ -771,7 +915,6 @@ document.addEventListener("DOMContentLoaded", () => {
         currentGameState = null;
     });
 
-    /**
     // LOBBY SYNC LOGIC
     // ==========================================================================
 
@@ -798,7 +941,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (currentGameId) {
             updateShareUrl();
         }
-    }
+    
+        generateRoleConfig();}
 
     function showJoinSection() {
         startForm.classList.add("hidden");
@@ -857,19 +1001,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function createGame() {
         const seed = parseInt(seedInput.value) || 1;
+        const drawMode = document.getElementById("roleDrawMode").value;
         
-        // Obtener jugadores humanos configurados
+        // Obtener configuración de roles desde UI dinámica
         humanPlayers = [];
-        const playersList = [];
+        const playersConfig = []; // Array de {pid, roleId, isHuman}
         
-        for (let i = 1; i <= 4; i++) {
-            const btn = document.getElementById(`typeP${i}`);
-            const pid = `P${i}`;
-            playersList.push(pid);
-            if (btn.dataset.type === "human") {
+        const configItems = document.querySelectorAll("#roleConfigContainer .player-config-item");
+        configItems.forEach((item, index) => {
+            const pid = `P${index + 1}`;
+            const roleId = item.dataset.roleId || Object.keys(ROLE_DB)[index];
+            const typeBtn = item.querySelector(".player-type-toggle");
+            const isHuman = typeBtn && typeBtn.dataset.type === "human";
+            
+            playersConfig.push({ pid, roleId, isHuman });
+            if (isHuman) {
                 humanPlayers.push(pid);
             }
-        }
+        });
 
         if (humanPlayers.length === 0) {
             alert("Debes elegir al menos un jugador Humano para jugar localmente.");
@@ -886,8 +1035,8 @@ document.addEventListener("DOMContentLoaded", () => {
         audio.playAmbience();
 
         try {
-            // Llamar API para iniciar juego
-            const data = await api.startGame(seed, humanPlayers);
+            // Llamar API para iniciar juego con roles
+            const data = await api.startGame(seed, humanPlayers, playersConfig, drawMode);
             currentGameId = data.game_id;
             isHost = true;
             
@@ -1047,6 +1196,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     btnShowCreateForm.addEventListener("click", showCreateForm);
 
+    document.getElementById("roleDrawMode").addEventListener("change", generateRoleConfig);
     btnCopyShareUrl.addEventListener("click", () => {
         const url = shareUrlCode.textContent;
         if (url) {
@@ -1075,8 +1225,7 @@ document.addEventListener("DOMContentLoaded", () => {
         currentGameState = state;
         activeActor = state.active_actor;
         
-        // Redibujar Canvas
-        renderer.draw(state);
+        // Redibujar Canvas se realiza a través de renderLoop automáticamente
         
         // Actualizar Cabecera de metadatos
         roundPill.textContent = `RONDA ${state.round}`;
@@ -1124,7 +1273,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 if (entity) {
-                    addLog("SISTEMA", `🔎 ${log.player} entra a ${log.room} y revela: <strong>${entity.name}</strong> ${entity.icon}<div class="card-detail-box ${entity.type}-type"><strong>Efecto:</strong> ${entity.desc}</div>`, "game-event");
+                    addLog("SISTEMA", `🔎 ${escapeHTML(log.player)} entra a ${escapeHTML(log.room)} y revela: <strong>${escapeHTML(entity.name)}</strong> ${entity.icon}<div class="card-detail-box ${entity.type}-type"><strong>Efecto:</strong> ${entity.desc}</div>`, "game-event");
                 } else {
                     const cardName = log.card.replace("EVENTS:", "").replace("EVENT:", "").replace("STATE:", "").replace("OBJECT:", "").replace("MONSTER:", "").replace("OMEN:", "");
                     const prettyCard = cardName.replace(/_/g, " ");
@@ -1134,7 +1283,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     else if (log.card.startsWith("OBJECT:")) icon = "🎒";
                     else if (log.card.startsWith("STATE:")) icon = "✨";
                     else if (log.card === "KEY") icon = "🔑";
-                    addLog("SISTEMA", `🔎 ${log.player} entra a ${log.room} y revela: <strong>${prettyCard}</strong> ${icon}`, "game-event");
+                    addLog("SISTEMA", `🔎 ${escapeHTML(log.player)} entra a ${escapeHTML(log.room)} y revela: <strong>${escapeHTML(prettyCard)}</strong> ${icon}`, "game-event");
                 }
 
                 // Disparar popup visual y auditivo de revelación de carta
@@ -1144,7 +1293,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const rollsSum = log.rolls.reduce((a, b) => a + b, 0);
                 const sanityStr = log.sanity > 0 ? ` + cordura (${log.sanity})` : log.sanity < 0 ? ` - cordura (${Math.abs(log.sanity)})` : '';
                 const result = log.sanity !== 0 ? ` = Total: <strong>${log.total}</strong>` : ` = Resultado: <strong>${log.total}</strong>`;
-                addLog("SISTEMA", `🎲 <strong>${log.player}</strong> tira dados [${log.purpose}]: dados (${rollsStr}) = ${rollsSum}${sanityStr}${result}`, "game-event");
+                addLog("SISTEMA", `🎲 <strong>${escapeHTML(log.player)}</strong> tira dados [${escapeHTML(log.purpose)}]: dados (${rollsStr}) = ${rollsSum}${sanityStr}${result}`, "game-event");
 
                 // Disparar popup animado neón de dados y efectos de rodado
                 triggerDiceRollAnimation(log.rolls, log.purpose, log.sanity, log.total);
@@ -1159,41 +1308,43 @@ document.addEventListener("DOMContentLoaded", () => {
                 else if (log.special_id === "CAMARA_LETAL") icon = "💀";
                 else if (log.special_id === "SALON_BELLEZA") icon = "🪞";
                 else if (log.special_id === "MONASTERIO_LOCURA") icon = "⛪";
-                addLog("SISTEMA", `🗺️ ¡Se devela una habitación especial! <strong>${roomName}</strong> ${icon} ha sido revelada en <strong>${log.room}</strong> por ${log.player}`, "game-event");
+                addLog("SISTEMA", `🗺️ ¡Se devela una habitación especial! <strong>${escapeHTML(roomName)}</strong> ${icon} ha sido revelada en <strong>${escapeHTML(log.room)}</strong> por ${escapeHTML(log.player)}`, "game-event");
             } else if (log.event === "ESCAPE_ATTEMPT") {
                 addLog("SISTEMA", `🕸️ Intento de escape: d6=${log.d6} + cordura=${log.sanity} = ${log.total} (${log.success ? "Éxito" : "Fallo"})`, "game-event");
             } else if (log.event === "KING_VANISHED") {
                 addLog("SISTEMA", `👑 El Rey de Amarillo se ha desvanecido por ${log.turns} turnos.`, "game-event");
             } else if (log.event === "PEEK_RESULT") {
-                addLog("SISTEMA", `👁️ Mirador en ${log.room} revela la carta: ${log.card}`, "game-event");
+                addLog("SISTEMA", `👁️ Mirador en ${escapeHTML(log.room)} revela la carta: ${escapeHTML(log.card)}`, "game-event");
             } else if (log.event === "SANITY_LOSS") {
-                addLog("SISTEMA", `💔 ${log.player} sufre -${log.amount} de cordura [Fuente: ${log.source}]`, "game-event");
+                addLog("SISTEMA", `💔 ${escapeHTML(log.player)} sufre -${log.amount} de cordura [Fuente: ${escapeHTML(log.source)}]`, "game-event");
             } else if (log.event === "SANITY_LOSS_PENDING_SACRIFICE") {
-                addLog("SISTEMA", `⚠️ ¡LOCURA INMINENTE! ${log.player} va a sufrir -${log.amount} de cordura [Fuente: ${log.source}] y debe sacrificar para resistir`, "game-event");
+                addLog("SISTEMA", `⚠️ ¡LOCURA INMINENTE! ${escapeHTML(log.player)} va a sufrir -${log.amount} de cordura [Fuente: ${escapeHTML(log.source)}] y debe sacrificar para resistir`, "game-event");
+            } else if (log.event === "SANITY_GAIN") {
+                addLog("SISTEMA", `💚 <strong>${escapeHTML(log.player)}</strong> recupera +${log.amount} de cordura [Fuente: ${escapeHTML(log.source)}]`, "game-event");
             } else if (log.event === "ITEM_GRANTED") {
                 const entity = ENTITY_DB[log.item];
                 if (entity) {
-                    addLog("SISTEMA", `🎒 ${log.player} obtiene objeto: <strong>${entity.name}</strong>${log.discarded ? ` (descartando ${log.discarded})` : ''}<div class="card-detail-box object-type"><strong>Efecto:</strong> ${entity.desc}</div>`, "game-event");
+                    addLog("SISTEMA", `🎒 ${escapeHTML(log.player)} obtiene objeto: <strong>${escapeHTML(entity.name)}</strong>${log.discarded ? ` (descartando ${escapeHTML(log.discarded)})` : ''}<div class="card-detail-box object-type"><strong>Efecto:</strong> ${entity.desc}</div>`, "game-event");
                 } else {
-                    addLog("SISTEMA", `🎒 ${log.player} obtiene objeto: ${log.item}${log.discarded ? ` (descartando ${log.discarded})` : ''}`, "game-event");
+                    addLog("SISTEMA", `🎒 ${escapeHTML(log.player)} obtiene objeto: ${escapeHTML(log.item)}${log.discarded ? ` (descartando ${escapeHTML(log.discarded)})` : ''}`, "game-event");
                 }
             } else if (log.event === "KEY_GRANTED") {
-                addLog("SISTEMA", `🔑 ${log.player} encuentra una Llave física`, "game-event");
+                addLog("SISTEMA", `🔑 ${escapeHTML(log.player)} encuentra una Llave física`, "game-event");
                 audio.playKey();
 
             } else if (log.event === "STATUS_ADDED") {
                 const entity = ENTITY_DB[log.status];
                 if (entity) {
-                    addLog("SISTEMA", `✨ ${log.player} adquiere estado: <strong>${entity.name}</strong> (${log.duration} turnos)<div class="card-detail-box state-type"><strong>Efecto:</strong> ${entity.desc}</div>`, "game-event");
+                    addLog("SISTEMA", `✨ ${escapeHTML(log.player)} adquiere estado: <strong>${escapeHTML(entity.name)}</strong> (${log.duration} turnos)<div class="card-detail-box state-type"><strong>Efecto:</strong> ${entity.desc}</div>`, "game-event");
                 } else {
-                    addLog("SISTEMA", `✨ ${log.player} adquiere estado: ${log.status} (${log.duration} turnos)`, "game-event");
+                    addLog("SISTEMA", `✨ ${escapeHTML(log.player)} adquiere estado: ${escapeHTML(log.status)} (${log.duration} turnos)`, "game-event");
                 }
             } else if (log.event === "MONSTER_SPAWNED") {
                 const entity = ENTITY_DB[log.monster];
                 if (entity) {
-                    addLog("SISTEMA", `👾 ¡Monstruo invocado! <strong>${entity.name}</strong> aparece en ${log.room}<div class="card-detail-box monster-type"><strong>Comportamiento:</strong> ${entity.desc}</div>`, "game-event");
+                    addLog("SISTEMA", `👾 ¡Monstruo invocado! <strong>${escapeHTML(entity.name)}</strong> aparece en ${escapeHTML(log.room)}<div class="card-detail-box monster-type"><strong>Comportamiento:</strong> ${entity.desc}</div>`, "game-event");
                 } else {
-                    addLog("SISTEMA", `👾 ¡Monstruo invocado! ${log.monster} aparece en ${log.room}`, "game-event");
+                    addLog("SISTEMA", `👾 ¡Monstruo invocado! ${escapeHTML(log.monster)} aparece en ${escapeHTML(log.room)}`, "game-event");
                 }
                 audio.playMonster();
 
@@ -1221,13 +1372,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     desc = `Fin de ronda. El Rey de Amarillo se manifiesta en piso ${floor} (d6=${log.d6 || "N/A"})`;
                     break;
                 case "SACRIFICE":
-                    desc = `Realiza un Sacrificio: ${JSON.stringify(log.data)}`;
+                    desc = `Realiza un Sacrificio: ${escapeHTML(JSON.stringify(log.data))}`;
                     break;
                 case "ACCEPT_SACRIFICE":
                     desc = `Acepta consecuencias de locura (-5 Cordura)`;
                     break;
                 default:
-                    desc = `Realiza acción: ${log.type}`;
+                    desc = `Realiza acción: ${escapeHTML(log.type)}`;
             }
             addLog(log.actor, desc);
         }
@@ -1240,12 +1391,11 @@ document.addEventListener("DOMContentLoaded", () => {
         playersStatusList.innerHTML = "";
         
         // Roles traducidos con iconos
-        const roleTranslations = {
-            "SCOUT": "Explorador 🧭",
-            "HIGH_ROLLER": "Azaroso 🎲",
-            "TANK": "Protector 🛡️",
-            "BRAWLER": "Luchador 👊"
-        };
+        // Roles con iconos desde ROLE_DB (7 roles canónicos)
+        const roleTranslations = {};
+        Object.keys(ROLE_DB).forEach(rid => {
+            roleTranslations[rid] = `${ROLE_DB[rid].name} ${ROLE_DB[rid].icon}`;
+        });
 
         // Estados traducidos con iconos y clases de estilo
         const statusDetails = {
@@ -1290,7 +1440,10 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const actionsDiv = document.createElement("div");
             actionsDiv.className = "player-status-actions";
-            actionsDiv.innerHTML = `Acciones: <span>${p.remaining_actions}</span>`;
+            actionsDiv.textContent = "Acciones: ";
+            const actSpan = document.createElement("span");
+            actSpan.textContent = p.remaining_actions;
+            actionsDiv.appendChild(actSpan);
             
             header.appendChild(nameDiv);
             header.appendChild(actionsDiv);
@@ -1315,7 +1468,7 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const sanityBarFill = document.createElement("div");
             sanityBarFill.className = `sanity-bar-fill ${sanityClass}`;
-            sanityBarFill.style.width = `${sanityPct}%`;
+            sanityBarFill.style.transform = `scaleX(${sanityPct / 100})`;
             
             sanityBarContainer.appendChild(sanityBarFill);
             
@@ -1329,7 +1482,11 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const keysStat = document.createElement("div");
             keysStat.className = "stat-item keys";
-            keysStat.textContent = `🔑 ${p.keys}`;
+            // Capacidad de llaves por rol (engine/inventory.py get_max_keys_capacity)
+            const keyCapacities = { SCOUT: 2, TANK: 1, HIGH_ROLLER: 1, BRAWLER: 1, HEALER: 1, PSYCHIC: 1, WITCH: 1, DEFAULT: 1 };
+            const keyCap = keyCapacities[p.role_id] || 1;
+            keysStat.textContent = `🔑 ${p.keys}/${keyCap}`;
+            keysStat.title = `Capacidad de llaves: ${keyCap} (${p.role_id})`;
             
             const roomStat = document.createElement("div");
             roomStat.className = "stat-item room";
@@ -1341,6 +1498,49 @@ document.addEventListener("DOMContentLoaded", () => {
             stats.appendChild(roomStat);
             
             card.appendChild(stats);
+            
+            // Indicadores específicos de rol
+            const roleIndicators = document.createElement("div");
+            roleIndicators.className = "role-indicators";
+            roleIndicators.style.fontSize = "0.7rem";
+            roleIndicators.style.color = "var(--text-muted)";
+            roleIndicators.style.marginTop = "4px";
+            
+            const indicators = [];
+            const role = ROLE_DB[p.role_id];
+            if (role) {
+                switch (role.ability) {
+                    case "free_move":
+                        if (!p.free_move_used_this_turn) indicators.push(`${role.icon} Movimiento gratis disponible`);
+                        else indicators.push(`${role.icon} Movimiento gratis usado`);
+                        break;
+                    case "double_roll":
+                        if (!p.double_roll_used_this_turn) indicators.push(`${role.icon} Double roll disponible`);
+                        else indicators.push(`${role.icon} Double roll usado`);
+                        break;
+                    case "shield":
+                        if (p.shield > 0) indicators.push(`🛡️ Escudo: ${p.shield}`);
+                        break;
+                    case "blunt_free":
+                        indicators.push(`${role.icon} Contundente GRATIS`);
+                        break;
+                    case "heal_group":
+                        indicators.push(`${role.icon} Curar grupo (-1 propia)`);
+                        break;
+                    case "peek_hallway":
+                        indicators.push(`${role.icon} Peek hallway`);
+                        break;
+                    case "deck_manipulation":
+                        indicators.push(`${role.icon} Manipulación mazos`);
+                        break;
+                }
+            }
+            
+            if (indicators.length > 0) {
+                roleIndicators.textContent = indicators.join(" • ");
+                card.appendChild(roleIndicators);
+            }
+            
             card.appendChild(sanityBarContainer);
             
             // Inventario de Objetos
@@ -1458,10 +1658,26 @@ document.addEventListener("DOMContentLoaded", () => {
                         btn.style.color = "var(--color-yellow)";
                         break;
                     case "SACRIFICE":
-                        const modeText = action.data.mode === "SANITY_MAX" ? "1 Cordura Máxima" : `Espacio Objeto (${action.data.discard_object_id})`;
-                        actionText = `💀 Sacrificar: ${modeText}`;
+                        // El servidor ya envía las opciones correctas según available_sacrifice_options
+                        // Cada action SACRIFICE es una opción distinta
+                        let sacrificeLabel = "";
+                        if (action.data.mode === "SANITY_MAX") {
+                            sacrificeLabel = "1 Cordura Máxima";
+                        } else if (action.data.mode === "OBJECT_SLOT") {
+                            if (action.data.discard_object_id) {
+                                sacrificeLabel = `Descartar: ${action.data.discard_object_id}`;
+                            } else {
+                                sacrificeLabel = "Reducir slot de objeto (elegir al confirmar)";
+                            }
+                        } else {
+                            sacrificeLabel = action.data.mode || "Opción desconocida";
+                        }
+                        actionText = `💀 Sacrificar: ${sacrificeLabel}`;
                         actionCost = "Inter.";
                         btn.style.borderColor = "var(--color-danger)";
+                        // Marcar botón para posible confirmación extra
+                        btn.dataset.sacrificeMode = action.data.mode;
+                        btn.dataset.discardObject = action.data.discard_object_id || "";
                         break;
                     case "ACCEPT_SACRIFICE":
                         actionText = "Acceptar Sanity Loss (-5 Cordura)";
@@ -1546,11 +1762,24 @@ document.addEventListener("DOMContentLoaded", () => {
                         actionCost = "-";
                 }
 
-                btn.innerHTML = `${actionText} ${actionCost ? `<span class="action-cost">${actionCost}</span>` : ""}`;
+                btn.textContent = actionText + " ";
+                if (actionCost) {
+                    const costSpan = document.createElement("span");
+                    costSpan.className = "action-cost";
+                    costSpan.textContent = actionCost;
+                    btn.appendChild(costSpan);
+                }
                 
                 // Evento click para enviar acción
                 btn.addEventListener("click", () => {
                     audio.playClick();
+                    
+                    // SACRIFICE con OBJECT_SLOT sin discard_object_id requiere confirmación de qué objeto descartar
+                    if (action.type === "SACRIFICE" && action.data.mode === "OBJECT_SLOT" && !action.data.discard_object_id) {
+                        showSacrificeObjectModal(action);
+                        return;
+                    }
+                    
                     executePlayerAction(action);
                 });
 
@@ -1601,25 +1830,46 @@ document.addEventListener("DOMContentLoaded", () => {
         if (state.outcome === "WIN") {
             gameOverBox.classList.add("outcome-WIN");
             gameOverTitle.textContent = "🏆 ¡VICTORIA CANÓNICA!";
+            const totalKeys = Object.values(state.players).reduce((sum, p) => sum + (p.keys || 0), 0);
             gameOverDetails.innerHTML = `
                 Felicidades, el grupo ha logrado escapar de la influencia del Rey de Amarillo.<br><br>
                 <strong>Detalles:</strong><br>
                 - Rondas jugadas: ${state.round}<br>
-                - Llaves reunidas: 4/4<br>
+                - Llaves reunidas: ${totalKeys}/${state.flags?.KEYS_TO_WIN || 4}<br>
                 - Semilla RNG: ${seedInput.value}
             `;
             addLog("SISTEMA", "¡Juego Terminado! El grupo de almas perdidas HA GANADO la partida.", "game-event");
         } else {
             gameOverBox.classList.add("outcome-LOSE");
             gameOverTitle.textContent = "👁️ HASTA EL FIN DE CARCOSA...";
+            
+            let causeDetails = "";
+            let causeLog = "";
+            
+            if (state.outcome && state.outcome.startsWith("LOSE_ALL_MINUS5")) {
+                // Formato: "LOSE_ALL_MINUS5 (SOURCE -> PID)"
+                const sourceMatch = state.outcome.match(/LOSE_ALL_MINUS5\s*\((.+)\)/);
+                const source = sourceMatch ? sourceMatch[1] : "desconocido";
+                causeDetails = `Todas las almas cayeron a -5 cordura.<br><strong>Golpe final:</strong> ${escapeHTML(source)}`;
+                causeLog = `¡Derrota! Todas las almas en -5 cordura. Fuente: ${source}`;
+            } else if (state.outcome === "LOSE_KEYS_DESTROYED") {
+                const keysTotal = state.flags?.KEYS_TOTAL || 6;
+                const keysDestroyed = state.keys_destroyed || 0;
+                const keysAvailable = keysTotal - keysDestroyed;
+                causeDetails = `Llaves destruidas superaron el umbral.<br><strong>Llaves en juego:</strong> ${keysAvailable} / ${keysTotal} (umbral: 3)<br><strong>Llaves destruidas:</strong> ${keysDestroyed}`;
+                causeLog = `¡Derrota! Llaves destruidas: ${keysDestroyed}, restantes en juego: ${keysAvailable} ≤ 3`;
+            } else {
+                causeDetails = `El Rey de Amarillo ha reclamado a las almas perdidas o destruido sus llaves.<br><br><strong>Causa:</strong> ${escapeHTML(state.outcome || "desconocida")}`;
+                causeLog = `¡Derrota! ${state.outcome || "Causa desconocida"}`;
+            }
+            
             gameOverDetails.innerHTML = `
-                El Rey de Amarillo ha reclamado a las almas perdidas o destruido sus llaves.<br><br>
+                ${causeDetails}<br><br>
                 <strong>Detalles:</strong><br>
                 - Rondas jugadas: ${state.round}<br>
-                - Causa de Derrota: El grupo ha perdido la cordura o las llaves físicas han sido destruidas en el Umbral.<br>
                 - Semilla RNG: ${seedInput.value}
             `;
-            addLog("SISTEMA", "¡Juego Terminado! Las almas perdidas han caído derrotadas.", "game-event");
+            addLog("SISTEMA", causeLog, "game-event");
         }
 
         // Ofrecer guardar partida
@@ -1798,6 +2048,73 @@ document.addEventListener("DOMContentLoaded", () => {
         overlay.onclick = () => {
             clearTimeout(autoCloseTimeout);
             overlay.classList.add("hidden");
+        };
+    }
+
+    // Modal para elegir qué objeto descartar al sacrificar slot de objeto
+    function showSacrificeObjectModal(sacrificeAction) {
+        const p = currentGameState.players[activeActor];
+        if (!p) return;
+        
+        // Objetos descartables (no soulbound)
+        const discardable = p.objects.filter(obj => {
+            const cleanObj = obj.replace("OBJECT:", "");
+            return !["BOOK_CHAMBERS", "CROWN", "RING", "CHAMBERS_BOOK"].includes(cleanObj);
+        });
+        
+        if (discardable.length === 0) {
+            // No hay objetos descartables, ejecutar directamente (servidor manejará)
+            executePlayerAction(sacrificeAction);
+            return;
+        }
+        
+        // Crear modal dinámico
+        const modal = document.createElement("div");
+        modal.className = "card-reveal-overlay";
+        modal.style.zIndex = "var(--z-modal)";
+        modal.innerHTML = `
+            <div class="card-reveal-box type-event" style="max-width: 400px;">
+                <div class="card-reveal-header">
+                    <span class="card-reveal-icon">💀</span>
+                    <span class="card-reveal-type">SACRIFICIO</span>
+                </div>
+                <h2 class="card-reveal-title">Reducir Slot de Objeto</h2>
+                <div class="card-reveal-divider"></div>
+                <p class="card-reveal-desc">Elige qué objeto descartar para reducir tu capacidad:</p>
+                <div id="sacrificeObjectList" style="display: flex; flex-direction: column; gap: 8px; margin: 16px 0;">
+                    ${discardable.map(obj => {
+                        const cleanObj = obj.replace("OBJECT:", "").replace(/_/g, " ");
+                        const entity = ENTITY_DB[obj] || ENTITY_DB[cleanObj.toUpperCase().replace(/ /g, "_")];
+                        const icon = entity ? entity.icon : "🎒";
+                        return `<button class="action-btn sacrifice-object-choice" data-object="${escapeHTML(obj)}" style="text-align: left; justify-content: flex-start;">${icon} ${escapeHTML(cleanObj)}</button>`;
+                    }).join("")}
+                </div>
+                <p class="card-reveal-footer">Click en un objeto para confirmar el sacrificio</p>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Event listeners para las opciones
+        modal.querySelectorAll(".sacrifice-object-choice").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const objectId = btn.dataset.object;
+                // Ejecutar sacrificio con el objeto elegido
+                const actionWithChoice = {
+                    ...sacrificeAction,
+                    data: { ...sacrificeAction.data, discard_object_id: objectId }
+                };
+                document.body.removeChild(modal);
+                executePlayerAction(actionWithChoice);
+            });
+        });
+        
+        // Cerrar al click fuera
+        modal.onclick = () => {
+            document.body.removeChild(modal);
+            // Re-render actions to re-enable buttons
+            renderActions(currentGameState);
         };
     }
 
