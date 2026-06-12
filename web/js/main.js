@@ -1778,39 +1778,61 @@ document.addEventListener("DOMContentLoaded", () => {
                     case "USE_MOTEMEY_BUY_START":
                         actionText = "🛒 Comprar en Motemey (Ofrece 2 Cartas)";
                         actionCost = "2 Cord.";
+                        btn.title = "Paga 2 cordura → muestra 2 cartas del mazo Motemey (13 cartas: 3 Brújula, 3 Vial, 2 Contundente, 4 Tesoros, 1 Llave, 1 Cuento) · Elige 1, otra al fondo";
+                        btn.dataset.showMotemeyModal = "true";
                         break;
                     case "USE_MOTEMEY_BUY_CHOOSE":
                         actionText = `🃏 Motemey: Elegir Opción ${action.data.chosen_index + 1}`;
                         actionCost = "-";
+                        btn.title = `Elige carta ${action.data.chosen_index + 1} de las 2 mostradas`;
                         break;
                     case "USE_YELLOW_DOORS":
                         actionText = `🚪 Transportar a ${action.data.target_player}`;
-                        actionCost = "1 Ac.";
+                        actionCost = "1 Ac. (Target -1 Cordura)";
+                        btn.title = "Teletransporta target a tu room · Target sufre -1 cordura · Reveal room";
+                        // Modal selector target
+                        btn.addEventListener("click", (e) => {
+                            e.stopPropagation();
+                            showYellowDoorsModal(action);
+                        });
                         break;
                     case "USE_TABERNA_ROOMS":
                         actionText = `🍻 Taberna: Rotar ${action.data.room_a} ⟷ ${action.data.room_b}`;
-                        actionCost = "Gratis";
+                        actionCost = "FREE (-1 Cordura)";
+                        btn.title = "FREE · Solo habitaciones (no pasillos) · 2 distintas · 1 uso/turno · -1 Cordura al actor · Intercambia mazos (peek mutuo)";
                         break;
                     case "USE_ARMORY_DROP":
                         const dropText = action.data.item_name === "KEY" ? "Llave" : action.data.item_name;
                         actionText = `⬇️ Armería: Dejar ${dropText}`;
-                        actionCost = "Gratis";
+                        actionCost = "FREE";
+                        btn.title = "Storage máx 2 items (llaves + objetos combinados) · No soulbound · FREE";
                         break;
                     case "USE_ARMORY_TAKE":
                         actionText = "⬆️ Armería: Tomar Ítem Guardado";
-                        actionCost = "Gratis";
+                        actionCost = "FREE";
+                        btn.title = "Recupera item del storage (máx 2 items total) · FREE";
                         break;
                     case "USE_SALON_BELLEZA":
                         actionText = "💅 Salón Belleza: Adquirir Vanidad";
                         actionCost = "1 Ac.";
+                        const salonUses = currentGameState?.salon_belleza_uses || 0;
+                        btn.title = `Usos globales: ${salonUses} · Cada 2 usos = VANIDAD (+1 daño cordura permanente) · PAID`;
                         break;
                     case "USE_CAPILLA":
-                        actionText = "⛪ Monasterio: Meditar (Iluminarse)";
+                        actionText = "⛪ Capilla: Meditar (d6+2 Cordura, 1/6 PARANOIA)";
                         actionCost = "1 Ac.";
+                        btn.title = "Cura d6+2 cordura · 16.6% chance PARANOIA (5 turnos, no compartir room) · PAID";
                         break;
                     case "USE_CAMARA_LETAL_RITUAL":
                         actionText = "🔴 Ritual Cámara Letal (7ª Llave)";
-                        actionCost = "1 Ac.";
+                        actionCost = "1 Ac. (2 jugadores)";
+                        btn.style.borderColor = "var(--color-danger)";
+                        btn.title = "Requiere 2 jugadores en la habitación. d6: 1-2=[7,0] | 3-6=[4,3] cordura. Otorga 7ª llave.";
+                        // Modal de confirmación con detalles
+                        btn.addEventListener("click", (e) => {
+                            e.stopPropagation();
+                            showCamaraLetalModal(action);
+                        });
                         break;
                     case "USE_ATTACH_TALE":
                         actionText = `📖 Unir Cuento ${action.data.tale_id.replace("TALE_", "")}`;
@@ -1894,6 +1916,14 @@ document.addEventListener("DOMContentLoaded", () => {
             
             // Actualizar estado devuelto
             updateState(result.state);
+            
+            // P1-7: Mostrar modal Motemey BUY_START después de ejecutar
+            if (action.type === "USE_MOTEMEY_BUY_START" && 
+                result.state?.pending_motemey_choice?.[activeActor]) {
+                setTimeout(() => {
+                    showMotemeyBuyModal(action);
+                }, 100);
+            }
 
         } catch (error) {
             alert(`Error al ejecutar acción: ${error.message}`);
@@ -2200,6 +2230,203 @@ document.addEventListener("DOMContentLoaded", () => {
             renderActions(currentGameState);
         };
     }
+
+    // Modal para Cámara Letal - confirmación con detalles d6
+    function showCamaraLetalModal(cameraAction) {
+        const modal = document.createElement("div");
+        modal.className = "card-reveal-overlay";
+        modal.style.zIndex = "var(--z-modal)";
+        modal.innerHTML = `
+            <div class="card-reveal-box type-event" style="max-width: 450px;">
+                <div class="card-reveal-header">
+                    <span class="card-reveal-icon">🔴</span>
+                    <span class="card-reveal-type">CÁMARA LETAL</span>
+                </div>
+                <h2 class="card-reveal-title">Ritual de la 7ª Llave</h2>
+                <div class="card-reveal-divider"></div>
+                <p class="card-reveal-desc">
+                    <strong>Requisitos:</strong> 2 jugadores en la habitación, ritual no completado.<br>
+                    <strong>Costos por d6:</strong>
+                    <ul style="margin: 8px 0; padding-left: 20px;">
+                        <li>1-2: [7, 0] cordura (un jugador -7, otro 0)</li>
+                        <li>3-6: [4, 3] cordura (un jugador -4, otro -3)</li>
+                    </ul>
+                    <strong>Efecto:</strong> Otorga la 7ª Llave física al pool (incrementa llaves disponibles).
+                    <br><br>Solo se puede realizar una vez por partida.
+                </p>
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 16px;">
+                    <button id="btnCamaraConfirm" class="btn btn-primary" style="flex: 1;">Confirmar Ritual</button>
+                    <button id="btnCamaraCancel" class="btn btn-secondary" style="flex: 1;">Cancelar</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        modal.querySelector("#btnCamaraConfirm").addEventListener("click", () => {
+            document.body.removeChild(modal);
+            executePlayerAction(cameraAction);
+        });
+        
+        modal.querySelector("#btnCamaraCancel").addEventListener("click", () => {
+            document.body.removeChild(modal);
+            renderActions(currentGameState);
+        });
+        
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+                renderActions(currentGameState);
+            }
+        };
+    }
+
+    // Modal para Puertas Amarillas - selector de target
+    function showYellowDoorsModal(doorsAction) {
+        const p = currentGameState.players[activeActor];
+        if (!p) return;
+        
+        // Otros jugadores en la partida
+        const otherPlayers = Object.entries(currentGameState.players)
+            .filter(([pid, pl]) => pid !== activeActor)
+            .map(([pid, pl]) => ({ pid, ...pl }));
+        
+        if (otherPlayers.length === 0) {
+            addLog("SISTEMA", "No hay otros jugadores para transportar.", "game-event");
+            return;
+        }
+        
+        const modal = document.createElement("div");
+        modal.className = "card-reveal-overlay";
+        modal.style.zIndex = "var(--z-modal)";
+        modal.innerHTML = `
+            <div class="card-reveal-box type-event" style="max-width: 400px;">
+                <div class="card-reveal-header">
+                    <span class="card-reveal-icon">🚪</span>
+                    <span class="card-reveal-type">PUERTAS AMARILLAS</span>
+                </div>
+                <h2 class="card-reveal-title">Transportar Alma</h2>
+                <div class="card-reveal-divider"></div>
+                <p class="card-reveal-desc">Elige a qué alma transportar a tu habitación (<strong>${escapeHTML(p.room)}</strong>).</p>
+                <p class="card-reveal-desc" style="color: var(--color-danger);"><strong>El target sufre -1 cordura.</strong></p>
+                <div id="yellowDoorsTargets" style="display: flex; flex-direction: column; gap: 8px; margin: 16px 0;">
+                    ${otherPlayers.map(t => {
+                        const roleName = ROLE_DB[t.role_id]?.name || t.role_id;
+                        const roleIcon = ROLE_DB[t.role_id]?.icon || "";
+                        return `<button class="action-btn yellow-door-target" data-target="${escapeHTML(t.pid)}" style="text-align: left; justify-content: flex-start;">
+                            ${roleIcon} ${t.pid} (${roleIcon} ${roleName}) - Cordura: ${t.sanity}/${t.sanity_max} - En: ${t.room}
+                        </button>`;
+                    }).join("")}
+                </div>
+                <p class="card-reveal-footer">Click en un jugador para confirmar</p>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        modal.querySelectorAll(".yellow-door-target").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const targetPid = btn.dataset.target;
+                const actionWithTarget = {
+                    ...doorsAction,
+                    data: { ...doorsAction.data, target_player: targetPid }
+                };
+                document.body.removeChild(modal);
+                executePlayerAction(actionWithTarget);
+            });
+        });
+        
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+                renderActions(currentGameState);
+            }
+        };
+    }
+
+    // Modal para Motemey BUY_START - muestra 2 cartas para elegir
+    function showMotemeyBuyModal(buyAction) {
+        // This is handled by the BUY_START action which sets pending_motemey_choice
+        // The BUY_CHOOSE actions are already rendered as buttons
+        // We just need to show a visual modal with the 2 cards
+        const pending = currentGameState?.pending_motemey_choice?.[activeActor];
+        if (!pending || pending.length < 2) {
+            executePlayerAction(buyAction); // fallback
+            return;
+        }
+        
+        const [card1, card2] = pending;
+        
+        const getEntity = (cardKey) => {
+            if (cardKey.startsWith("OMEN:")) return ENTITY_DB[cardKey];
+            const clean = cardKey.replace("EVENTS:", "").replace("EVENT:", "").replace("STATE:", "").replace("OBJECT:", "").replace("MONSTER:", "");
+            return ENTITY_DB[clean];
+        };
+        
+        const e1 = getEntity(card1);
+        const e2 = getEntity(card2);
+        
+        const modal = document.createElement("div");
+        modal.className = "card-reveal-overlay";
+        modal.style.zIndex = "var(--z-modal)";
+        modal.innerHTML = `
+            <div class="card-reveal-box type-object" style="max-width: 500px;">
+                <div class="card-reveal-header">
+                    <span class="card-reveal-icon">⚖️</span>
+                    <span class="card-reveal-type">MOTEMEY - COMPRA</span>
+                </div>
+                <h2 class="card-reveal-title">Elige tu Objeto (2 cordura pagados)</h2>
+                <div class="card-reveal-divider"></div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+                    <div class="motemey-choice" data-index="0" style="border: 2px solid var(--border-color); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s;">
+                        <div style="font-size: 2rem; text-align: center;">${e1?.icon || "🃏"}</div>
+                        <div style="font-weight: 600; text-align: center; margin: 8px 0;">${e1?.name || card1}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center;">${e1?.desc?.substring(0, 100) || ""}...</div>
+                    </div>
+                    <div class="motemey-choice" data-index="1" style="border: 2px solid var(--border-color); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s;">
+                        <div style="font-size: 2rem; text-align: center;">${e2?.icon || "🃏"}</div>
+                        <div style="font-weight: 600; text-align: center; margin: 8px 0;">${e2?.name || card2}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); text-align: center;">${e2?.desc?.substring(0, 100) || ""}...</div>
+                    </div>
+                </div>
+                <p class="card-reveal-footer">Click en una carta para elegir · La otra vuelve al fondo del mazo</p>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Hover effects
+        modal.querySelectorAll(".motemey-choice").forEach(choice => {
+            choice.addEventListener("mouseenter", () => {
+                choice.style.borderColor = "var(--color-accent)";
+                choice.style.boxShadow = "0 0 15px var(--color-accent-glow)";
+            });
+            choice.addEventListener("mouseleave", () => {
+                choice.style.borderColor = "var(--border-color)";
+                choice.style.boxShadow = "none";
+            });
+            choice.addEventListener("click", () => {
+                const chosenIndex = parseInt(choice.dataset.index);
+                document.body.removeChild(modal);
+                // Dispatch BUY_CHOOSE with chosen_index
+                const chooseAction = {
+                    actor: activeActor,
+                    type: "USE_MOTEMEY_BUY_CHOOSE",
+                    data: { chosen_index: chosenIndex }
+                };
+                executePlayerAction(chooseAction);
+            });
+        });
+        
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+                renderActions(currentGameState);
+            }
+        };
+    }
+
 
     // Loop de animación continuo a 60fps para efectos visuales fluidos
     function renderLoop() {
