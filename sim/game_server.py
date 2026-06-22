@@ -19,6 +19,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
@@ -347,7 +348,7 @@ async def _auto_advance_until_human(game_id: str) -> None:
             if action not in legal:
                 action = legal[0] if legal else Action(actor=actor, type=ActionType.END_TURN, data={})
             _single_step(session, actor, action.type.value, action.data, "bot")
-        
+
         # Broadcast state after each bot action
         if game_id in _ws_connections:
             await _broadcast(game_id, {
@@ -361,7 +362,7 @@ async def _auto_advance_until_human(game_id: str) -> None:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.post("/start")
-def start_game(req: StartRequest) -> Dict[str, Any]:
+async def start_game(req: StartRequest) -> Dict[str, Any]:
     """
     Inicia una nueva partida. Retorna game_id + estado inicial.
 
@@ -398,7 +399,9 @@ def start_game(req: StartRequest) -> Dict[str, Any]:
     }
 
     # Avanzar automáticamente si el primer turno es de un bot o de KING
-    _auto_advance_until_human(game_id)
+    # Se ejecuta como task (no await) porque start() es sync — el cliente recibe el state
+    # inicial de inmediato y el bot loop avanza en background hasta encontrar un humano.
+    asyncio.create_task(_auto_advance_until_human(game_id))
 
     return {"game_id": game_id, "state": _state_summary(_sessions[game_id]["state"])}
 
