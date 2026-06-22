@@ -179,30 +179,119 @@ class CarcosaAudio {
     playMonster() {
         if (this.isMuted || !this.ctx) return;
         this.init();
-        
+
         try {
             const freqs = [110.00, 116.54, 155.56, 220.00]; // Acorde disonante
             freqs.forEach((freq) => {
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
-                
+
                 osc.type = 'sawtooth';
                 osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-                
+
                 gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1.2);
-                
+
                 const filter = this.ctx.createBiquadFilter();
                 filter.type = 'lowpass';
                 filter.frequency.setValueAtTime(250, this.ctx.currentTime);
-                
+
                 osc.connect(filter);
                 filter.connect(gain);
                 gain.connect(this.ctx.destination);
-                
+
                 osc.start();
                 osc.stop(this.ctx.currentTime + 1.3);
             });
+        } catch(e){}
+    }
+
+    // P3-3: Game Over variants
+    playVictory() {
+        if (this.isMuted || !this.ctx) return;
+        this.init();
+
+        try {
+            // Arpegio mayor ascendente (C5 E5 G5 C6) — sensación de escape
+            const notes = [523.25, 659.25, 783.99, 1046.50];
+            notes.forEach((freq, idx) => {
+                const time = this.ctx.currentTime + idx * 0.12;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, time);
+
+                gain.gain.setValueAtTime(0.07, time);
+                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(time);
+                osc.stop(time + 0.55);
+            });
+        } catch(e){}
+    }
+
+    playDefeat() {
+        if (this.isMuted || !this.ctx) return;
+        this.init();
+
+        try {
+            // Cluster descendente grave — colapso del Rey
+            const freqs = [220.00, 196.00, 174.61, 155.56]; // A3 G3 F3 Eb3
+            freqs.forEach((freq, idx) => {
+                const time = this.ctx.currentTime + idx * 0.18;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(freq, time);
+
+                gain.gain.setValueAtTime(0.06, time);
+                gain.gain.exponentialRampToValueAtTime(0.001, time + 1.0);
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(400, time);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(time);
+                osc.stop(time + 1.1);
+            });
+        } catch(e){}
+    }
+
+    // P3-3: Sacrificio — pulso grave con caída de pitch
+    playSacrifice() {
+        if (this.isMuted || !this.ctx) return;
+        this.init();
+
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(180, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(45, this.ctx.currentTime + 0.6);
+
+            gain.gain.setValueAtTime(0.10, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.7);
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(300, this.ctx.currentTime);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.75);
         } catch(e){}
     }
 }
@@ -242,52 +331,188 @@ document.addEventListener("DOMContentLoaded", () => {
             name: "Explorador",
             icon: "🧭",
             color: "#FF4A6B",
-            desc: "1 movimiento gratis por turno (free_move_used_this_turn).",
+            desc: "<strong>Movimiento gratis (1/turno):</strong> una acción MOVE adicional sin consumir acciones. Se tracks vía <code>free_move_used_this_turn</code>. Si llevas Brújula (COMPASS), se sinergiza con peek/pasillos.",
             ability: "free_move"
         },
         "HIGH_ROLLER": {
             name: "Azaroso",
             icon: "🎲",
             color: "#4B96FF",
-            desc: "Double roll 1 vez por turno (double_roll_used_this_turn).",
+            desc: "<strong>Double roll (1/turno):</strong> cuando tiras dados por cualquier motivo, puedes repetir UN dado del pool. Tracked vía <code>double_roll_used_this_turn</code>. Ideal para eventos de d6 + cordura con umbrales altos.",
             ability: "double_roll"
         },
         "TANK": {
             name: "Protector",
             icon: "🛡️",
             color: "#3CE39A",
-            desc: "Escudo temporal (shield) + bloquea meditación de otros en su room.",
+            desc: "<strong>Escudo (stack):</strong> absorbe 1 golpe de cordura al recibir daño. Se muestra como <code>shield</code> en stats. <strong>Bloqueo meditación:</strong> en tu room, otros no pueden usar acciones de Capilla/Monasterio (engine lo enforces automáticamente).",
             ability: "shield"
         },
         "BRAWLER": {
             name: "Luchador",
             icon: "👊",
             color: "#F6C844",
-            desc: "Contundente gratis (USE_BLUNT cost_override=0).",
+            desc: "<strong>Contundente gratis:</strong> USE_BLUNT envía <code>cost_override=0</code> al server. Cada uso de BLUNT stunea al monstruo 2 turnos. No consume acciones si es la única que usas ese turno (verificar engine).",
             ability: "blunt_free"
         },
         "HEALER": {
             name: "Curandero",
             icon: "🩹",
             color: "#06B6D4",
-            desc: "Sacrifica 1 cordura propia → +2 cordura a otros + estado (SANIDAD/ILUMINADO).",
+            desc: "<strong>Curar grupo:</strong> USE_HEALER_HEAL (-1 cordura propia) → +2 cordura a OTRO jugador + estado aleatorio (SANIDAD o ILUMINADO, 2 turnos). Requiere sanity ≥ 1 y al menos 1 objetivo válido en el room o adyacente.",
             ability: "heal_group"
         },
         "PSYCHIC": {
             name: "Psíquico",
             icon: "🔮",
             color: "#C084FC",
-            desc: "Peek hallway: ve cartas superiores de habitaciones adyacentes.",
+            desc: "<strong>Peek hallway:</strong> PEEK_ROOM_DECK sobre habitaciones ADYACENTES (no solo la actual). Revela la carta superior de cada deck adyacente sin consumirla. Útil para evitar monstruos oplanificados.",
             ability: "peek_hallway"
         },
         "WITCH": {
             name: "Bruja",
             icon: "🧙",
             color: "#A855F7",
-            desc: "Mecánica única: puede manipular mazos / cartas reveladas.",
+            desc: "<strong>Manipulación de mazos:</strong> mecánicas especiales de control de cartas reveladas / rotación de mazos. Habilita acciones USE_WITCH_MANIPULATE que reordena o mueve cartas entre habitaciones. Ver engine/legality.py para activaciones canónicas.",
             ability: "deck_manipulation"
         }
     };
+
+    // P3-2: Seeded RNG for special rooms preview (matches engine/setup.py logic)
+    class SeededRNG {
+        constructor(seed) {
+            this.seed = seed >>> 0;
+        }
+        // xorshift32 - matches Python's random behavior approximately
+        next() {
+            this.seed ^= this.seed << 13;
+            this.seed ^= this.seed >>> 17;
+            this.seed ^= this.seed << 5;
+            return (this.seed >>> 0) / 0x100000000;
+        }
+        randint(min, max) {
+            return min + Math.floor(this.next() * (max - min + 1));
+        }
+        sample(array, k) {
+            // Fisher-Yates shuffle then take first k
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(this.next() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled.slice(0, k);
+        }
+        shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(this.next() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+    }
+
+    // Pool canónico de habitaciones especiales (engine/setup.py)
+    const SPECIAL_ROOMS_POOL = [
+        "TABERNA", "MOTEMEY", "ARMERIA",
+        "PUERTAS_AMARILLO", "CAMARA_LETAL", "SALON_BELLEZA", "MONASTERIO_LOCURA"
+    ];
+
+    // Nombres legibles para display
+    const SPECIAL_ROOM_LABELS = {
+        "TABERNA": "🍻 Taberna (FREE)",
+        "MOTEMEY": "⚖️ Motemey (FREE)",
+        "ARMERIA": "⚔️ Armería (FREE)",
+        "PUERTAS_AMARILLO": "🚪 Puertas Amarillas (PAID)",
+        "CAMARA_LETAL": "💀 Cámara Letal (PAID)",
+        "SALON_BELLEZA": "🪞 Salón Belleza (PAID)",
+        "MONASTERIO_LOCURA": "⛪ Monasterio Locura (PAID)"
+    };
+
+    function generateSpecialRoomsPreview(seed) {
+        const rng = new SeededRNG(seed);
+        // Paso 1: Seleccionar 3 tipos distintos al azar
+        const selectedTypes = rng.sample(SPECIAL_ROOMS_POOL, 3);
+        // Paso 2: Shuffle para asignación aleatoria a pisos
+        rng.shuffle(selectedTypes);
+
+        const preview = [];
+        const floorNames = ["F1", "F2", "F3"];
+
+        for (let i = 0; i < 3; i++) {
+            const floorNum = i + 1;
+            const specialType = selectedTypes[i];
+            // Lanzar D4: 1→R1, 2→R2, 3→R3, 4→R4
+            const d4Roll = rng.randint(1, 4);
+            const roomId = `F${floorNum}_R${d4Roll}`;
+
+            preview.push({
+                floor: floorNames[i],
+                floorNum,
+                type: specialType,
+                label: SPECIAL_ROOM_LABELS[specialType],
+                room: roomId,
+                roomDisplay: `R${d4Roll}`
+            });
+        }
+
+        return preview;
+    }
+
+    function updateSpecialRoomsValidator(seed) {
+        if (!specialRoomsValidator || !validatorContent) return;
+
+        const preview = generateSpecialRoomsPreview(seed);
+
+        // Validar invariantes
+        const totalRooms = preview.length;
+        const floorsCovered = new Set(preview.map(p => p.floorNum)).size;
+        const allInRooms = preview.every(p => p.room.includes("_R")); // No pasillos
+        const uniqueTypes = new Set(preview.map(p => p.type)).size;
+
+        const validTotal = totalRooms === 3;
+        const validFloors = floorsCovered === 3;
+        const validNoCorridors = allInRooms;
+        const validUniqueTypes = uniqueTypes === 3;
+
+        let html = "";
+
+        // Resumen de habitaciones
+        html += `<div style="margin-bottom: 12px;">`;
+        preview.forEach(p => {
+            html += `<div class="validator-row info">
+                <span>${p.floor}: ${p.label}</span>
+                <span>→ ${p.roomDisplay}</span>
+            </div>`;
+        });
+        html += `</div>`;
+
+        // Validaciones
+        html += `<div style="border-top: 1px solid var(--border-color); padding-top: 8px;">`;
+        html += `<div class="validator-row ${validTotal ? 'valid' : 'warning'}">
+            <span>Total habitaciones especiales: ${totalRooms}/3</span>
+            <span>${validTotal ? '✓' : '✗'}</span>
+        </div>`;
+        html += `<div class="validator-row ${validFloors ? 'valid' : 'warning'}">
+            <span>1 por piso (F1,F2,F3): ${floorsCovered}/3</span>
+            <span>${validFloors ? '✓' : '✗'}</span>
+        </div>`;
+        html += `<div class="validator-row ${validNoCorridors ? 'valid' : 'warning'}">
+            <span>Nunca en pasillos</span>
+            <span>${validNoCorridors ? '✓' : '✗'}</span>
+        </div>`;
+        html += `<div class="validator-row ${validUniqueTypes ? 'valid' : 'warning'}">
+            <span>3 tipos únicos: ${uniqueTypes}/3</span>
+            <span>${validUniqueTypes ? '✓' : '✗'}</span>
+        </div>`;
+        html += `</div>`;
+
+        const allValid = validTotal && validFloors && validNoCorridors && validUniqueTypes;
+        html += `<div style="margin-top: 8px; padding: 8px; background: ${allValid ? 'rgba(60, 227, 154, 0.1)' : 'rgba(255, 74, 107, 0.1)'}; border-radius: 4px; text-align: center; font-weight: 600; color: ${allValid ? 'var(--color-success)' : 'var(--color-danger)'};">
+            ${allValid ? '✅ Todos los invariantes CANÓNICOS válidos' : '⚠️ INVARIANTES VIOLADOS - Revisar seed'}
+        </div>`;
+
+        validatorContent.innerHTML = html;
+        specialRoomsValidator.classList.remove("hidden");
+    }
 
     // Base de datos de todas las entidades del juego con sus descripciones mecánicas oficiales
     const ENTITY_DB = {
@@ -695,6 +920,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnShowCreateForm = document.getElementById("btnShowCreateForm");
     const lobbyActiveGame = document.getElementById("lobbyActiveGameInfo");
 
+    // P3-2: Special Rooms Validator
+    const specialRoomsValidator = document.getElementById("specialRoomsValidator");
+    const validatorContent = document.getElementById("validatorContent");
+
     const roundPill = document.getElementById("roundPill");
     const phasePill = document.getElementById("phasePill");
     const kingPill = document.getElementById("kingPill");
@@ -712,6 +941,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const tueTuePill = document.getElementById("tueTuePill");
     const falseKingPill = document.getElementById("falseKingPill");
     const kingVanishedPill = document.getElementById("kingVanishedPill");
+
+    // P3-1: Deck counters
+    const deckCountersBar = document.getElementById("deckCountersBar");
+    const motemeyDeckPill = document.getElementById("motemeyDeckPill");
+    const globalDeckPill = document.getElementById("globalDeckPill");
 
     // Elementos DOM para Audio y Grimorio
     const btnAudioToggle = document.getElementById("btnAudioToggle");
@@ -855,50 +1089,87 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderGrimorio() {
         const query = grimorioSearch.value.toLowerCase().trim();
         const activeFilter = document.querySelector(".grimorio-filters .filter-btn.active").dataset.filter;
-        
+
         grimorioContent.innerHTML = "";
-        
-        for (let key in ENTITY_DB) {
-            const item = ENTITY_DB[key];
-            const matchesQuery = item.name.toLowerCase().includes(query) || item.desc.toLowerCase().includes(query);
-            const matchesFilter = activeFilter === "all" || item.type === activeFilter;
-            
-            if (matchesQuery && matchesFilter) {
-                const card = document.createElement("div");
-                card.className = "grimorio-item-card";
-                
-                const header = document.createElement("div");
-                header.className = "grimorio-item-header";
-                
-                const title = document.createElement("div");
-                title.className = "grimorio-item-title";
-                title.innerHTML = `${item.icon} ${item.name}`;
-                
-                const badge = document.createElement("span");
-                badge.className = `grimorio-item-type-badge badge-${item.type}`;
-                
-                let typeText = item.type;
-                if (item.type === "object") typeText = "Objeto";
-                else if (item.type === "monster") typeText = "Monstruo";
-                else if (item.type === "state") typeText = "Estado";
-                else if (item.type === "event") typeText = "Evento";
-                else if (item.type === "omen") typeText = "Presagio";
-                
-                badge.textContent = typeText;
-                
-                header.appendChild(title);
-                header.appendChild(badge);
-                card.appendChild(header);
-                
-                const desc = document.createElement("div");
-                desc.className = "grimorio-item-desc";
-                desc.innerHTML = item.desc;
-                card.appendChild(desc);
-                
-                grimorioContent.appendChild(card);
+
+        if (activeFilter === "role") {
+            // P3-5: Show roles from ROLE_DB
+            for (let roleId in ROLE_DB) {
+                const role = ROLE_DB[roleId];
+                const matchesQuery = role.name.toLowerCase().includes(query) || role.desc.toLowerCase().includes(query);
+
+                if (matchesQuery) {
+                    const card = document.createElement("div");
+                    card.className = "grimorio-item-card grimorio-item-role";
+                    card.style.borderLeftColor = role.color;
+
+                    const header = document.createElement("div");
+                    header.className = "grimorio-item-header";
+
+                    const title = document.createElement("div");
+                    title.className = "grimorio-item-title";
+                    title.innerHTML = `${role.icon} ${role.name}`;
+
+                    const badge = document.createElement("span");
+                    badge.className = "grimorio-item-type-badge badge-role";
+                    badge.textContent = "Rol";
+
+                    header.appendChild(title);
+                    header.appendChild(badge);
+                    card.appendChild(header);
+
+                    const desc = document.createElement("div");
+                    desc.className = "grimorio-item-desc";
+                    desc.innerHTML = `<strong>Habilidad: </strong>${role.ability}<br><strong>Efecto:</strong> ${role.desc}`;
+                    card.appendChild(desc);
+
+                    grimorioContent.appendChild(card);
+                }
+            }
+        } else {
+            // Existing ENTITY_DB logic
+            for (let key in ENTITY_DB) {
+                const item = ENTITY_DB[key];
+                const matchesQuery = item.name.toLowerCase().includes(query) || item.desc.toLowerCase().includes(query);
+                const matchesFilter = activeFilter === "all" || item.type === activeFilter;
+
+                if (matchesQuery && matchesFilter) {
+                    const card = document.createElement("div");
+                    card.className = "grimorio-item-card";
+
+                    const header = document.createElement("div");
+                    header.className = "grimorio-item-header";
+
+                    const title = document.createElement("div");
+                    title.className = "grimorio-item-title";
+                    title.innerHTML = `${item.icon} ${item.name}`;
+
+                    const badge = document.createElement("span");
+                    badge.className = `grimorio-item-type-badge badge-${item.type}`;
+
+                    let typeText = item.type;
+                    if (item.type === "object") typeText = "Objeto";
+                    else if (item.type === "monster") typeText = "Monstruo";
+                    else if (item.type === "state") typeText = "Estado";
+                    else if (item.type === "event") typeText = "Evento";
+                    else if (item.type === "omen") typeText = "Presagio";
+
+                    badge.textContent = typeText;
+
+                    header.appendChild(title);
+                    header.appendChild(badge);
+                    card.appendChild(header);
+
+                    const desc = document.createElement("div");
+                    desc.className = "grimorio-item-desc";
+                    desc.innerHTML = item.desc;
+                    card.appendChild(desc);
+
+                    grimorioContent.appendChild(card);
+                }
             }
         }
-        
+
         if (grimorioContent.innerHTML === "") {
             const empty = document.createElement("div");
             empty.style.color = "var(--text-muted)";
@@ -940,6 +1211,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         currentGameId = null;
         currentGameState = null;
+        // P3-1: Hide deck counters bar
+        if (deckCountersBar) deckCountersBar.classList.add("hidden");
     });
 
     // LOBBY SYNC LOGIC
@@ -968,8 +1241,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (currentGameId) {
             updateShareUrl();
         }
-    
-        generateRoleConfig();}
+
+        generateRoleConfig();
+        // P3-2: Initial validator
+        const initialSeed = parseInt(seedInput.value) || 1;
+        updateSpecialRoomsValidator(initialSeed);
+}
 
     function showJoinSection() {
         startForm.classList.add("hidden");
@@ -1224,6 +1501,17 @@ document.addEventListener("DOMContentLoaded", () => {
     btnShowCreateForm.addEventListener("click", showCreateForm);
 
     document.getElementById("roleDrawMode").addEventListener("change", generateRoleConfig);
+
+    // P3-2: Update special rooms validator when seed changes
+    seedInput.addEventListener("input", () => {
+        const seed = parseInt(seedInput.value) || 1;
+        updateSpecialRoomsValidator(seed);
+    });
+    document.getElementById("roleDrawMode").addEventListener("change", () => {
+        const seed = parseInt(seedInput.value) || 1;
+        updateSpecialRoomsValidator(seed);
+    });
+
     btnCopyShareUrl.addEventListener("click", () => {
         const url = shareUrlCode.textContent;
         if (url) {
@@ -1284,7 +1572,30 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             kingVanishedPill.style.display = "none";
         }
-        
+
+        // P3-1: Deck counters bar (show when game is active)
+        if (deckCountersBar) {
+            deckCountersBar.classList.remove("hidden");
+            // Motemey deck: cards.length - top (server sends motemey_deck with cards + top)
+            let motemeyRemaining = 13; // fallback initial
+            if (state.motemey_deck && state.motemey_deck.cards) {
+                motemeyRemaining = state.motemey_deck.cards.length - (state.motemey_deck.top || 0);
+            }
+            motemeyDeckPill.textContent = `MOTEMEY: ${motemeyRemaining}`;
+            // Global deck: sum of all room decks (cards.length - top)
+            let globalRemaining = 0;
+            if (state.rooms) {
+                for (const roomId in state.rooms) {
+                    const room = state.rooms[roomId];
+                    if (room.deck && room.deck.cards) {
+                        globalRemaining += room.deck.cards.length - (room.deck.top || 0);
+                    }
+                }
+            }
+            if (globalRemaining === 0) globalRemaining = 108; // fallback initial
+            globalDeckPill.textContent = `GLOBAL: ${globalRemaining}`;
+        }
+
         // P2-2: Anillo activo indicator (en holder stats, ver renderPlayersList)
         
         // Limpiar marcador de turno en barra de título
@@ -1385,6 +1696,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 addLog("SISTEMA", `💔 ${escapeHTML(log.player)} sufre -${log.amount} de cordura [Fuente: ${escapeHTML(log.source)}]`, "game-event");
             } else if (log.event === "SANITY_LOSS_PENDING_SACRIFICE") {
                 addLog("SISTEMA", `⚠️ ¡LOCURA INMINENTE! ${escapeHTML(log.player)} va a sufrir -${log.amount} de cordura [Fuente: ${escapeHTML(log.source)}] y debe sacrificar para resistir`, "game-event");
+                // P3-3: audio cue de sacrificio pendiente
+                audio.playSacrifice();
             } else if (log.event === "SANITY_GAIN") {
                 addLog("SISTEMA", `💚 <strong>${escapeHTML(log.player)}</strong> recupera +${log.amount} de cordura [Fuente: ${escapeHTML(log.source)}]`, "game-event");
             } else if (log.event === "ITEM_GRANTED") {
@@ -2086,10 +2399,17 @@ document.addEventListener("DOMContentLoaded", () => {
      */
     function showGameOver(state) {
         gameOverOverlay.classList.remove("hidden");
-        
+
         // Quitar clases previas
         gameOverBox.classList.remove("outcome-WIN", "outcome-LOSE");
-        
+
+        // P3-3: Audio cue contextual para Game Over
+        if (state.outcome === "WIN") {
+            audio.playVictory();
+        } else {
+            audio.playDefeat();
+        }
+
         if (state.outcome === "WIN") {
             gameOverBox.classList.add("outcome-WIN");
             gameOverTitle.textContent = "🏆 ¡VICTORIA CANÓNICA!";

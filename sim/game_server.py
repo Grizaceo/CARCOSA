@@ -26,6 +26,8 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -115,6 +117,14 @@ async def init_db_pool():
 
 
 app = FastAPI(title="CARCOSA Game Server", version="1.0.0")
+
+# Servir frontend estático en /static
+app.mount("/static", StaticFiles(directory="web"), name="static")
+
+# Servir index.html en root
+@app.get("/")
+async def serve_index():
+    return FileResponse("web/index.html")
 
 # Custom exception handler for HTTPException to ensure proper error responses
 from fastapi.responses import JSONResponse
@@ -234,6 +244,11 @@ def _state_summary(state: GameState) -> Dict[str, Any]:
             }
             for rid, r in state.rooms.items()
         },
+        # P3-1: Motemey deck for frontend deck counters
+        "motemey_deck": {
+            "cards": [str(c) for c in state.motemey_deck.cards],
+            "top": state.motemey_deck.top,
+        } if state.motemey_deck else None,
         "king_floor": state.king_floor,
         "action_log": list(state.action_log),
     }

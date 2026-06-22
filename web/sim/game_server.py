@@ -19,15 +19,17 @@ Endpoints:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException, WebSocket, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from engine.actions import Action, ActionType
@@ -131,6 +133,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.on_event("startup")
 async def startup_db():
     await init_db_pool()
+    load_sessions_from_disk()
+    asyncio.create_task(cleanup_inactive_sessions_task())
 
 @app.on_event("shutdown")
 async def shutdown_db():
@@ -152,6 +156,113 @@ _sessions: Dict[str, Dict[str, Any]] = {}
 
 # WebSocket connections per session: {game_id -> set of WebSocket}
 _ws_connections: Dict[str, set] = {}
+
+def serialize_rng(rng: RNG) -> Dict[str, Any]:
+    return {
+        "seed": rng.seed,
+        "last_king_d6": rng.last_king_d6,
+        "last_king_d4": rng.last_king_d4,
+        "random_state": list(rng._r.getstate()) if rng._r else None
+    }
+
+def deserialize_rng(d: Dict[str, Any]) -> RNG:
+    rng = RNG(d["seed"])
+    rng.last_king_d6 = d.get("last_king_d6")
+    rng.last_king_d4 = d.get("last_king_d4")
+    if d.get("random_state") and rng._r:
+        state = d["random_state"]
+        state[1] = tuple(state[1])
+        rng._r.setstate(tuple(state))
+    return rng
+
+def serialize_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "state": session["state"].to_dict(),
+        "rng": serialize_rng(session["rng"]),
+        "seed": session["seed"],
+        "records": session["records"],
+        "step_idx": session["step_idx"],
+        "human_ids": list(session["human_ids"]),
+        "bot_ids": list(session["bot_ids"]),
+        "updated_at": datetime.now().isoformat()
+    }
+
+def deserialize_session(d: Dict[str, Any]) -> Dict[str, Any]:
+    cfg = Config()
+    state = GameState.from_dict(d["state"])
+    rng = deserialize_rng(d["rng"])
+    return {
+        "state": state,
+        "rng": rng,
+        "cfg": cfg,
+        "seed": d["seed"],
+        "records": d["records"],
+        "step_idx": d["step_idx"],
+        "human_ids": set(d["human_ids"]),
+        "bot_ids": set(d["bot_ids"]),
+    }
+
+def save_session_to_disk(game_id: str) -> None:
+    session = _sessions.get(game_id)
+    if not session:
+        return
+    try:
+        os.makedirs("runs/active_sessions", exist_ok=True)
+        path = os.path.join("runs/active_sessions", f"{game_id}.json")
+        with open(path, "w") as f:
+            json.dump(serialize_session(session), f, indent=2)
+    except Exception as e:
+        print(f"[SESSION_SAVE] Error saving session {game_id}: {e}")
+
+def load_sessions_from_disk() -> None:
+    path = "runs/active_sessions"
+    if not os.path.exists(path):
+        return
+    print("[SESSION_LOAD] Loading active sessions from disk...")
+    for filename in os.listdir(path):
+        if filename.endswith(".json"):
+            game_id = filename[:-5]
+            file_path = os.path.join(path, filename)
+            try:
+                with open(file_path, "r") as f:
+                    data = json.load(f)
+                _sessions[game_id] = deserialize_session(data)
+                print(f"[SESSION_LOAD] Restored active session: {game_id}")
+            except Exception as e:
+                print(f"[SESSION_LOAD] Error loading session {game_id}: {e}")
+
+def delete_session_from_disk(game_id: str) -> None:
+    try:
+        path = os.path.join("runs/active_sessions", f"{game_id}.json")
+        if os.path.exists(path):
+            os.remove(path)
+            print(f"[SESSION_DELETE] Deleted active session file: {game_id}")
+    except Exception as e:
+        print(f"[SESSION_DELETE] Error deleting session file {game_id}: {e}")
+
+async def cleanup_inactive_sessions_task():
+    while True:
+        await asyncio.sleep(900)  # Cada 15 minutos
+        print("[CLEANUP] Checking for inactive sessions...")
+        path = "runs/active_sessions"
+        if not os.path.exists(path):
+            continue
+        now = datetime.now()
+        for filename in os.listdir(path):
+            if filename.endswith(".json"):
+                game_id = filename[:-5]
+                file_path = os.path.join(path, filename)
+                try:
+                    mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+                    # Si no ha sido modificada en más de 2 horas
+                    if (now - mtime).total_seconds() > 7200:
+                        print(f"[CLEANUP] Expiring inactive game session: {game_id}")
+                        _sessions.pop(game_id, None)
+                        _ws_connections.pop(game_id, None)
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                except Exception as e:
+                    print(f"[CLEANUP] Error during cleanup of {game_id}: {e}")
 
 
 # ── Request models ─────────────────────────────────────────────────────────────
@@ -236,25 +347,38 @@ def _state_summary(state: GameState) -> Dict[str, Any]:
         },
         "king_floor": state.king_floor,
         "action_log": list(state.action_log),
+        # P3-1: motemey_deck (DeckState -> {cards, top}) para contador frontend
+        "motemey_deck": {
+            "cards": [str(c) for c in state.motemey_deck.cards],
+            "top": state.motemey_deck.top,
+        } if state.motemey_deck else {"cards": [], "top": 0},
     }
 
 
 # ── WebSocket broadcast helper ───────────────────────────────────────────────────
 
 async def _broadcast(game_id: str, message: Dict[str, Any]) -> None:
-    """Send JSON message to all WebSocket connections for a game session."""
+    """Send JSON message to all WebSocket connections for a game session in parallel."""
     connections = _ws_connections.get(game_id, set())
-    dead_connections = set()
+    if not connections:
+        return
+        
+    payload = json.dumps(message)
+    tasks = []
     
-    for ws in connections:
-        try:
-            await ws.send_text(json.dumps(message))
-        except Exception:
-            dead_connections.add(ws)
-    
-    # Remove dead connections
-    if dead_connections:
-        _ws_connections[game_id] = connections - dead_connections
+    for ws in list(connections):
+        async def safe_send(w):
+            try:
+                await w.send_text(payload)
+            except Exception:
+                connections.discard(w)
+        tasks.append(safe_send(ws))
+        
+    if tasks:
+        await asyncio.gather(*tasks)
+        
+    if game_id in _ws_connections and not _ws_connections[game_id]:
+        _ws_connections.pop(game_id, None)
 
 
 # ── Auto-advance ──────────────────────────────────────────────────────────────
@@ -339,7 +463,7 @@ async def _auto_advance_until_human(game_id: str) -> None:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.post("/start")
-def start_game(req: StartRequest) -> Dict[str, Any]:
+async def start_game(req: StartRequest) -> Dict[str, Any]:
     """
     Inicia una nueva partida. Retorna game_id + estado inicial.
 
@@ -347,8 +471,8 @@ def start_game(req: StartRequest) -> Dict[str, Any]:
     bots (policy=GOAL) que el servidor avanza automáticamente.
 
     Ejemplo:
-        curl -X POST http://localhost:8765/start \\
-             -H 'Content-Type: application/json' \\
+        curl -X POST http://localhost:8765/start \
+             -H 'Content-Type: application/json' \
              -d '{"seed": 1, "players": ["P1", "P2"]}'
     """
     game_id = str(uuid.uuid4())[:8]
@@ -376,7 +500,10 @@ def start_game(req: StartRequest) -> Dict[str, Any]:
     }
 
     # Avanzar automáticamente si el primer turno es de un bot o de KING
-    _auto_advance_until_human(game_id)
+    await _auto_advance_until_human(game_id)
+
+    # Guardar sesión activa en disco
+    save_session_to_disk(game_id)
 
     return {"game_id": game_id, "state": _state_summary(_sessions[game_id]["state"])}
 
@@ -468,6 +595,13 @@ async def act(req: ActRequest) -> Dict[str, Any]:
 
     # El estado final es el que quedó después del auto-advance
     final_state: GameState = session["state"]
+
+    # Persistencia
+    if final_state.game_over:
+        delete_session_from_disk(req.game_id)
+    else:
+        save_session_to_disk(req.game_id)
+
     return {
         "game_id": req.game_id,
         "state": _state_summary(final_state),
@@ -524,6 +658,8 @@ async def save_game(game_id: str) -> Dict[str, Any]:
         saved_to = path
         print(f"[FS] Game {game_id} saved to {path}")
     
+    delete_session_from_disk(game_id)
+    
     return {
         "game_id": game_id,
         "saved_to": saved_to,
@@ -532,7 +668,7 @@ async def save_game(game_id: str) -> Dict[str, Any]:
     }
 
 
-@app.get("/")
+@app.get("/health")
 def health() -> Dict[str, Any]:
     """Health check básico."""
     return {
@@ -603,26 +739,18 @@ async def download_game(game_id: str):
 # ── Static file serving ──────────────────────────────────────────────────────
 # Sirve frontend estático (index.html + assets)
 STATIC_DIR = "/app/static"
+if not os.path.exists(STATIC_DIR):
+    # Fallback para desarrollo local fuera de Docker
+    STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+    if not os.path.exists(STATIC_DIR):
+        STATIC_DIR = "web"
+
+# Servir archivos estáticos en /static
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.get("/", include_in_schema=False)
 async def serve_index():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
-
-@app.get("/static/css/style.css", include_in_schema=False)
-async def serve_css():
-    return FileResponse(os.path.join(STATIC_DIR, "css", "style.css"), media_type="text/css")
-
-@app.get("/static/js/api.js", include_in_schema=False)
-async def serve_api_js():
-    return FileResponse(os.path.join(STATIC_DIR, "js", "api.js"), media_type="application/javascript")
-
-@app.get("/static/js/renderer.js", include_in_schema=False)
-async def serve_renderer_js():
-    return FileResponse(os.path.join(STATIC_DIR, "js", "renderer.js"), media_type="application/javascript")
-
-@app.get("/static/js/main.js", include_in_schema=False)
-async def serve_main_js():
-    return FileResponse(os.path.join(STATIC_DIR, "js", "main.js"), media_type="application/javascript")
 
 
 # ── WebSocket endpoint ─────────────────────────────────────────────────────────
@@ -630,10 +758,7 @@ async def serve_main_js():
 @app.websocket("/ws/{game_id}/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: str, player_id: str):
     """
-    WebSocket endpoint for real-time game state updates.
-    
-    Client (Godot) connects to /ws/{game_id}/{player_id} after receiving game_id
-    from /start. Server sends state_update messages when game state changes.
+    WebSocket endpoint for real-time game state updates with keepalive.
     """
     await websocket.accept()
     
@@ -653,11 +778,17 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str, player_id: str)
     
     try:
         while True:
-            # Keep connection alive (clients don't need to send messages)
-            data = await websocket.receive_text()
-            # Ignore any messages from client for now
+            try:
+                # Esperar mensajes del cliente o mantener conexión viva con timeouts
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=20.0)
+            except asyncio.TimeoutError:
+                # Enviar ping al cliente
+                await websocket.send_text(json.dumps({"type": "ping"}))
     except Exception:
         pass
     finally:
-        # Remove dead connection
-        _ws_connections.get(game_id, set()).discard(websocket)
+        # Remove connection
+        if game_id in _ws_connections:
+            _ws_connections[game_id].discard(websocket)
+            if not _ws_connections[game_id]:
+                _ws_connections.pop(game_id, None)

@@ -35,6 +35,12 @@
                 <span class="dot"></span>
                 <span class="text">Desconectado</span>
             </div>
+
+            <!-- Deck Counters Bar (P3-1) -->
+            <div id="deckCountersBar" class="deck-counters-bar hidden">
+                <span class="deck-pill" id="motemeyDeckPill" title="Mazo Motemey (13 cartas: 3 Brújula, 3 Vial, 2 Contundente, 4 Tesoros, 1 Llave, 1 Cuento)">MOTEMEY: 13</span>
+                <span class="deck-pill" id="globalDeckPill" title="Mazo Global: 108 cartas distribuidas en 12 habitaciones (9 c/u)">GLOBAL: 108</span>
+            </div>
         </header>
 
         <!-- Active Game Info Bar -->
@@ -97,9 +103,15 @@
                     <button type="submit" id="btnStart" class="btn btn-primary" style="margin-top: 10px;">
                         👁️ Crear Nueva Partida
                     </button>
-                </form>
+                    </form>
 
-                <!-- Join Existing Game Section -->
+                    <!-- P3-2: Special Rooms Validator -->
+                    <div id="specialRoomsValidator" class="special-rooms-validator hidden">
+                    <h4>🔮 Validador de Habitaciones Especiales (Preview)</h4>
+                    <div id="validatorContent"></div>
+                    </div>
+
+                    <!-- Join Existing Game Section -->
                 <div id="joinExistingGame" class="lobby-section hidden">
                     <h3>Unirse a Partida Existente</h3>
                     <div class="form-group">
@@ -242,6 +254,8 @@
                 <button class="filter-btn" data-filter="monster">Monstruos</button>
                 <button class="filter-btn" data-filter="state">Estados</button>
                 <button class="filter-btn" data-filter="event">Eventos</button>
+                <button class="filter-btn" data-filter="omen">Presagios</button>
+                <button class="filter-btn" data-filter="role">Roles</button>
             </div>
         </div>
         <div class="grimorio-content" id="grimorioContent">

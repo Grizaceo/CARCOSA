@@ -73,14 +73,92 @@ body {
     background: #A16EFF;
 }
 
-/* Layout Shell */
-.app-container {
-    max-width: 1600px;
-    margin: 0 auto;
-    padding: 20px;
-    min-height: 100vh;
+/* P3-1: Deck Counters Bar */
+.deck-counters-bar {
     display: flex;
-    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(138, 75, 243, 0.1);
+    flex-wrap: wrap;
+}
+
+.deck-pill {
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    border: 1px solid var(--border-color);
+    background: rgba(23, 20, 42, 0.8);
+    cursor: help;
+    transition: var(--transition);
+}
+
+.deck-pill:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 8px var(--color-accent-glow);
+}
+
+#motemeyDeckPill {
+    color: #3B82F6;
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+#globalDeckPill {
+    color: #F59E0B;
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* P3-2: Special Rooms Validator in Lobby */
+.special-rooms-validator {
+    background: rgba(11, 9, 20, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 16px;
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+}
+
+.special-rooms-validator h4 {
+    margin-bottom: 8px;
+    color: var(--color-yellow);
+    font-size: 0.85rem;
+}
+
+.special-rooms-validator .validator-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+    padding: 2px 0;
+}
+
+.special-rooms-validator .validator-row.valid {
+    color: var(--color-success);
+}
+
+.special-rooms-validator .validator-row.warning {
+    color: var(--color-danger);
+}
+
+.special-rooms-validator .validator-row.info {
+    color: var(--text-muted);
+}
+
+/* P3-5: Grimorio Role Filter */
+.grimorio-item-role {
+    border-left: 3px solid;
+}
+
+.grimorio-item-type-badge.badge-role {
+    background: linear-gradient(135deg, rgba(138, 75, 243, 0.2) 0%, rgba(246, 200, 68, 0.2) 100%);
+    color: var(--text-primary);
+}
+
+.filter-btn[data-filter="role"] {
+    background: linear-gradient(135deg, rgba(138, 75, 243, 0.15) 0%, rgba(246, 200, 68, 0.15) 100%);
+    border-color: rgba(138, 75, 243, 0.3);
 }
 
 header {
