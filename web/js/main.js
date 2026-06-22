@@ -1003,6 +1003,7 @@ document.addEventListener("DOMContentLoaded", () => {
             audio.playHover();
             renderGrimorio();
         });
+    });
 
     // Generar configuración de roles dinámicamente
     function generateRoleConfig() {
@@ -1083,8 +1084,6 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         });
     }
-
-    });
 
     function renderGrimorio() {
         const query = grimorioSearch.value.toLowerCase().trim();
