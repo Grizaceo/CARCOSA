@@ -28,7 +28,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -129,10 +129,14 @@ if not os.path.exists(STATIC_DIR):
 # Servir frontend estático en /static
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# Servir index.html en root
+# Servir index.html en root con headers anti-cache para forzar reload del frontend
 @app.get("/")
 async def serve_index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    response = FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 # Custom exception handler for HTTPException to ensure proper error responses
 from fastapi.responses import JSONResponse
