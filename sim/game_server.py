@@ -118,13 +118,20 @@ async def init_db_pool():
 
 app = FastAPI(title="CARCOSA Game Server", version="1.0.0")
 
+# Detectar directorio de static (Docker usa /app/static, local usa web/)
+STATIC_DIR = "/app/static"
+if not os.path.exists(STATIC_DIR):
+    STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+    if not os.path.exists(STATIC_DIR):
+        STATIC_DIR = "web"
+
 # Servir frontend estático en /static
-app.mount("/static", StaticFiles(directory="web"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Servir index.html en root
 @app.get("/")
 async def serve_index():
-    return FileResponse("web/index.html")
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 # Custom exception handler for HTTPException to ensure proper error responses
 from fastapi.responses import JSONResponse
@@ -613,31 +620,6 @@ async def download_game(game_id: str):
         media_type="application/x-ndjson",
         headers={"Content-Disposition": f"attachment; filename={game_id}.jsonl"}
     )
-
-
-# ── Static file serving ──────────────────────────────────────────────────────
-# Sirve frontend estático (index.html + assets)
-STATIC_DIR = "/app/static"
-
-@app.get("/", include_in_schema=False)
-async def serve_index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
-
-@app.get("/static/css/style.css", include_in_schema=False)
-async def serve_css():
-    return FileResponse(os.path.join(STATIC_DIR, "css", "style.css"), media_type="text/css")
-
-@app.get("/static/js/api.js", include_in_schema=False)
-async def serve_api_js():
-    return FileResponse(os.path.join(STATIC_DIR, "js", "api.js"), media_type="application/javascript")
-
-@app.get("/static/js/renderer.js", include_in_schema=False)
-async def serve_renderer_js():
-    return FileResponse(os.path.join(STATIC_DIR, "js", "renderer.js"), media_type="application/javascript")
-
-@app.get("/static/js/main.js", include_in_schema=False)
-async def serve_main_js():
-    return FileResponse(os.path.join(STATIC_DIR, "js", "main.js"), media_type="application/javascript")
 
 
 # ── WebSocket endpoint ─────────────────────────────────────────────────────────
