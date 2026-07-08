@@ -314,6 +314,10 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentLegalActions = []; // Acciones legales del jugador activo actual
     let hoveredRoomId = null; // ID de la habitación que el ratón está sobrevolando actualmente
     let previousGameState = null; // Estado anterior para detectar cambios
+    let gameOverShown = false; // Evita mostrar/registrar el Game Over más de una vez
+    let lastSeenStep = -1; // Descarta estados que llegan fuera de orden (HTTP vs WS)
+    let actionInFlight = false; // Evita enviar dos acciones con estado stale (doble click)
+    let fxEnabled = true; // Suprime animaciones/audio durante replay masivo de bitácora
 
     function escapeHTML(str) {
         if (!str) return "";
@@ -368,53 +372,9 @@ document.addEventListener("DOMContentLoaded", () => {
             color: "#C084FC",
             desc: "<strong>Peek hallway:</strong> PEEK_ROOM_DECK sobre habitaciones ADYACENTES (no solo la actual). Revela la carta superior de cada deck adyacente sin consumirla. Útil para evitar monstruos oplanificados.",
             ability: "peek_hallway"
-        },
-        "WITCH": {
-            name: "Bruja",
-            icon: "🧙",
-            color: "#A855F7",
-            desc: "<strong>Manipulación de mazos:</strong> mecánicas especiales de control de cartas reveladas / rotación de mazos. Habilita acciones USE_WITCH_MANIPULATE que reordena o mueve cartas entre habitaciones. Ver engine/legality.py para activaciones canónicas.",
-            ability: "deck_manipulation"
         }
+        // El pool canónico del engine (engine/catalogs/roles.py) tiene exactamente estos 6 roles.
     };
-
-    // P3-2: Seeded RNG for special rooms preview (matches engine/setup.py logic)
-    class SeededRNG {
-        constructor(seed) {
-            this.seed = seed >>> 0;
-        }
-        // xorshift32 - matches Python's random behavior approximately
-        next() {
-            this.seed ^= this.seed << 13;
-            this.seed ^= this.seed >>> 17;
-            this.seed ^= this.seed << 5;
-            return (this.seed >>> 0) / 0x100000000;
-        }
-        randint(min, max) {
-            return min + Math.floor(this.next() * (max - min + 1));
-        }
-        sample(array, k) {
-            // Fisher-Yates shuffle then take first k
-            const shuffled = [...array];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(this.next() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            return shuffled.slice(0, k);
-        }
-        shuffle(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(this.next() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-        }
-    }
-
-    // Pool canónico de habitaciones especiales (engine/setup.py)
-    const SPECIAL_ROOMS_POOL = [
-        "TABERNA", "MOTEMEY", "ARMERIA",
-        "PUERTAS_AMARILLO", "CAMARA_LETAL", "SALON_BELLEZA", "MONASTERIO_LOCURA"
-    ];
 
     // Nombres legibles para display
     const SPECIAL_ROOM_LABELS = {
@@ -427,91 +387,64 @@ document.addEventListener("DOMContentLoaded", () => {
         "MONASTERIO_LOCURA": "⛪ Monasterio Locura (PAID)"
     };
 
-    function generateSpecialRoomsPreview(seed) {
-        const rng = new SeededRNG(seed);
-        // Paso 1: Seleccionar 3 tipos distintos al azar
-        const selectedTypes = rng.sample(SPECIAL_ROOMS_POOL, 3);
-        // Paso 2: Shuffle para asignación aleatoria a pisos
-        rng.shuffle(selectedTypes);
-
-        const preview = [];
-        const floorNames = ["F1", "F2", "F3"];
-
-        for (let i = 0; i < 3; i++) {
-            const floorNum = i + 1;
-            const specialType = selectedTypes[i];
-            // Lanzar D4: 1→R1, 2→R2, 3→R3, 4→R4
-            const d4Roll = rng.randint(1, 4);
-            const roomId = `F${floorNum}_R${d4Roll}`;
-
-            preview.push({
-                floor: floorNames[i],
-                floorNum,
-                type: specialType,
-                label: SPECIAL_ROOM_LABELS[specialType],
-                room: roomId,
-                roomDisplay: `R${d4Roll}`
-            });
-        }
-
-        return preview;
-    }
-
-    function updateSpecialRoomsValidator(seed) {
+    // P3-2: Preview REAL del setup, calculado por el servidor con el engine (no aproximación JS).
+    let validatorRequestId = 0;
+    async function updateSpecialRoomsValidator(seed) {
         if (!specialRoomsValidator || !validatorContent) return;
+        const reqId = ++validatorRequestId;
 
-        const preview = generateSpecialRoomsPreview(seed);
+        validatorContent.innerHTML = `<div style="color: var(--text-muted); text-align: center; padding: 8px;">Consultando setup real al servidor...</div>`;
+        specialRoomsValidator.classList.remove("hidden");
 
-        // Validar invariantes
-        const totalRooms = preview.length;
-        const floorsCovered = new Set(preview.map(p => p.floorNum)).size;
-        const allInRooms = preview.every(p => p.room.includes("_R")); // No pasillos
-        const uniqueTypes = new Set(preview.map(p => p.type)).size;
+        let preview;
+        try {
+            const drawMode = document.getElementById("roleDrawMode").value;
+            const previewApi = api || new CarcosaAPI(serverUrlInput.value.trim());
+            preview = await previewApi.getSetupPreview(seed, drawMode);
+        } catch (e) {
+            if (reqId !== validatorRequestId) return;
+            validatorContent.innerHTML = `<div style="color: var(--text-muted); text-align: center; padding: 8px;">Preview no disponible (servidor sin conexión). Se calculará al crear la partida.</div>`;
+            return;
+        }
+        if (reqId !== validatorRequestId) return; // llegó tarde, hay una consulta más nueva
 
-        const validTotal = totalRooms === 3;
+        const specials = preview.special_rooms || [];
+        const floorsCovered = new Set(specials.map(s => s.room.split("_")[0])).size;
+        const allInRooms = specials.every(s => s.room.includes("_R"));
+        const uniqueTypes = new Set(specials.map(s => s.special_id)).size;
+        const validTotal = specials.length === 3;
         const validFloors = floorsCovered === 3;
-        const validNoCorridors = allInRooms;
-        const validUniqueTypes = uniqueTypes === 3;
+        const validUniqueTypes = uniqueTypes === specials.length;
 
-        let html = "";
-
-        // Resumen de habitaciones
-        html += `<div style="margin-bottom: 12px;">`;
-        preview.forEach(p => {
+        let html = `<div style="margin-bottom: 12px;">`;
+        specials.forEach(s => {
+            const label = SPECIAL_ROOM_LABELS[s.special_id] || s.special_id;
             html += `<div class="validator-row info">
-                <span>${p.floor}: ${p.label}</span>
-                <span>→ ${p.roomDisplay}</span>
+                <span>${escapeHTML(s.room.split("_")[0])}: ${label}</span>
+                <span>→ ${escapeHTML(s.room)}</span>
             </div>`;
         });
         html += `</div>`;
 
-        // Validaciones
+        if (preview.roles && preview.draw_mode !== "FIXED") {
+            html += `<div style="margin-bottom: 8px; font-size: 0.75rem; color: var(--text-muted);">Roles sorteados (seed ${preview.seed}): ` +
+                Object.entries(preview.roles).map(([pid, rid]) => `${pid}=${ROLE_DB[rid]?.icon || ""}${ROLE_DB[rid]?.name || rid}`).join(" · ") +
+                `</div>`;
+        }
+
         html += `<div style="border-top: 1px solid var(--border-color); padding-top: 8px;">`;
-        html += `<div class="validator-row ${validTotal ? 'valid' : 'warning'}">
-            <span>Total habitaciones especiales: ${totalRooms}/3</span>
-            <span>${validTotal ? '✓' : '✗'}</span>
-        </div>`;
-        html += `<div class="validator-row ${validFloors ? 'valid' : 'warning'}">
-            <span>1 por piso (F1,F2,F3): ${floorsCovered}/3</span>
-            <span>${validFloors ? '✓' : '✗'}</span>
-        </div>`;
-        html += `<div class="validator-row ${validNoCorridors ? 'valid' : 'warning'}">
-            <span>Nunca en pasillos</span>
-            <span>${validNoCorridors ? '✓' : '✗'}</span>
-        </div>`;
-        html += `<div class="validator-row ${validUniqueTypes ? 'valid' : 'warning'}">
-            <span>3 tipos únicos: ${uniqueTypes}/3</span>
-            <span>${validUniqueTypes ? '✓' : '✗'}</span>
-        </div>`;
+        html += `<div class="validator-row ${validTotal ? 'valid' : 'warning'}"><span>Total habitaciones especiales: ${specials.length}/3</span><span>${validTotal ? '✓' : '✗'}</span></div>`;
+        html += `<div class="validator-row ${validFloors ? 'valid' : 'warning'}"><span>1 por piso (F1,F2,F3): ${floorsCovered}/3</span><span>${validFloors ? '✓' : '✗'}</span></div>`;
+        html += `<div class="validator-row ${allInRooms ? 'valid' : 'warning'}"><span>Nunca en pasillos</span><span>${allInRooms ? '✓' : '✗'}</span></div>`;
+        html += `<div class="validator-row ${validUniqueTypes ? 'valid' : 'warning'}"><span>Tipos únicos</span><span>${validUniqueTypes ? '✓' : '✗'}</span></div>`;
         html += `</div>`;
 
-        const allValid = validTotal && validFloors && validNoCorridors && validUniqueTypes;
+        const allValid = validTotal && validFloors && allInRooms && validUniqueTypes;
         html += `<div style="margin-top: 8px; padding: 8px; background: ${allValid ? 'rgba(60, 227, 154, 0.1)' : 'rgba(255, 74, 107, 0.1)'}; border-radius: 4px; text-align: center; font-weight: 600; color: ${allValid ? 'var(--color-success)' : 'var(--color-danger)'};">
-            ${allValid ? '✅ Todos los invariantes CANÓNICOS válidos' : '⚠️ INVARIANTES VIOLADOS - Revisar seed'}
+            ${allValid ? '✅ Setup real del engine — invariantes canónicos válidos' : '⚠️ INVARIANTES VIOLADOS - Revisar seed'}
         </div>`;
 
         validatorContent.innerHTML = html;
-        specialRoomsValidator.classList.remove("hidden");
     }
 
     // Base de datos de todas las entidades del juego con sus descripciones mecánicas oficiales
@@ -836,7 +769,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
         
-        if (clickedRoomId) {
+        if (clickedRoomId && !actionInFlight) {
             // Buscar si hay una acción legal de movimiento ("MOVE") hacia esa habitación
             const moveAction = currentLegalActions.find(act => act.type === "MOVE" && act.data && act.data.to === clickedRoomId);
             if (moveAction) {
@@ -1005,84 +938,85 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // Generar configuración de roles dinámicamente
+    // Configuración de asientos (4 asientos fijos P1..P4).
+    // Control por asiento: "local" (YO, este navegador), "remote" (AMIGO, otro navegador), "bot".
+    const SEAT_CONTROLS = [
+        { value: "local", label: "🙋 YO", cls: "human" },
+        { value: "remote", label: "🧑‍🤝‍🧑 AMIGO", cls: "remote" },
+        { value: "bot", label: "🤖 BOT", cls: "bot" },
+    ];
+    const DEFAULT_SEAT_CONTROLS = { P1: "local", P2: "remote", P3: "bot", P4: "bot" };
+
     function generateRoleConfig() {
         const container = document.getElementById("roleConfigContainer");
         const drawMode = document.getElementById("roleDrawMode").value;
         container.innerHTML = "";
-        
+
         const roleIds = Object.keys(ROLE_DB);
-        
-        if (drawMode === "RANDOM_UNIQUE") {
-            // Mostrar todos los 7 roles, permitir seleccionar 1-4
-            roleIds.forEach((roleId, index) => {
-                const role = ROLE_DB[roleId];
-                const pid = `P${index + 1}`;
-                const item = document.createElement("div");
-                item.className = "player-config-item";
-                item.dataset.roleId = roleId;
-                item.innerHTML = `
-                    <span class="player-name" style="color: ${role.color};">${pid} (${role.name})</span>
-                    <button type="button" class="player-type-toggle human" id="type${pid}" data-type="human" data-role="${roleId}">HUMANO</button>
-                    <span class="role-desc" style="font-size: 0.7rem; color: var(--text-muted); margin-left: 8px; max-width: 200px;">${role.desc}</span>
-                `;
-                container.appendChild(item);
-            });
-        } else if (drawMode === "FIXED") {
-            // Orden fijo: primeros 4 roles
-            roleIds.slice(0, 4).forEach((roleId, index) => {
-                const role = ROLE_DB[roleId];
-                const pid = `P${index + 1}`;
-                const item = document.createElement("div");
-                item.className = "player-config-item";
-                item.dataset.roleId = roleId;
-                item.innerHTML = `
-                    <span class="player-name" style="color: ${role.color};">${pid} (${role.name})</span>
-                    <button type="button" class="player-type-toggle human" id="type${pid}" data-type="human" data-role="${roleId}">HUMANO</button>
-                    <span class="role-desc" style="font-size: 0.7rem; color: var(--text-muted); margin-left: 8px; max-width: 200px;">${role.desc}</span>
-                `;
-                container.appendChild(item);
-            });
-        } else {
-            // RANDOM_WITH_REPLACEMENT - selector por slot
-            for (let i = 0; i < 4; i++) {
-                const pid = `P${i + 1}`;
-                const item = document.createElement("div");
-                item.className = "player-config-item";
-                item.innerHTML = `
-                    <span class="player-name" style="color: ${renderer.playerColors[pid]};">${pid}</span>
-                    <select class="form-control role-select" id="roleSelect${pid}" style="width: auto; display: inline-block; margin-right: 8px;">
-                        ${roleIds.map(rid => `<option value="${rid}">${ROLE_DB[rid].name}</option>`).join("")}
-                    </select>
-                    <button type="button" class="player-type-toggle human" id="type${pid}" data-type="human">HUMANO</button>
-                `;
-                container.appendChild(item);
+
+        for (let i = 0; i < 4; i++) {
+            const pid = `P${i + 1}`;
+            const item = document.createElement("div");
+            item.className = "player-config-item";
+            item.dataset.pid = pid;
+
+            const name = document.createElement("span");
+            name.className = "player-name";
+            name.style.color = renderer.playerColors[pid] || "#fff";
+            name.textContent = pid;
+            item.appendChild(name);
+
+            // Selector de rol: solo tiene sentido en modo FIXED (el server lo respeta ahí).
+            if (drawMode === "FIXED") {
+                const select = document.createElement("select");
+                select.className = "form-control role-select";
+                select.id = `roleSelect${pid}`;
+                select.style.cssText = "width: auto; display: inline-block; margin: 0 8px;";
+                roleIds.forEach(rid => {
+                    const opt = document.createElement("option");
+                    opt.value = rid;
+                    opt.textContent = `${ROLE_DB[rid].icon} ${ROLE_DB[rid].name}`;
+                    select.appendChild(opt);
+                });
+                select.value = roleIds[i % roleIds.length];
+                item.appendChild(select);
+            } else {
+                const hint = document.createElement("span");
+                hint.style.cssText = "font-size: 0.75rem; color: var(--text-muted); margin: 0 8px;";
+                hint.textContent = "🎲 rol aleatorio";
+                item.appendChild(hint);
             }
+
+            // Botón de control del asiento (cicla YO → AMIGO → BOT)
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "player-type-toggle";
+            btn.id = `type${pid}`;
+            const initial = DEFAULT_SEAT_CONTROLS[pid];
+            setSeatControl(btn, initial);
+            btn.addEventListener("click", () => {
+                const idx = SEAT_CONTROLS.findIndex(c => c.value === btn.dataset.control);
+                const next = SEAT_CONTROLS[(idx + 1) % SEAT_CONTROLS.length];
+                setSeatControl(btn, next.value);
+            });
+            item.appendChild(btn);
+
+            const legend = document.createElement("span");
+            legend.className = "role-desc";
+            legend.style.cssText = "font-size: 0.7rem; color: var(--text-muted); margin-left: 8px;";
+            legend.textContent = "YO = este navegador · AMIGO = se une con el link · BOT = IA";
+            item.appendChild(legend);
+
+            container.appendChild(item);
         }
-        
-        // Re-attach toggle listeners
-        attachPlayerTypeToggles();
     }
 
-    function attachPlayerTypeToggles() {
-        document.querySelectorAll(".player-type-toggle").forEach(btn => {
-            // Remove old listeners by cloning
-            const newBtn = btn.cloneNode(true);
-            btn.parentNode.replaceChild(newBtn, btn);
-            newBtn.addEventListener("click", () => {
-                if (newBtn.classList.contains("human")) {
-                    newBtn.classList.remove("human");
-                    newBtn.classList.add("bot");
-                    newBtn.textContent = "BOT";
-                    newBtn.dataset.type = "bot";
-                } else {
-                    newBtn.classList.remove("bot");
-                    newBtn.classList.add("human");
-                    newBtn.textContent = "HUMANO";
-                    newBtn.dataset.type = "human";
-                }
-            });
-        });
+    function setSeatControl(btn, value) {
+        const ctrl = SEAT_CONTROLS.find(c => c.value === value) || SEAT_CONTROLS[2];
+        btn.dataset.control = ctrl.value;
+        btn.textContent = ctrl.label;
+        btn.classList.remove("human", "remote", "bot");
+        btn.classList.add(ctrl.cls);
     }
 
     function renderGrimorio() {
@@ -1180,24 +1114,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
 
-    // Toggle de tipo de jugador (Lobby)
-    const toggleButtons = document.querySelectorAll(".player-type-toggle");
-    toggleButtons.forEach(btn => {
-        btn.addEventListener("click", () => {
-            if (btn.classList.contains("human")) {
-                btn.classList.remove("human");
-                btn.classList.add("bot");
-                btn.textContent = "BOT";
-                btn.dataset.type = "bot";
-            } else {
-                btn.classList.remove("bot");
-                btn.classList.add("human");
-                btn.textContent = "HUMANO";
-                btn.dataset.type = "human";
-            }
-        });
-    });
-
     // Botón Nueva Partida en pantalla de Game Over
     btnNewGame.addEventListener("click", () => {
         gameOverOverlay.classList.add("hidden");
@@ -1223,17 +1139,25 @@ document.addEventListener("DOMContentLoaded", () => {
         const urlGameId = params.get("game");
         const urlSeed = params.get("seed");
 
+        // Si la página se sirve desde el propio game server, usar ese origen por defecto.
+        if (window.location.protocol.startsWith("http")) {
+            serverUrlInput.value = window.location.origin;
+        }
+
         // Check for saved game in localStorage
         const savedGameId = localStorage.getItem("carcosa_game_id");
         
-        if (urlGameId) {
+        if (urlGameId && savedGameId === urlGameId) {
+            // F5 de un invitado que entró por link: reconectar con sus asientos
+            tryRejoin(savedGameId);
+        } else if (urlGameId) {
             // Join mode: pre-fill game_id
             joinGameIdInput.value = urlGameId;
             if (urlSeed) joinSeedInput.value = urlSeed;
             showJoinSection();
         } else if (savedGameId) {
-            // Restore saved game
-            showActiveGame(savedGameId);
+            // Rejoin automático tras F5/cierre: recuperar partida y asientos de este navegador
+            tryRejoin(savedGameId);
         }
 
         // Update share URL if we have a game_id
@@ -1245,7 +1169,57 @@ document.addEventListener("DOMContentLoaded", () => {
         // P3-2: Initial validator
         const initialSeed = parseInt(seedInput.value) || 1;
         updateSpecialRoomsValidator(initialSeed);
-}
+    }
+
+    /**
+     * Rejoin tras F5/cierre del navegador. La fuente de verdad de "mis asientos" son los
+     * claims del servidor para este client_id; carcosa_my_seats es el respaldo para
+     * re-reclamarlos (en modo "add", que NO suelta otros asientos) si hiciera falta.
+     */
+    async function tryRejoin(gameId) {
+        api = new CarcosaAPI(serverUrlInput.value.trim());
+        let stateData;
+        try {
+            stateData = await api.getState(gameId);
+        } catch (e) {
+            // La partida ya no existe: limpiar y quedarse en el lobby
+            localStorage.removeItem("carcosa_game_id");
+            localStorage.removeItem("carcosa_my_seats");
+            api = null;
+            return;
+        }
+
+        const state = stateData.state;
+        const claims = (state.seats && state.seats.claims) || {};
+        let mySeats = Object.keys(claims).filter(pid => claims[pid] === api.clientId);
+
+        if (mySeats.length === 0) {
+            // Reintentar con los asientos que teníamos guardados
+            let savedSeats = [];
+            try { savedSeats = JSON.parse(localStorage.getItem("carcosa_my_seats") || "[]"); } catch (e) {}
+            const humans = (state.seats && state.seats.humans) || [];
+            savedSeats = savedSeats.filter(s => humans.includes(s));
+            if (savedSeats.length > 0) {
+                try {
+                    const res = await api.claimSeats(gameId, savedSeats, "add");
+                    mySeats = res.claimed || savedSeats;
+                } catch (e) { /* asientos tomados por otro: caer al flujo de unirse */ }
+            }
+        }
+
+        if (mySeats.length === 0 || state.game_over) {
+            joinGameIdInput.value = gameId;
+            showJoinSection();
+            return;
+        }
+
+        humanPlayers = mySeats;
+        currentGameId = gameId;
+        localStorage.setItem("carcosa_my_seats", JSON.stringify(mySeats));
+        showActiveGame(gameId, mySeats.includes("P1"));
+        enterGameView(state);
+        addLog("SISTEMA", `🔄 Reconectado a la partida <strong>#${gameId}</strong> como ${mySeats.join(", ")}`, "game-event");
+    }
 
     function showJoinSection() {
         startForm.classList.add("hidden");
@@ -1296,7 +1270,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function updateShareUrl() {
         if (currentGameId) {
-            const seed = seedInput.value || joinSeedInput.value || "1";
+            // La seed real viene del estado del servidor (el invitado no la ingresó)
+            const seed = currentGameState?.seed ?? (seedInput.value || joinSeedInput.value || "1");
             const url = `${window.location.origin}${window.location.pathname}?game=${currentGameId}&seed=${seed}`;
             shareUrlCode.textContent = url;
         }
@@ -1305,26 +1280,34 @@ document.addEventListener("DOMContentLoaded", () => {
     async function createGame() {
         const seed = parseInt(seedInput.value) || 1;
         const drawMode = document.getElementById("roleDrawMode").value;
-        
-        // Obtener configuración de roles desde UI dinámica
-        humanPlayers = [];
-        const playersConfig = []; // Array de {pid, roleId, isHuman}
-        
-        const configItems = document.querySelectorAll("#roleConfigContainer .player-config-item");
-        configItems.forEach((item, index) => {
-            const pid = `P${index + 1}`;
-            const roleId = item.dataset.roleId || Object.keys(ROLE_DB)[index];
-            const typeBtn = item.querySelector(".player-type-toggle");
-            const isHuman = typeBtn && typeBtn.dataset.type === "human";
-            
-            playersConfig.push({ pid, roleId, isHuman });
-            if (isHuman) {
-                humanPlayers.push(pid);
-            }
-        });
 
+        // Leer configuración de asientos desde la UI (4 asientos fijos)
+        humanPlayers = [];        // asientos controlados por ESTE navegador
+        const allHumanSeats = []; // asientos humanos (locales + amigo remoto)
+        const playersConfig = []; // [{pid, roleId?, control}]
+
+        for (let i = 1; i <= 4; i++) {
+            const pid = `P${i}`;
+            const btn = document.getElementById(`type${pid}`);
+            const control = btn ? btn.dataset.control : "bot";
+            const roleSelect = document.getElementById(`roleSelect${pid}`);
+            const cfg = { pid, control };
+            if (roleSelect) cfg.roleId = roleSelect.value;
+            playersConfig.push(cfg);
+            if (control === "local") {
+                humanPlayers.push(pid);
+                allHumanSeats.push(pid);
+            } else if (control === "remote") {
+                allHumanSeats.push(pid);
+            }
+        }
+
+        if (allHumanSeats.length === 0) {
+            alert("Debes elegir al menos un asiento humano (YO o AMIGO).");
+            return;
+        }
         if (humanPlayers.length === 0) {
-            alert("Debes elegir al menos un jugador Humano para jugar localmente.");
+            alert("Debes controlar al menos un asiento (YO) desde este navegador.");
             return;
         }
 
@@ -1338,36 +1321,21 @@ document.addEventListener("DOMContentLoaded", () => {
         audio.playAmbience();
 
         try {
-            // Llamar API para iniciar juego con roles
-            const data = await api.startGame(seed, humanPlayers, playersConfig, drawMode);
+            // Llamar API para iniciar juego con asientos + roles
+            const data = await api.startGame(seed, allHumanSeats, playersConfig, drawMode);
             currentGameId = data.game_id;
             isHost = true;
-            
+
             // Guardar en localStorage
             localStorage.setItem("carcosa_game_id", currentGameId);
-            
-            showActiveGame(currentGameId, true);
-            
-            renderedLogCount = 0; // Reset log count
-            logContent.innerHTML = ""; // Limpiar pantalla de logs
-            
-            // Cambiar vista de Lobby a Juego
-            lobbyView.classList.add("hidden");
-            gameView.classList.remove("hidden");
-            
-            // Agregar log inicial
-            addLog("SISTEMA", `Nueva partida creada. ID: ${currentGameId}. Semilla: ${seed}`, "game-event");
-            addLog("SISTEMA", `Jugadores locales humanos: ${humanPlayers.join(", ")}`, "game-event");
-            
-            // Actualizar estado del juego
-            updateState(data.state);
+            localStorage.setItem("carcosa_my_seats", JSON.stringify(humanPlayers));
 
-            // Conectar WebSocket para recibir cambios en tiempo real
-            api.connectWS(currentGameId, humanPlayers[0], (wsData) => {
-                if (wsData.type === "state_update") {
-                    updateState(wsData.state);
-                }
-            });
+            showActiveGame(currentGameId, true);
+            enterGameView(data.state, seed);
+
+            const remoteSeats = allHumanSeats.filter(s => !humanPlayers.includes(s));
+            addLog("SISTEMA", `Nueva partida creada. ID: <strong>${currentGameId}</strong>. Semilla: ${seed}`, "game-event");
+            addLog("SISTEMA", `Tus asientos: ${humanPlayers.join(", ")}${remoteSeats.length ? ` · Asientos del amigo: ${remoteSeats.join(", ")} (comparte el link de la partida)` : ""}`, "game-event");
 
         } catch (error) {
             alert(`No se pudo conectar con el servidor de CARCOSA en ${serverUrl}. Asegúrate de que el servidor FastAPI esté corriendo en ese puerto.\n\nError: ${error.message}`);
@@ -1376,71 +1344,88 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Fallback de polling cuando el WS muere definitivamente (server caído/redeploy largo).
+    let pollTimer = null;
+    function startPollingFallback() {
+        if (pollTimer || !currentGameId) return;
+        addLog("SISTEMA", "⚠️ Conexión en tiempo real perdida. Consultando estado cada 5s...", "game-event");
+        connectionStatusBar.classList.remove("connected");
+        connectionStatusBar.classList.add("disconnected");
+        connectionStatusBar.querySelector(".text").textContent = "Reconectando (polling)...";
+        pollTimer = setInterval(async () => {
+            if (!api || !currentGameId) { stopPollingFallback(); return; }
+            try {
+                const data = await api.getState(currentGameId);
+                updateState(data.state);
+                // Reintentar el WS: si vuelve, ws_connected detendrá el polling
+                api.reconnectAttempts = 0;
+                api.connectWS(currentGameId, humanPlayers[0] || "P1", wsHandler);
+                stopPollingFallback();
+            } catch (e) { /* servidor aún caído, seguir intentando */ }
+        }, 5000);
+    }
+    function stopPollingFallback() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    function wsHandler(wsData) {
+        if (wsData.type === "state_update") {
+            updateState(wsData.state);
+        } else if (wsData.type === "ws_connected") {
+            stopPollingFallback();
+            connectionStatusBar.classList.add("connected");
+            connectionStatusBar.classList.remove("disconnected");
+            if (currentGameId) connectionStatusBar.querySelector(".text").textContent = `Conectado a #${currentGameId}`;
+        } else if (wsData.type === "ws_dead") {
+            startPollingFallback();
+        } else if (wsData.type === "error" && wsData.code === "game_not_found") {
+            addLog("SISTEMA", `❌ La partida ya no existe en el servidor (${escapeHTML(wsData.detail || "")}).`, "game-event");
+            alert("La partida ya no existe en el servidor (expiró o el servidor se reinició sin ella).");
+            leaveGame();
+        }
+    }
+
+    // Entra a la vista de juego, conecta WS y pinta el estado inicial.
+    function enterGameView(state, seed) {
+        renderedLogCount = 0;
+        gameOverShown = false;
+        previousGameState = null;
+        lastSeenStep = -1;
+        logContent.innerHTML = "";
+        lobbyView.classList.add("hidden");
+        gameView.classList.remove("hidden");
+        audio.init();
+        audio.playAmbience();
+        updateState(state);
+        api.connectWS(currentGameId, humanPlayers[0] || "P1", wsHandler);
+    }
+
     async function joinGame() {
         const gameId = joinGameIdInput.value.trim().toLowerCase();
         if (!gameId) return alert("Ingresa un Game ID válido");
         if (gameId.length !== 8) return alert("El Game ID debe tener 8 caracteres");
 
         const serverUrl = serverUrlInput.value.trim();
-        const seed = parseInt(joinSeedInput.value) || 1;
-
-        // Obtener jugadores humanos configurados (para el invitado, usamos los mismos que el host)
-        humanPlayers = [];
-        for (let i = 1; i <= 4; i++) {
-            const btn = document.getElementById(`typeP${i}`);
-            const pid = `P${i}`;
-            if (btn.dataset.type === "human") {
-                humanPlayers.push(pid);
-            }
-        }
-
-        if (humanPlayers.length === 0) {
-            alert("Debes elegir al menos un jugador Humano para jugar localmente.");
-            return;
-        }
-
         api = new CarcosaAPI(serverUrl);
         btnJoinGame.disabled = true;
         btnJoinGame.textContent = "Uniendo...";
 
         try {
-            // Validar que la partida existe
+            // Validar que la partida existe y ver asientos disponibles
             const stateData = await api.getState(gameId);
-            
-            currentGameId = gameId;
-            isHost = false;
-            
-            // Guardar en localStorage
-            localStorage.setItem("carcosa_game_id", currentGameId);
-            
-            showActiveGame(currentGameId, false);
-            
-            renderedLogCount = 0;
-            logContent.innerHTML = "";
-            
-            // Cambiar vista de Lobby a Juego
-            lobbyView.classList.add("hidden");
-            gameView.classList.remove("hidden");
-            
-            // Disparar audio
-            audio.init();
-            audio.playAmbience();
-            
-            // Agregar log inicial
-            addLog("SISTEMA", `Unido a partida #${currentGameId}. Semilla: ${seed}`, "game-event");
-            addLog("SISTEMA", `Jugadores locales humanos: ${humanPlayers.join(", ")}`, "game-event");
-            
-            // Actualizar estado del juego
-            updateState(stateData.state);
+            const seats = stateData.state.seats || { humans: [], claims: {} };
+            const claims = seats.claims || {};
+            const myId = api.clientId;
 
-            // Conectar WebSocket para recibir cambios en tiempo real
-            // El invitado usa su primer jugador humano
-            const localPlayerId = humanPlayers[0] || "P1";
-            api.connectWS(currentGameId, localPlayerId, (wsData) => {
-                if (wsData.type === "state_update") {
-                    updateState(wsData.state);
-                }
-            });
+            if ((seats.humans || []).length === 0) {
+                alert("Esta partida no tiene asientos humanos.");
+                btnJoinGame.disabled = false;
+                btnJoinGame.textContent = "Unirse";
+                return;
+            }
+
+            // Selector de asiento(s) para el invitado (los ocupados se pueden forzar)
+            showSeatPickerModal(gameId, stateData.state, seats.humans, claims, myId);
 
         } catch (error) {
             alert(`No se pudo unir a la partida: ${error.message}`);
@@ -1449,13 +1434,105 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Modal para que el invitado elija qué asiento(s) controlar.
+    // Los asientos ocupados por otro navegador se pueden FORZAR (rescate: amigo que
+    // perdió su localStorage, cambió de dispositivo, o nunca llegó).
+    function showSeatPickerModal(gameId, state, humanSeats, claims, myClientId) {
+        const modal = document.createElement("div");
+        modal.className = "card-reveal-overlay";
+        modal.style.zIndex = "var(--z-modal, 1000)";
+        const seatButtons = humanSeats.map(pid => {
+            const p = state.players[pid] || {};
+            const role = ROLE_DB[p.role_id] || {};
+            const owner = claims[pid];
+            let tag = "";
+            if (owner === myClientId) tag = " ✅ (ya era tuyo)";
+            else if (owner) tag = " 🔒 (ocupado — click para forzar)";
+            return `<button class="action-btn seat-choice" data-seat="${escapeHTML(pid)}" data-taken="${owner && owner !== myClientId ? "1" : ""}" style="text-align: left; justify-content: flex-start;">
+                ${role.icon || "🎭"} <strong>${escapeHTML(pid)}</strong> — ${escapeHTML(role.name || p.role_id || "?")}${tag}
+            </button>`;
+        }).join("");
+
+        modal.innerHTML = `
+            <div class="card-reveal-box type-event" style="max-width: 420px;">
+                <div class="card-reveal-header">
+                    <span class="card-reveal-icon">🎭</span>
+                    <span class="card-reveal-type">UNIRSE A PARTIDA</span>
+                </div>
+                <h2 class="card-reveal-title">Elige tu asiento</h2>
+                <div class="card-reveal-divider"></div>
+                <p class="card-reveal-desc">Partida <strong>#${escapeHTML(gameId)}</strong>. Elige qué alma controlarás desde este navegador.</p>
+                <div style="display: flex; flex-direction: column; gap: 8px; margin: 16px 0;">
+                    ${seatButtons}
+                </div>
+                <p class="card-reveal-footer">Click en un asiento para reclamarlo</p>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        modal.querySelectorAll(".seat-choice").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const seat = btn.dataset.seat;
+                const taken = btn.dataset.taken === "1";
+                if (taken && !confirm(`${seat} está controlado por otro navegador. ¿Quitárselo? (úsalo solo si ese jugador perdió su sesión)`)) {
+                    return;
+                }
+                try {
+                    await api.claimSeats(gameId, [seat], "add", taken);
+                    document.body.removeChild(modal);
+                    await completeJoin(gameId, [seat]);
+                } catch (err) {
+                    alert(`No se pudo reclamar ${seat}: ${err.message}`);
+                }
+            });
+        });
+
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+                btnJoinGame.disabled = false;
+                btnJoinGame.textContent = "Unirse";
+            }
+        };
+    }
+
+    async function completeJoin(gameId, seats) {
+        humanPlayers = seats;
+        currentGameId = gameId;
+        isHost = false;
+
+        localStorage.setItem("carcosa_game_id", currentGameId);
+        localStorage.setItem("carcosa_my_seats", JSON.stringify(seats));
+
+        showActiveGame(currentGameId, false);
+
+        const stateData = await api.getState(gameId);
+        enterGameView(stateData.state);
+
+        addLog("SISTEMA", `Unido a partida <strong>#${currentGameId}</strong> como ${seats.join(", ")}`, "game-event");
+    }
+
     function leaveGame() {
+        // Liberar los asientos en el servidor para que otro navegador pueda tomarlos
+        if (api && currentGameId) {
+            api.claimSeats(currentGameId, [], "release").catch(() => {});
+        }
+        stopPollingFallback();
+
         // Limpiar estado
         currentGameId = null;
         isHost = false;
         isJoining = false;
         localStorage.removeItem("carcosa_game_id");
-        
+        localStorage.removeItem("carcosa_my_seats");
+
+        // Reactivar botones del lobby (createGame/joinGame los dejan deshabilitados)
+        btnStart.disabled = false;
+        btnStart.textContent = "👁️ Crear Nueva Partida";
+        btnJoinGame.disabled = false;
+        btnJoinGame.textContent = "Unirse";
+
         // Desconectar WebSocket
         if (api) {
             api.disconnectWS();
@@ -1528,10 +1605,15 @@ document.addEventListener("DOMContentLoaded", () => {
      * Actualiza el estado local y redibuja la interfaz.
      */
     function updateState(state) {
-        console.log("[UPDATE] updateState called", { hasPrevState: !!previousGameState });
+        // Descartar estados fuera de orden: /act (HTTP) y los broadcasts (WS) viajan por
+        // canales distintos; procesar un estado viejo produce diffs invertidos y logs espurios.
+        if (typeof state.step === "number") {
+            if (state.step < lastSeenStep) return;
+            lastSeenStep = state.step;
+        }
+
         // Detectar eventos inferidos comparando con estado anterior
         if (previousGameState) {
-            console.log("[UPDATE] Calling inferEventsFromStateDiff");
             inferEventsFromStateDiff(previousGameState, state);
         }
         previousGameState = JSON.parse(JSON.stringify(state)); // Deep clone para próxima comparación
@@ -1603,12 +1685,16 @@ document.addEventListener("DOMContentLoaded", () => {
         // Renderizar Jugadores en la barra lateral
         renderPlayersList(state);
         
-        // Procesar logs autoritativos del servidor
+        // Procesar logs autoritativos del servidor.
+        // Al unirse a mitad de partida hay decenas de entradas históricas: suprimir
+        // animaciones/overlays/audio salvo para las últimas entradas.
         if (state.action_log) {
+            const pending = state.action_log.length - renderedLogCount;
             for (let i = renderedLogCount; i < state.action_log.length; i++) {
-                const log = state.action_log[i];
-                processServerLog(log);
+                fxEnabled = !(pending > 8 && i < state.action_log.length - 3);
+                processServerLog(state.action_log[i]);
             }
+            fxEnabled = true;
             renderedLogCount = state.action_log.length;
         }
         
@@ -1696,7 +1782,7 @@ document.addEventListener("DOMContentLoaded", () => {
             } else if (log.event === "SANITY_LOSS_PENDING_SACRIFICE") {
                 addLog("SISTEMA", `⚠️ ¡LOCURA INMINENTE! ${escapeHTML(log.player)} va a sufrir -${log.amount} de cordura [Fuente: ${escapeHTML(log.source)}] y debe sacrificar para resistir`, "game-event");
                 // P3-3: audio cue de sacrificio pendiente
-                audio.playSacrifice();
+                if (fxEnabled) audio.playSacrifice();
             } else if (log.event === "SANITY_GAIN") {
                 addLog("SISTEMA", `💚 <strong>${escapeHTML(log.player)}</strong> recupera +${log.amount} de cordura [Fuente: ${escapeHTML(log.source)}]`, "game-event");
             } else if (log.event === "ITEM_GRANTED") {
@@ -1708,7 +1794,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             } else if (log.event === "KEY_GRANTED") {
                 addLog("SISTEMA", `🔑 ${escapeHTML(log.player)} encuentra una Llave física`, "game-event");
-                audio.playKey();
+                if (fxEnabled) audio.playKey();
 
             } else if (log.event === "STATUS_ADDED") {
                 const entity = ENTITY_DB[log.status];
@@ -1724,25 +1810,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 } else {
                     addLog("SISTEMA", `👾 ¡Monstruo invocado! ${escapeHTML(log.monster)} aparece en ${escapeHTML(log.room)}`, "game-event");
                 }
-                audio.playMonster();
+                if (fxEnabled) audio.playMonster();
 
             // P2-2: Anillo activado
             } else if (log.event === "RING_ACTIVATED") {
                 const holder = log.player || log.actor;
                 addLog("SISTEMA", `💍 <strong>${escapeHTML(holder)}</strong> activa el Anillo de Amarillo: cura a TODOS al máximo, pero -2 cordura/turno al portador.`, "game-event");
-                audio.playKey();
+                if (fxEnabled) audio.playKey();
 
             // P2-3: Libro Chambers - cuento unido / vanish
             } else if (log.event === "TALE_ATTACHED") {
                 addLog("SISTEMA", `📖 <strong>${escapeHTML(log.player)}</strong> une Cuento ${escapeHTML(log.tale_id?.replace("TALE_", "") || "?")} al Libro Chambers. Rey desvanecido +1 turno (total: ${log.vanish_turns || 1}).`, "game-event");
-                audio.playKey();
+                if (fxEnabled) audio.playKey();
 
             // P2-4: Falso Rey aparece
             } else if (log.event === "FALSE_KING_APPEARED") {
                 const floor = log.floor || "?";
                 const holder = log.player || log.actor;
                 addLog("SISTEMA", `👑 ¡FALSO REY aparece en Piso ${floor}! (Corona activada por ${escapeHTML(holder)}). Presencia daño en su piso.`, "game-event");
-                audio.playMonster();
+                if (fxEnabled) audio.playMonster();
 
 
             }
@@ -1833,10 +1919,13 @@ document.addEventListener("DOMContentLoaded", () => {
             "ILUMINADO": { label: "✨ Iluminado", class: "status-ILUMINADO" }
         };
 
+        const seatHumans = (state.seats && state.seats.humans) || [];
+
         for (let pid in state.players) {
             const p = state.players[pid];
             const isActive = (activeActor === pid);
             const isLocal = humanPlayers.includes(pid);
+            const isHumanSeat = seatHumans.includes(pid);
             
             const card = document.createElement("div");
             card.className = `player-status-card ${isActive ? 'active-turn' : ''}`;
@@ -1857,7 +1946,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const roleSpan = document.createElement("span");
             roleSpan.className = "role";
             const roleName = roleTranslations[p.role_id] || p.role_id;
-            roleSpan.textContent = ` ${roleName}${isLocal ? ' (L)' : ' (BOT)'}`;
+            const seatTag = isLocal ? " (TÚ)" : isHumanSeat ? " (AMIGO)" : " (BOT)";
+            roleSpan.textContent = ` ${roleName}${seatTag}`;
             
             nameDiv.appendChild(dot);
             nameDiv.appendChild(nameText);
@@ -1907,9 +1997,8 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const keysStat = document.createElement("div");
             keysStat.className = "stat-item keys";
-            // Capacidad de llaves por rol (engine/inventory.py get_max_keys_capacity)
-            const keyCapacities = { SCOUT: 2, TANK: 1, HIGH_ROLLER: 1, BRAWLER: 1, HEALER: 1, PSYCHIC: 1, WITCH: 1, DEFAULT: 1 };
-            const keyCap = keyCapacities[p.role_id] || 1;
+            // Capacidad real calculada por el engine (incluye bonus de TREASURE_RING)
+            const keyCap = p.keys_capacity ?? 1;
             keysStat.textContent = `🔑 ${p.keys}/${keyCap}`;
             keysStat.title = `Capacidad de llaves: ${keyCap} (${p.role_id})`;
             
@@ -1973,10 +2062,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const objectCharges = p.object_charges || {};
             const slotsPenalty = p.object_slots_penalty || 0;
             
-            // Calcular slots disponibles (base por rol - penalty)
-            const baseSlots = { SCOUT: 3, TANK: 3, HIGH_ROLLER: 3, BRAWLER: 3, HEALER: 3, PSYCHIC: 3, WITCH: 3, DEFAULT: 3 };
-            const baseSlotCount = baseSlots[p.role_id] || 3;
-            const availableSlots = Math.max(0, baseSlotCount - slotsPenalty);
+            // Slots reales calculados por el engine (ya descuentan la penalidad de sacrificio)
+            const availableSlots = p.object_slots ?? 3;
+            const baseSlotCount = availableSlots + slotsPenalty;
             
             // Objetos normales (no soulbound)
             const normalObjects = (p.objects || []).filter(obj => {
@@ -2086,85 +2174,127 @@ document.addEventListener("DOMContentLoaded", () => {
 
     /**
      * Pide las acciones legales del actor activo y las renderiza en pantalla.
+     *
+     * IMPORTANTE: esta función es async y puede ser invocada varias veces seguidas
+     * (respuesta HTTP de /act + broadcasts WS). El token de generación garantiza
+     * que solo la invocación más reciente pinte botones — sin él, cada invocación
+     * en vuelo agregaba su propio set de botones y las opciones salían duplicadas.
      */
+    let renderActionsToken = 0;
     async function renderActions(state) {
+        const token = ++renderActionsToken;
         actionsGrid.innerHTML = "";
 
-        // Si el juego terminó o no le toca a un humano local, no mostramos acciones
+        // Si el juego terminó, no mostramos acciones
         if (state.game_over) {
+            currentLegalActions = [];
             return;
         }
 
-        const isLocal = humanPlayers.includes(activeActor) || activeActor === "KING";
+        // Solo mostramos acciones si el actor activo es un asiento controlado por ESTE navegador.
+        // El turno del Rey lo resuelve el servidor automáticamente.
+        const isLocal = humanPlayers.includes(activeActor);
         if (!isLocal) {
             currentLegalActions = [];
-            renderer.draw(state, []);
-            const botMsg = document.createElement("div");
-            botMsg.style.color = "var(--text-muted)";
-            botMsg.style.textAlign = "center";
-            botMsg.style.padding = "20px";
-            botMsg.style.fontSize = "0.9rem";
-            botMsg.style.fontStyle = "italic";
-            botMsg.textContent = `Bot pensando turno...`;
-            actionsGrid.appendChild(botMsg);
+            const waitMsg = document.createElement("div");
+            waitMsg.style.color = "var(--text-muted)";
+            waitMsg.style.textAlign = "center";
+            waitMsg.style.padding = "20px";
+            waitMsg.style.fontSize = "0.9rem";
+            waitMsg.style.fontStyle = "italic";
+            if (activeActor === "KING") {
+                waitMsg.textContent = "👑 El Rey de Amarillo actúa...";
+            } else if (state.seats && (state.seats.humans || []).includes(activeActor)) {
+                waitMsg.textContent = `⌛ Esperando a ${activeActor} (otro jugador)...`;
+            } else {
+                waitMsg.textContent = `🤖 ${activeActor} (bot) pensando turno...`;
+            }
+            actionsGrid.appendChild(waitMsg);
+
+            // Rescate: si el turno es de un asiento humano SIN reclamar (amigo que nunca
+            // se unió o que salió), permitir tomar el control desde este navegador.
+            // Los asientos reclamados por otro navegador activo no se ofrecen aquí;
+            // para esos casos existe el force-claim del seat picker (Unirse).
+            const seatUnclaimed = !((state.seats && state.seats.claims) || {})[activeActor];
+            if (activeActor !== "KING" && seatUnclaimed && state.seats && (state.seats.humans || []).includes(activeActor)) {
+                const takeBtn = document.createElement("button");
+                takeBtn.className = "action-btn";
+                takeBtn.style.marginTop = "8px";
+                takeBtn.textContent = `🎮 Tomar control de ${activeActor}`;
+                takeBtn.title = "Reclama este asiento para este navegador (útil si el otro jugador no está).";
+                takeBtn.addEventListener("click", async () => {
+                    if (!confirm(`¿Tomar control de ${activeActor} en este navegador?`)) return;
+                    try {
+                        await api.claimSeats(currentGameId, [activeActor], "add", true);
+                        if (!humanPlayers.includes(activeActor)) humanPlayers.push(activeActor);
+                        localStorage.setItem("carcosa_my_seats", JSON.stringify(humanPlayers));
+                        addLog("SISTEMA", `🎮 Ahora controlas a ${activeActor} desde este navegador.`, "game-event");
+                        renderActions(currentGameState);
+                    } catch (e) {
+                        alert(`No se pudo tomar control: ${e.message}`);
+                    }
+                });
+                actionsGrid.appendChild(takeBtn);
+            }
             return;
         }
 
-        // P0-4: Verificar movimiento bloqueado (Reina Helada efecto inmediato)
-        const movementBlocked = state.movement_blocked_players && state.movement_blocked_players.includes(activeActor);
-        
-        // P0-4: Verificar ICE_SERVANT / Reina Helada persistente (1 acción max en piso)
-        let iceServantFloor = null;
-        if (state.monsters) {
-            for (const m of state.monsters) {
-                if (m.monster_id === "ICE_SERVANT" || (m.monster_id && m.monster_id.includes("ICE_SERVANT"))) {
-                    iceServantFloor = m.room.startsWith("F1_") ? 1 : m.room.startsWith("F2_") ? 2 : 3;
-                    break;
-                }
-            }
-        }
-        // También verificar Reina Helada persistente (estado en engine: jugadores en piso reina = 1 acción)
-        const activePlayer = state.players[activeActor];
-        const reinaFloor = state.king_floor; // Nota: en engine, reina_helada persistente usa king_floor logic
-        const hasReinaPersistent = activePlayer && state.king_floor && activePlayer.room.startsWith("F" + state.king_floor + "_");
-        
-        const actionLimited = iceServantFloor !== null || hasReinaPersistent;
-
+        let raw;
         try {
             const data = await api.getLegalActions(currentGameId, activeActor);
-            let actions = data.actions;
-            currentLegalActions = actions || [];
-            
-            // P0-4: Filtrar acciones MOVE si movimiento bloqueado
-            if (movementBlocked) {
-                actions = actions.filter(a => a.type !== "MOVE" && a.type !== "USE_PORTABLE_STAIRS" && a.type !== "USE_YELLOW_DOORS" && a.type !== "USE_OBJECT" && !(a.type === "USE_OBJECT" && a.data.object_id === "COMPASS"));
-                currentLegalActions = actions;
-            }
-            
-            // P0-4: Limitar a 1 acción si ICE_SERVANT o Reina persistente (except END_TURN)
-            if (actionLimited) {
-                const endTurnAction = actions.find(a => a.type === "END_TURN");
-                const otherActions = actions.filter(a => a.type !== "END_TURN");
-                if (otherActions.length > 1) {
-                    actions = [otherActions[0]];
-                    if (endTurnAction) actions.push(endTurnAction);
-                    currentLegalActions = actions;
-                }
-            }
-            
-            // Redibujar el tablero pasando las acciones legales para resaltar caminos válidos
-            renderer.draw(state, currentLegalActions);
+            raw = data.actions || [];
+        } catch (error) {
+            console.error("Error al obtener acciones legales:", error);
+            return;
+        }
 
-            if (!actions || actions.length === 0) {
-                const noActions = document.createElement("div");
-                noActions.style.color = "var(--color-danger)";
-                noActions.style.textAlign = "center";
-                noActions.textContent = "No hay acciones legales disponibles.";
-                actionsGrid.appendChild(noActions);
-                return;
-            }
+        // Si mientras esperábamos llegó un estado más nuevo, abortar: otra invocación pintará.
+        if (token !== renderActionsToken) return;
 
-            actions.forEach(action => {
+        // /legal es la ÚNICA fuente de verdad — sin filtrado local.
+        currentLegalActions = raw;
+        actionsGrid.innerHTML = "";
+
+        // Banner de contexto: sacrificio pendiente / movimiento bloqueado / acciones restantes
+        const pendingSac = state.flags && state.flags.PENDING_SACRIFICE_CHECK;
+        const pendingList = Array.isArray(pendingSac) ? pendingSac : (pendingSac ? [pendingSac] : []);
+        if (pendingList.includes(activeActor)) {
+            const banner = document.createElement("div");
+            banner.style.cssText = "color: var(--color-danger); text-align: center; padding: 8px; font-weight: 700; border: 1px solid var(--color-danger); border-radius: 6px; margin-bottom: 8px;";
+            banner.textContent = `💀 ¡LOCURA INMINENTE! ${activeActor} debe elegir: sacrificar o aceptar caer a -5.`;
+            actionsGrid.appendChild(banner);
+            audio.playSacrifice();
+        }
+        if ((state.movement_blocked_players || []).includes(activeActor)) {
+            const mb = document.createElement("div");
+            mb.style.cssText = "color: #7dd3fc; text-align: center; padding: 4px; font-size: 0.8rem;";
+            mb.textContent = "🧊 Movimiento bloqueado este turno (Reina Helada)";
+            actionsGrid.appendChild(mb);
+        }
+
+        if (!raw || raw.length === 0) {
+            const noActions = document.createElement("div");
+            noActions.style.color = "var(--color-danger)";
+            noActions.style.textAlign = "center";
+            noActions.textContent = "No hay acciones legales disponibles.";
+            actionsGrid.appendChild(noActions);
+            return;
+        }
+
+        // Agrupar/deduplicar acciones para no inundar la UI:
+        // - USE_MOTEMEY_BUY (legacy) se oculta si existe USE_MOTEMEY_BUY_START (mismo efecto → botón duplicado)
+        // - Las decenas de combinaciones USE_TABERNA_ROOMS se colapsan en UN botón que abre modal
+        const hasBuyStart = raw.some(a => a.type === "USE_MOTEMEY_BUY_START");
+        const tabernaActions = raw.filter(a => a.type === "USE_TABERNA_ROOMS");
+        const actions = raw.filter(a =>
+            a.type !== "USE_TABERNA_ROOMS" &&
+            !(a.type === "USE_MOTEMEY_BUY" && hasBuyStart)
+        );
+        if (tabernaActions.length > 0) {
+            actions.push({ type: "USE_TABERNA_ROOMS", data: {}, _tabernaGroup: tabernaActions });
+        }
+
+        actions.forEach(action => {
                 const btn = document.createElement("button");
                 btn.className = "action-btn";
                 
@@ -2252,14 +2382,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         actionText = `🚪 Transportar a ${action.data.target_player}`;
                         actionCost = "1 Ac. (Target -1 Cordura)";
                         btn.title = "Teletransporta target a tu room · Target sufre -1 cordura · Reveal room";
-                        // Modal selector target
-                        btn.addEventListener("click", (e) => {
-                            e.stopPropagation();
-                            showYellowDoorsModal(action);
-                        });
                         break;
                     case "USE_TABERNA_ROOMS":
-                        actionText = `🍻 Taberna: Rotar ${action.data.room_a} ⟷ ${action.data.room_b}`;
+                        actionText = `🍻 Taberna: Intercambiar 2 habitaciones (elegir)`;
                         actionCost = "FREE (-1 Cordura)";
                         btn.title = "FREE · Solo habitaciones (no pasillos) · 2 distintas · 1 uso/turno · -1 Cordura al actor · Intercambia mazos (peek mutuo)";
                         break;
@@ -2290,11 +2415,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         actionCost = "1 Ac. (2 jugadores)";
                         btn.style.borderColor = "var(--color-danger)";
                         btn.title = "Requiere 2 jugadores en la habitación. d6: 1-2=[7,0] | 3-6=[4,3] cordura. Otorga 7ª llave.";
-                        // Modal de confirmación con detalles
-                        btn.addEventListener("click", (e) => {
-                            e.stopPropagation();
-                            showCamaraLetalModal(action);
-                        });
+                        action._confirm = "camara_letal";
                         break;
                     case "USE_ATTACH_TALE":
                         actionText = `📖 Unir Cuento ${action.data.tale_id.replace("TALE_", "")}`;
@@ -2337,16 +2458,21 @@ document.addEventListener("DOMContentLoaded", () => {
                     btn.appendChild(costSpan);
                 }
                 
-                // Evento click para enviar acción
+                // Evento click ÚNICO para enviar acción (o abrir modal de confirmación/selección).
+                // La data del action se envía EXACTAMENTE como la entregó /legal — el engine
+                // valida con igualdad estricta y agregar campos extra la vuelve ilegal.
                 btn.addEventListener("click", () => {
                     audio.playClick();
-                    
-                    // SACRIFICE con OBJECT_SLOT sin discard_object_id requiere confirmación de qué objeto descartar
-                    if (action.type === "SACRIFICE" && action.data.mode === "OBJECT_SLOT" && !action.data.discard_object_id) {
-                        showSacrificeObjectModal(action);
+
+                    if (action._tabernaGroup) {
+                        showTabernaModal(action._tabernaGroup);
                         return;
                     }
-                    
+                    if (action._confirm === "camara_letal") {
+                        showCamaraLetalModal(action);
+                        return;
+                    }
+
                     executePlayerAction(action);
                 });
 
@@ -2358,30 +2484,29 @@ document.addEventListener("DOMContentLoaded", () => {
                 actionsGrid.appendChild(btn);
 
             });
-
-        } catch (error) {
-            console.error("Error al renderizar acciones:", error);
-        }
     }
 
     /**
      * Envía la acción seleccionada al servidor FastAPI.
      */
     async function executePlayerAction(action) {
+        if (actionInFlight) return; // evitar doble envío con estado stale (doble click / canvas)
+        actionInFlight = true;
+        const actingActor = activeActor;
         try {
             // Deshabilitar botones de acción temporalmente
             const buttons = actionsGrid.querySelectorAll("button");
             buttons.forEach(b => b.disabled = true);
 
             // Llamar API act
-            const result = await api.act(currentGameId, activeActor, action.type, action.data);
-            
+            const result = await api.act(currentGameId, actingActor, action.type, action.data);
+
             // Actualizar estado devuelto
             updateState(result.state);
-            
+
             // P1-7: Mostrar modal Motemey BUY_START después de ejecutar
-            if (action.type === "USE_MOTEMEY_BUY_START" && 
-                result.state?.pending_motemey_choice?.[activeActor]) {
+            if (action.type === "USE_MOTEMEY_BUY_START" &&
+                result.state?.pending_motemey_choice?.[actingActor]) {
                 setTimeout(() => {
                     showMotemeyBuyModal(action);
                 }, 100);
@@ -2390,6 +2515,8 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (error) {
             alert(`Error al ejecutar acción: ${error.message}`);
             renderActions(currentGameState);
+        } finally {
+            actionInFlight = false;
         }
     }
 
@@ -2397,6 +2524,8 @@ document.addEventListener("DOMContentLoaded", () => {
      * Muestra la superposición de Game Over con los resultados de la partida.
      */
     function showGameOver(state) {
+        if (gameOverShown) return;
+        gameOverShown = true;
         gameOverOverlay.classList.remove("hidden");
 
         // Quitar clases previas
@@ -2417,8 +2546,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 Felicidades, el grupo ha logrado escapar de la influencia del Rey de Amarillo.<br><br>
                 <strong>Detalles:</strong><br>
                 - Rondas jugadas: ${state.round}<br>
-                - Llaves reunidas: ${totalKeys}/${state.flags?.KEYS_TO_WIN || 4}<br>
-                - Semilla RNG: ${seedInput.value}
+                - Llaves reunidas: ${totalKeys}/${state.keys_to_win || 4}<br>
+                - Semilla RNG: ${state.seed ?? seedInput.value}
             `;
             addLog("SISTEMA", "¡Juego Terminado! El grupo de almas perdidas HA GANADO la partida.", "game-event");
         } else {
@@ -2435,7 +2564,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 causeDetails = `Todas las almas cayeron a -5 cordura.<br><strong>Golpe final:</strong> ${escapeHTML(source)}`;
                 causeLog = `¡Derrota! Todas las almas en -5 cordura. Fuente: ${source}`;
             } else if (state.outcome === "LOSE_KEYS_DESTROYED") {
-                const keysTotal = state.flags?.KEYS_TOTAL || 6;
+                const keysTotal = state.keys_total || 6;
                 const keysDestroyed = state.keys_destroyed || 0;
                 const keysAvailable = keysTotal - keysDestroyed;
                 causeDetails = `Llaves destruidas superaron el umbral.<br><strong>Llaves en juego:</strong> ${keysAvailable} / ${keysTotal} (umbral: 3)<br><strong>Llaves destruidas:</strong> ${keysDestroyed}`;
@@ -2449,16 +2578,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${causeDetails}<br><br>
                 <strong>Detalles:</strong><br>
                 - Rondas jugadas: ${state.round}<br>
-                - Semilla RNG: ${seedInput.value}
+                - Semilla RNG: ${state.seed ?? seedInput.value}
             `;
             addLog("SISTEMA", causeLog, "game-event");
         }
 
-        // Ofrecer guardar partida
-        if (api && currentGameId) {
+        // Registro de partida: el servidor auto-guarda al terminar (state.saved_to).
+        if (state.saved_to) {
+            addLog("SISTEMA", `📼 Registro de partida guardado automáticamente en: ${escapeHTML(state.saved_to)}`, "game-event");
+        } else if (api && currentGameId && isHost) {
+            // Respaldo (server antiguo o WS sin saved_to): solo el host pide guardar; /save es idempotente.
             api.saveGame(currentGameId).then(res => {
-                console.log("Partida guardada compatible con BC:", res);
-                addLog("SISTEMA", `Registro de partida guardado en: ${res.saved_to}`, "game-event");
+                addLog("SISTEMA", `📼 Registro de partida guardado en: ${escapeHTML(res.saved_to)}`, "game-event");
             }).catch(err => {
                 console.error("Error al guardar partida:", err);
             });
@@ -2500,6 +2631,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Ventanas flotantes de animación de tirada de dados holográfica
     function triggerDiceRollAnimation(rolls, purpose, sanity, total) {
+        if (!fxEnabled) return;
         audio.playRoll();
 
         const overlay = document.getElementById("diceRollerOverlay");
@@ -2557,6 +2689,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Modal flotante de develación de cartas del mazo
     function triggerCardRevealAnimation(cardKey) {
+        if (!fxEnabled) return;
         let entity = null;
         let cardTitle = cardKey.replace(/_/g, " ");
         let cardIcon = "🃏";
@@ -2633,70 +2766,63 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
-    // Modal para elegir qué objeto descartar al sacrificar slot de objeto
-    function showSacrificeObjectModal(sacrificeAction) {
-        const p = currentGameState.players[activeActor];
-        if (!p) return;
-        
-        // Objetos descartables (no soulbound)
-        const discardable = p.objects.filter(obj => {
-            const cleanObj = obj.replace("OBJECT:", "");
-            return !["BOOK_CHAMBERS", "CROWN", "RING", "CHAMBERS_BOOK"].includes(cleanObj);
-        });
-        
-        if (discardable.length === 0) {
-            // No hay objetos descartables, ejecutar directamente (servidor manejará)
-            executePlayerAction(sacrificeAction);
-            return;
-        }
-        
-        // Crear modal dinámico
+    // Modal para Taberna: elegir la combinación exacta de 2 habitaciones a intercambiar.
+    // Recibe la lista de acciones legales USE_TABERNA_ROOMS del servidor y ejecuta una tal cual.
+    function showTabernaModal(tabernaActions) {
+        if (!tabernaActions || tabernaActions.length === 0) return;
+
+        const roomsA = [...new Set(tabernaActions.map(a => a.data.room_a))].sort();
+
         const modal = document.createElement("div");
         modal.className = "card-reveal-overlay";
         modal.style.zIndex = "var(--z-modal)";
         modal.innerHTML = `
-            <div class="card-reveal-box type-event" style="max-width: 400px;">
+            <div class="card-reveal-box type-event" style="max-width: 420px;">
                 <div class="card-reveal-header">
-                    <span class="card-reveal-icon">💀</span>
-                    <span class="card-reveal-type">SACRIFICIO</span>
+                    <span class="card-reveal-icon">🍻</span>
+                    <span class="card-reveal-type">TABERNA</span>
                 </div>
-                <h2 class="card-reveal-title">Reducir Slot de Objeto</h2>
+                <h2 class="card-reveal-title">Intercambiar Mazos de 2 Habitaciones</h2>
                 <div class="card-reveal-divider"></div>
-                <p class="card-reveal-desc">Elige qué objeto descartar para reducir tu capacidad:</p>
-                <div id="sacrificeObjectList" style="display: flex; flex-direction: column; gap: 8px; margin: 16px 0;">
-                    ${discardable.map(obj => {
-                        const cleanObj = obj.replace("OBJECT:", "").replace(/_/g, " ");
-                        const entity = ENTITY_DB[obj] || ENTITY_DB[cleanObj.toUpperCase().replace(/ /g, "_")];
-                        const icon = entity ? entity.icon : "🎒";
-                        return `<button class="action-btn sacrifice-object-choice" data-object="${escapeHTML(obj)}" style="text-align: left; justify-content: flex-start;">${icon} ${escapeHTML(cleanObj)}</button>`;
-                    }).join("")}
+                <p class="card-reveal-desc">FREE · -1 Cordura · 1 uso/turno · Solo habitaciones (no pasillos). Ambas ven la carta superior del nuevo mazo (peek mutuo).</p>
+                <div style="display: flex; gap: 8px; justify-content: center; margin: 16px 0; align-items: center;">
+                    <select id="tabernaRoomA" class="form-control" style="width: auto;"></select>
+                    <span style="font-size: 1.2rem;">⟷</span>
+                    <select id="tabernaRoomB" class="form-control" style="width: auto;"></select>
                 </div>
-                <p class="card-reveal-footer">Click en un objeto para confirmar el sacrificio</p>
+                <div style="display: flex; gap: 12px; justify-content: center;">
+                    <button id="btnTabernaConfirm" class="btn btn-primary" style="flex: 1;">Confirmar (-1 Cordura)</button>
+                    <button id="btnTabernaCancel" class="btn btn-secondary" style="flex: 1;">Cancelar</button>
+                </div>
             </div>
         `;
-        
         document.body.appendChild(modal);
-        
-        // Event listeners para las opciones
-        modal.querySelectorAll(".sacrifice-object-choice").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                const objectId = btn.dataset.object;
-                // Ejecutar sacrificio con el objeto elegido
-                const actionWithChoice = {
-                    ...sacrificeAction,
-                    data: { ...sacrificeAction.data, discard_object_id: objectId }
-                };
-                document.body.removeChild(modal);
-                executePlayerAction(actionWithChoice);
-            });
-        });
-        
-        // Cerrar al click fuera
-        modal.onclick = () => {
+
+        const selA = modal.querySelector("#tabernaRoomA");
+        const selB = modal.querySelector("#tabernaRoomB");
+
+        function fillA() {
+            selA.innerHTML = roomsA.map(r => `<option value="${escapeHTML(r)}">${escapeHTML(r)}</option>`).join("");
+        }
+        function fillB() {
+            const a = selA.value;
+            const options = tabernaActions.filter(x => x.data.room_a === a).map(x => x.data.room_b);
+            selB.innerHTML = options.map(r => `<option value="${escapeHTML(r)}">${escapeHTML(r)}</option>`).join("");
+        }
+        fillA();
+        fillB();
+        selA.addEventListener("change", fillB);
+
+        modal.querySelector("#btnTabernaConfirm").addEventListener("click", () => {
+            const chosen = tabernaActions.find(x => x.data.room_a === selA.value && x.data.room_b === selB.value);
             document.body.removeChild(modal);
-            // Re-render actions to re-enable buttons
-            renderActions(currentGameState);
+            if (chosen) executePlayerAction(chosen);
+        });
+        modal.querySelector("#btnTabernaCancel").addEventListener("click", () => {
+            document.body.removeChild(modal);
+        });
+        modal.onclick = (e) => {
+            if (e.target === modal) document.body.removeChild(modal);
         };
     }
 
@@ -2750,70 +2876,6 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
-    // Modal para Puertas Amarillas - selector de target
-    function showYellowDoorsModal(doorsAction) {
-        const p = currentGameState.players[activeActor];
-        if (!p) return;
-        
-        // Otros jugadores en la partida
-        const otherPlayers = Object.entries(currentGameState.players)
-            .filter(([pid, pl]) => pid !== activeActor)
-            .map(([pid, pl]) => ({ pid, ...pl }));
-        
-        if (otherPlayers.length === 0) {
-            addLog("SISTEMA", "No hay otros jugadores para transportar.", "game-event");
-            return;
-        }
-        
-        const modal = document.createElement("div");
-        modal.className = "card-reveal-overlay";
-        modal.style.zIndex = "var(--z-modal)";
-        modal.innerHTML = `
-            <div class="card-reveal-box type-event" style="max-width: 400px;">
-                <div class="card-reveal-header">
-                    <span class="card-reveal-icon">🚪</span>
-                    <span class="card-reveal-type">PUERTAS AMARILLAS</span>
-                </div>
-                <h2 class="card-reveal-title">Transportar Alma</h2>
-                <div class="card-reveal-divider"></div>
-                <p class="card-reveal-desc">Elige a qué alma transportar a tu habitación (<strong>${escapeHTML(p.room)}</strong>).</p>
-                <p class="card-reveal-desc" style="color: var(--color-danger);"><strong>El target sufre -1 cordura.</strong></p>
-                <div id="yellowDoorsTargets" style="display: flex; flex-direction: column; gap: 8px; margin: 16px 0;">
-                    ${otherPlayers.map(t => {
-                        const roleName = ROLE_DB[t.role_id]?.name || t.role_id;
-                        const roleIcon = ROLE_DB[t.role_id]?.icon || "";
-                        return `<button class="action-btn yellow-door-target" data-target="${escapeHTML(t.pid)}" style="text-align: left; justify-content: flex-start;">
-                            ${roleIcon} ${t.pid} (${roleIcon} ${roleName}) - Cordura: ${t.sanity}/${t.sanity_max} - En: ${t.room}
-                        </button>`;
-                    }).join("")}
-                </div>
-                <p class="card-reveal-footer">Click en un jugador para confirmar</p>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        modal.querySelectorAll(".yellow-door-target").forEach(btn => {
-            btn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                const targetPid = btn.dataset.target;
-                const actionWithTarget = {
-                    ...doorsAction,
-                    data: { ...doorsAction.data, target_player: targetPid }
-                };
-                document.body.removeChild(modal);
-                executePlayerAction(actionWithTarget);
-            });
-        });
-        
-        modal.onclick = (e) => {
-            if (e.target === modal) {
-                document.body.removeChild(modal);
-                renderActions(currentGameState);
-            }
-        };
-    }
-
     // Modal para Motemey BUY_START - muestra 2 cartas para elegir
     function showMotemeyBuyModal(buyAction) {
         // This is handled by the BUY_START action which sets pending_motemey_choice
@@ -2821,7 +2883,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // We just need to show a visual modal with the 2 cards
         const pending = currentGameState?.pending_motemey_choice?.[activeActor];
         if (!pending || pending.length < 2) {
-            executePlayerAction(buyAction); // fallback
+            // Sin elección pendiente en el estado: los botones BUY_CHOOSE de /legal
+            // siguen disponibles en el panel de acciones. NUNCA re-ejecutar BUY_START
+            // (cobraría 2 de cordura otra vez).
             return;
         }
         

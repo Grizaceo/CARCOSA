@@ -10,6 +10,24 @@ class CarcosaAPI {
         this.ws = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
+        this.clientId = CarcosaAPI.getClientId();
+    }
+
+    /**
+     * Identificador estable de este navegador (para reclamar asientos).
+     */
+    static getClientId() {
+        let cid = null;
+        try {
+            cid = localStorage.getItem("carcosa_client_id");
+            if (!cid) {
+                cid = "c-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+                localStorage.setItem("carcosa_client_id", cid);
+            }
+        } catch (e) {
+            cid = "c-" + Math.random().toString(36).slice(2, 10);
+        }
+        return cid;
     }
 
     /**
@@ -51,7 +69,7 @@ class CarcosaAPI {
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ seed, players: humanPlayers, players_config: playersConfig, draw_mode: drawMode })
+                body: JSON.stringify({ seed, players: humanPlayers, players_config: playersConfig, draw_mode: drawMode, client_id: this.clientId })
             });
             if (!response.ok) {
                 let errMsg = "Error al iniciar partida";
@@ -128,7 +146,8 @@ class CarcosaAPI {
                     game_id: gameId,
                     actor,
                     action_type: actionType,
-                    action_data: actionData
+                    action_data: actionData,
+                    client_id: this.clientId
                 })
             });
             if (!response.ok) {
@@ -144,6 +163,45 @@ class CarcosaAPI {
             console.error("API error (act):", error);
             throw error;
         }
+    }
+
+    /**
+     * Reclama asiento(s) humano(s) para este navegador.
+     * mode: "add" (default) | "replace" | "release". takeover fuerza quitar el asiento a otro cliente.
+     */
+    async claimSeats(gameId, seats, mode = "add", takeover = false) {
+        const response = await this._fetchWithTimeout(`${this.baseUrl}/claim`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ game_id: gameId, client_id: this.clientId, seats, mode, takeover })
+        });
+        if (!response.ok) {
+            let errMsg = "No se pudo reclamar el asiento";
+            try {
+                const err = await response.json();
+                errMsg = err.detail || errMsg;
+            } catch (e) {}
+            throw new Error(errMsg);
+        }
+        return await response.json();
+    }
+
+    /**
+     * Preview real del setup (habitaciones especiales + roles) para una semilla.
+     */
+    async getSetupPreview(seed, drawMode = "") {
+        const response = await this._fetchWithTimeout(`${this.baseUrl}/setup_preview/${seed}?draw_mode=${encodeURIComponent(drawMode)}`);
+        if (!response.ok) throw new Error("No se pudo obtener preview de setup");
+        return await response.json();
+    }
+
+    /**
+     * Lista de partidas guardadas (registro de playtests).
+     */
+    async listGames(limit = 20) {
+        const response = await this._fetchWithTimeout(`${this.baseUrl}/games?limit=${limit}`);
+        if (!response.ok) throw new Error("No se pudo listar partidas");
+        return await response.json();
     }
 
     /**
@@ -176,10 +234,8 @@ class CarcosaAPI {
      * @param {function} onMessageCallback Callback para recibir actualizaciones de estado
      */
     connectWS(gameId, playerId, onMessageCallback) {
-        if (this.ws) {
-            this.ws.explicitlyClosed = true;
-            this.ws.close();
-        }
+        this.disconnectWS(); // cierra socket previo Y cancela reconexiones pendientes
+        this._wsGameId = gameId;
 
         // Convertir http:// o https:// a ws:// o wss:// de forma segura
         let wsUrl = this.baseUrl.replace(/^http/, "ws");
@@ -192,6 +248,7 @@ class CarcosaAPI {
         socket.onopen = () => {
             console.log("WebSocket conectado exitosamente.");
             this.reconnectAttempts = 0; // Resetear intentos en conexión exitosa
+            if (onMessageCallback) onMessageCallback({ type: "ws_connected" });
         };
 
         socket.onmessage = (event) => {
@@ -210,26 +267,35 @@ class CarcosaAPI {
         };
 
         socket.onclose = (event) => {
-            console.log("WebSocket cerrado", event);
-            if (!socket.explicitlyClosed) {
-                if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.reconnectAttempts++;
-                    const backoffTime = Math.pow(2, this.reconnectAttempts) * 1000;
-                    console.log(`Intentando reconectar WebSocket en ${backoffTime}ms (Intento ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-                    setTimeout(() => {
+            // Ignorar cierres de sockets viejos (ya reemplazados) o cierres explícitos
+            if (socket.explicitlyClosed || this.ws !== socket || this._wsGameId !== gameId) return;
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.reconnectAttempts++;
+                const backoffTime = Math.pow(2, this.reconnectAttempts) * 1000;
+                console.log(`Reconectando WebSocket en ${backoffTime}ms (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+                this._reconnectTimer = setTimeout(() => {
+                    this._reconnectTimer = null;
+                    if (this._wsGameId === gameId) {
                         this.connectWS(gameId, playerId, onMessageCallback);
-                    }, backoffTime);
-                } else {
-                    console.error("No se pudo reconectar al WebSocket de CARCOSA tras varios intentos.");
-                }
+                    }
+                }, backoffTime);
+            } else {
+                console.error("No se pudo reconectar al WebSocket de CARCOSA tras varios intentos.");
+                // Avisar a la UI para que active el fallback de polling
+                if (onMessageCallback) onMessageCallback({ type: "ws_dead" });
             }
         };
     }
 
     disconnectWS() {
+        if (this._reconnectTimer) {
+            clearTimeout(this._reconnectTimer);
+            this._reconnectTimer = null;
+        }
+        this._wsGameId = null;
         if (this.ws) {
             this.ws.explicitlyClosed = true;
-            this.ws.close();
+            try { this.ws.close(); } catch (e) {}
             this.ws = null;
         }
     }

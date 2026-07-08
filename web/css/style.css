@@ -287,6 +287,12 @@ header {
     background: rgba(246, 200, 68, 0.05);
 }
 
+.player-type-toggle.remote {
+    border-color: var(--color-success, #3CE39A);
+    color: var(--color-success, #3CE39A);
+    background: rgba(60, 227, 154, 0.08);
+}
+
 .btn {
     width: 100%;
     padding: 14px 20px;

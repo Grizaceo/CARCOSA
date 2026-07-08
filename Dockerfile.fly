@@ -1,4 +1,4 @@
-# Railway: sirve frontend estático + backend FastAPI en un contenedor
+# Fly.io: sirve frontend estático + backend FastAPI en un contenedor
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -7,6 +7,7 @@ ENV PORT=8080
 
 WORKDIR /app
 
+# Solo dependencias del servidor (sin PyTorch/ML pesado)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -22,10 +23,15 @@ COPY engine/ ./engine/
 # Copiar frontend estático (web/ es el frontend canónico)
 COPY web/ ./static/
 
-# Script de arranque
+# Script de arranque: sirve estáticos + API en mismo puerto
 COPY <<'EOF' /app/start.sh
 #!/bin/bash
 set -e
+
+# Sirve archivos estáticos en /static/ via uvicorn + starlette.staticfiles
+# y la API en /start, /state, /act, /ws, etc.
+# Usamos uvicorn con la app FastAPI que monta StaticFiles
+
 cd /app
 exec uvicorn sim.game_server:app \
     --host 0.0.0.0 \
@@ -35,19 +41,23 @@ EOF
 
 RUN chmod +x /app/start.sh
 
-# Parchear game_server.py para servir static files
+# Modificar game_server.py para montar StaticFiles (parche en runtime)
 COPY <<'EOF' /app/patch_static.py
 import sys
 sys.path.insert(0, '/app')
 
+# Leer game_server.py original
 with open('/app/sim/game_server.py', 'r') as f:
     content = f.read()
 
+# Insertar montaje de StaticFiles después de crear la app
 if 'StaticFiles' not in content:
+    # Añadir import
     content = content.replace(
         'from fastapi import FastAPI, HTTPException, WebSocket',
         'from fastapi import FastAPI, HTTPException, WebSocket\nfrom fastapi.staticfiles import StaticFiles'
     )
+    # Montar static files después de app = FastAPI(...)
     content = content.replace(
         'app = FastAPI(title="CARCOSA Game Server", version="1.0.0")',
         '''app = FastAPI(title="CARCOSA Game Server", version="1.0.0")
