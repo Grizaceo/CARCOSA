@@ -118,6 +118,17 @@ async def init_db_pool():
                 await conn.execute("""
                     CREATE INDEX IF NOT EXISTS idx_carcosa_games_created_at ON carcosa_games(created_at DESC)
                 """)
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS carcosa_reports (
+                        id TEXT PRIMARY KEY,
+                        game_id TEXT,
+                        client_id TEXT,
+                        category TEXT,
+                        description TEXT NOT NULL,
+                        context TEXT,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
             print(f"[DB] PostgreSQL pool initialized with custom SSL: {database_url[:50]}...")
         except Exception as e:
             print(f"[DB] Table creation FAILED: {type(e).__name__}: {e}")
@@ -337,6 +348,15 @@ class ActRequest(BaseModel):
     action_type: str
     action_data: Dict[str, Any] = {}
     client_id: Optional[str] = None
+
+
+class ReportRequest(BaseModel):
+    """Reporte de error in-app (para jugadores que no usan GitHub)."""
+    description: str
+    category: str = "otro"          # regla | visual | interfaz | otro
+    game_id: Optional[str] = None
+    client_id: Optional[str] = None
+    context: Dict[str, Any] = {}    # capturado automáticamente por el frontend
 
 
 class ClaimRequest(BaseModel):
@@ -982,6 +1002,104 @@ def setup_preview(seed: int, draw_mode: str = "") -> Dict[str, Any]:
         "special_rooms": sorted(specials, key=lambda s: s["room"]),
         "roles": {str(pid): p.role_id for pid, p in state.players.items()},
     }
+
+
+FS_REPORTS_PATH = os.path.join("runs", "bug_reports.jsonl")
+
+
+@app.post("/report")
+async def submit_report(req: ReportRequest) -> Dict[str, Any]:
+    """
+    Guarda un reporte de error enviado desde el frontend (HALI).
+    PostgreSQL si hay pool (Render: el filesystem es efímero); si no, jsonl local.
+    """
+    description = (req.description or "").strip()
+    if not description:
+        raise HTTPException(status_code=400, detail="El reporte necesita una descripción.")
+    if len(description) > 4000:
+        description = description[:4000]
+
+    context_json = json.dumps(_json_safe(req.context or {}), ensure_ascii=False)
+    if len(context_json) > 60_000:
+        context_json = context_json[:60_000]
+
+    report_id = str(uuid.uuid4())[:8]
+    created_at = datetime.now()
+
+    saved_to = None
+    if _db_pool:
+        try:
+            async with _db_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO carcosa_reports (id, game_id, client_id, category, description, context, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    """,
+                    report_id, req.game_id, req.client_id,
+                    (req.category or "otro")[:32], description, context_json, created_at,
+                )
+            saved_to = "postgresql://carcosa_reports"
+        except Exception as e:
+            print(f"[REPORT] PG save failed: {e}, falling back to filesystem")
+
+    if not saved_to:
+        try:
+            os.makedirs("runs", exist_ok=True)
+            with open(FS_REPORTS_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "id": report_id,
+                    "game_id": req.game_id,
+                    "client_id": req.client_id,
+                    "category": req.category,
+                    "description": description,
+                    "context": req.context,
+                    "created_at": created_at.isoformat(),
+                }, ensure_ascii=False) + "\n")
+            saved_to = FS_REPORTS_PATH
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"No se pudo guardar el reporte: {e}")
+
+    print(f"[REPORT] {report_id} ({req.category}) game={req.game_id}: {description[:80]}")
+    return {"report_id": report_id, "saved_to": saved_to}
+
+
+@app.get("/reports")
+async def list_reports(limit: int = 100) -> Dict[str, Any]:
+    """Lista los reportes de error acumulados (para recolectarlos y triarlos)."""
+    if _db_pool:
+        try:
+            async with _db_pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT id, game_id, client_id, category, description, context, created_at
+                    FROM carcosa_reports ORDER BY created_at DESC LIMIT $1
+                """, limit)
+            return {
+                "reports": [
+                    {
+                        "id": r["id"], "game_id": r["game_id"], "client_id": r["client_id"],
+                        "category": r["category"], "description": r["description"],
+                        "context": json.loads(r["context"]) if r["context"] else {},
+                        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                    }
+                    for r in rows
+                ],
+                "storage": "postgresql",
+            }
+        except Exception as e:
+            print(f"[REPORT] PG list failed: {e}, falling back to filesystem")
+
+    reports: List[Dict[str, Any]] = []
+    if os.path.exists(FS_REPORTS_PATH):
+        with open(FS_REPORTS_PATH, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        reports.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+    reports.reverse()
+    return {"reports": reports[:limit], "storage": "filesystem"}
 
 
 @app.get("/health")

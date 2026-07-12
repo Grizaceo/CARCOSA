@@ -76,7 +76,7 @@ HALI.data = (() => {
     return {
       s: rec.step, r: rec.round, ph: rec.phase, actor: rec.actor,
       a: { t: rec.action_type, d: rec.action_data || {} },
-      T: +((rec.T_pre != null ? rec.T_pre : 0).toFixed ? rec.T_pre.toFixed(4) : rec.T_pre) || 0,
+      T: typeof rec.T_pre === 'number' ? +rec.T_pre.toFixed(4) : 0,
       k: fs.king_floor || 1,
       fk: fs.false_king_floor != null ? fs.false_king_floor : null,
       kd: fs.keys_destroyed || 0,
@@ -329,13 +329,18 @@ HALI.data = (() => {
     }
   }
 
-  // ── Narración de acciones (ticker) ──────────────────────────────────────
-  const ROOM_LABEL = (rid) => String(rid || '').replace('_', '·');
+  // ── Narración de acciones (crónica) ─────────────────────────────────────
+  // Todo lo interpolado termina en innerHTML: escapar SIEMPRE (los replays
+  // pueden venir de archivos arrastrados por el usuario).
+  const _esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const ROOM_LABEL = (rid) => _esc(String(rid || '').replace('_', '·'));
   function describeAction(frame) {
     if (!frame || !frame.a) return '';
-    const { actor } = frame;
+    const actor = _esc(frame.actor);
     const t = frame.a.t;
-    const d = frame.a.d || {};
+    const rawD = frame.a.d || {};
+    const d = Object.fromEntries(Object.entries(rawD).map(([k, v]) => [k, typeof v === 'string' ? _esc(v) : v]));
     switch (t) {
       case 'MOVE': return `${actor} avanza a ${ROOM_LABEL(d.to)}`;
       case 'SEARCH': return `${actor} registra la habitación`;

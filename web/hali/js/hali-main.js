@@ -35,6 +35,9 @@ HALI.app = (() => {
     lastLogLen: 0,        // action_log ya procesado (live)
   };
 
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
   function _cid() {
     if (S.clientId) return S.clientId;
     let cid = null;
@@ -265,7 +268,7 @@ HALI.app = (() => {
       for (const g of games.slice(0, 12)) {
         const li = document.createElement('li');
         const outcome = data.describeOutcome(g.outcome) || 'parcial';
-        li.innerHTML = `<span class="mono">${g.id}</span> · r${g.rounds ?? '—'} · ${outcome}`;
+        li.innerHTML = `<span class="mono">${esc(g.id)}</span> · r${esc(g.rounds ?? '—')} · ${esc(outcome)}`;
         li.title = 'ver replay';
         li.onclick = () => watchSavedGame(g.id);
         ul.appendChild(li);
@@ -558,8 +561,8 @@ HALI.app = (() => {
       const soul = (p.objects || []).filter((o) => sb.has(o));
       const chip = (o, isSoul) => {
         const e = HALI.cards.lookup(o);
-        const charge = p.oc && p.oc[o] != null ? `<sup>${p.oc[o]}</sup>` : '';
-        return `<span class="chip${isSoul ? ' soul' : ''}" title="${(e && e.name) || o}${isSoul ? ' (alma vinculada)' : ''}">${HALI.cards.icon(o)}${charge}</span>`;
+        const charge = p.oc && p.oc[o] != null ? `<sup>${esc(p.oc[o])}</sup>` : '';
+        return `<span class="chip${isSoul ? ' soul' : ''}" title="${esc((e && e.name) || o)}${isSoul ? ' (alma vinculada)' : ''}">${HALI.cards.icon(o)}${charge}</span>`;
       };
       const slotsHtml =
         normal.map((o) => chip(o, false)).join('') +
@@ -572,7 +575,7 @@ HALI.app = (() => {
         <div class="pcard-head">
           <span class="pcard-dot" style="background:${art.PAL.players[pid] || '#888'}"></span>
           <span class="pcard-name">${pid}${isMine ? ' ✦' : ''}</span>
-          <span class="pcard-role" title="${p.role}">${HALI.cards.ROLE_ES[p.role] || p.role}</span>
+          <span class="pcard-role" title="${esc(p.role)}">${esc(HALI.cards.ROLE_ES[p.role] || p.role)}</span>
         </div>
         <div class="sanity-track"><div class="sanity-fill${p.sanity <= 0 ? ' low' : ''}" style="width:${(s01 * 100).toFixed(0)}%"></div></div>
         <div class="pcard-row">
@@ -582,7 +585,7 @@ HALI.app = (() => {
           <span class="keys" title="llaves ${p.keys}/${kc}">${keysHtml}</span>
         </div>
         <div class="pcard-slots" title="objetos ${normal.length}/${os}${soul.length ? ` · ${soul.length} vinculados` : ''}">${slotsHtml}</div>
-        ${p.statuses.length ? `<div class="pcard-status">${p.statuses.join(' · ')}</div>` : ''}`;
+        ${p.statuses.length ? `<div class="pcard-status">${esc(p.statuses.join(' · '))}</div>` : ''}`;
       cards.appendChild(el);
     }
 
@@ -750,6 +753,77 @@ HALI.app = (() => {
     document.getElementById('status-line').textContent = text;
   }
 
+  // ── Reporte de errores in-app ───────────────────────────────────────────
+  function _reportContext() {
+    const v = S.view || {};
+    const lastLog = Array.from(document.querySelectorAll('#game-log-body .lg'))
+      .slice(-12).map((el) => el.textContent.slice(0, 200));
+    return {
+      mode: S.live ? 'live' : (S.session ? 'replay' : 'sin-fuente'),
+      gameId: S.live ? S.live.gameId : null,
+      replaySeed: S.session ? S.session.meta.seed : null,
+      frameIdx: S.frameIdx,
+      round: v.r, phase: v.ph, actor: v.actor,
+      mySeats: S.live ? S.live.mySeats() : [],
+      players: Object.fromEntries(Object.entries(v.P || {}).map(([pid, p]) =>
+        [pid, { room: p.room, sanity: p.sanity, keys: p.keys, role: p.role }])),
+      lastLog,
+      url: location.href,
+      ua: navigator.userAgent,
+      ts: new Date().toISOString(),
+    };
+  }
+
+  function _openReport() {
+    document.getElementById('report-status').textContent = '';
+    document.getElementById('report-desc').value = '';
+    document.getElementById('btn-report-send').disabled = false;
+    document.getElementById('report-modal').classList.remove('hidden');
+    document.getElementById('report-desc').focus();
+  }
+
+  async function _sendReport() {
+    const desc = document.getElementById('report-desc').value.trim();
+    const statusEl = document.getElementById('report-status');
+    if (!desc) { statusEl.textContent = 'Escribe al menos una frase sobre lo que pasó.'; return; }
+    const payload = {
+      description: desc,
+      category: document.getElementById('report-category').value,
+      game_id: S.live ? S.live.gameId : null,
+      client_id: _cid(),
+      context: _reportContext(),
+    };
+    const btn = document.getElementById('btn-report-send');
+    btn.disabled = true;
+    statusEl.textContent = 'Enviando…';
+    try {
+      const base = S.live ? S.live.base : _serverBase();
+      const res = await fetch(base + '/report', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || res.status);
+      statusEl.textContent = `¡Gracias! Reporte ${data.report_id} enviado.`;
+      setTimeout(() => document.getElementById('report-modal').classList.add('hidden'), 1400);
+    } catch (e) {
+      // sin server (p. ej. demo autocontenida): descargar el reporte como archivo
+      try {
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `carcosa_reporte_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        statusEl.textContent = 'Sin conexión al server: se descargó el reporte como archivo — envíaselo al anfitrión.';
+        btn.disabled = false;
+      } catch (e2) {
+        statusEl.textContent = 'No se pudo enviar ni descargar: ' + e.message;
+        btn.disabled = false;
+      }
+    }
+  }
+
   // ── Barra de acciones (live) ────────────────────────────────────────────
   function _isLegalMove(rid) {
     return S.legal.some((a) => a.type === 'MOVE' && a.data && a.data.to === rid);
@@ -915,6 +989,12 @@ HALI.app = (() => {
       document.getElementById('overlay-gameover').classList.add('hidden'));
     on('card-panel', () => document.getElementById('card-panel').classList.add('hidden'));
     on('btn-log-toggle', () => document.getElementById('game-log').classList.toggle('collapsed'));
+    on('btn-report', _openReport);
+    on('btn-report-cancel', () => document.getElementById('report-modal').classList.add('hidden'));
+    on('btn-report-send', _sendReport);
+    document.getElementById('report-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'report-modal') e.target.classList.add('hidden');
+    });
   }
 
   return { init, loadReplayObject, loadReplayText, connectLive, createGame, seek, refreshGamesList, state: S };

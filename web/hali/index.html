@@ -101,6 +101,32 @@
     <button id="btn-save" title="guarda la partida (también parciales) para reproducirla luego">Guardar partida</button>
   </div>
 
+  <!-- Reporte de errores (siempre visible) -->
+  <div id="report-fab">
+    <button id="btn-report" title="¿algo funcionó raro? cuéntanos y lo revisamos">⚠ Reportar error</button>
+  </div>
+
+  <!-- Modal de reporte -->
+  <div id="report-modal" class="hidden">
+    <div id="report-box">
+      <div id="report-title">Reportar un error</div>
+      <div class="report-hint">Cuéntanos qué pasó con tus palabras. El contexto de la partida (ronda, jugadas recientes) se adjunta solo.</div>
+      <select id="report-category">
+        <option value="regla">Una regla se aplicó mal</option>
+        <option value="visual">Algo se ve mal en el tablero</option>
+        <option value="interfaz">Un botón o menú no funciona</option>
+        <option value="otro" selected>Otra cosa</option>
+      </select>
+      <textarea id="report-desc" rows="5" maxlength="4000"
+        placeholder="Ej: usé el Vial y no recuperé cordura / la araña se movió dos veces / …"></textarea>
+      <div id="report-status"></div>
+      <div class="row-inline" style="justify-content:flex-end">
+        <button id="btn-report-cancel">Cancelar</button>
+        <button id="btn-report-send">Enviar reporte</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Acciones legales (live) -->
   <div id="action-bar" class="hidden"></div>
 
