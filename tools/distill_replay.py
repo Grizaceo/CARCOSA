@@ -146,21 +146,38 @@ def _infer_events(prev: Dict[str, Any], curr: Dict[str, Any]) -> list:
     return ev
 
 
+def _inventory_limits(role: str, objects: list, penalty: int) -> tuple:
+    """Espejo de engine/systems/inventory.get_inventory_limits (solo display)."""
+    key_cap = 2 if role == "HIGH_ROLLER" else 1
+    if "TREASURE_RING" in (objects or []):
+        key_cap += 1
+    base = 3 if role == "TANK" else (1 if role == "SCOUT" else 2)
+    return key_cap, max(0, base - (penalty or 0))
+
+
 def distill_frame(rec: Dict[str, Any]) -> Dict[str, Any]:
     fs = rec["full_state"]
     remaining = fs.get("remaining_actions", {}) or {}
     players = {}
     for pid, p in fs["players"].items():
+        role = p.get("role_id", "DEFAULT")
+        objects = list(p.get("objects", []))
+        key_cap, obj_slots = _inventory_limits(role, objects, p.get("object_slots_penalty", 0))
         players[pid] = {
             "room": p["room"],
             "sanity": p["sanity"],
             "sanityMax": p.get("sanity_max"),
             "keys": p.get("keys", 0),
-            "role": p.get("role_id", "DEFAULT"),
+            "role": role,
             "statuses": [s["status_id"] for s in p.get("statuses", [])],
-            "objects": list(p.get("objects", [])),
+            "objects": objects,
             "atMinus5": bool(p.get("at_minus5", False)),
             "ra": remaining.get(pid),
+            "kc": key_cap,
+            "os": obj_slots,
+            "sb": list(p.get("soulbound_items", [])),
+            "oc": dict(p.get("object_charges", {})),
+            "sh": p.get("shield", 0),
         }
 
     rooms_deck = {}

@@ -347,5 +347,22 @@ HALI.cards = (() => {
     return 'event';
   }
 
-  return { DB, lookup, pretty, icon, kind };
+  /** Nombres de rol en español (espejo de engine/catalogs/roles.py). */
+  const ROLE_ES = {
+    HEALER: 'Sanador', TANK: 'Tanque', HIGH_ROLLER: 'Apostador',
+    SCOUT: 'Explorador', BRAWLER: 'Luchador', PSYCHIC: 'Psíquico', DEFAULT: '—',
+  };
+
+  /**
+   * Límites de inventario (espejo de engine/systems/inventory.get_inventory_limits):
+   * llaves = base por rol (+1 con TREASURE_RING); objetos = base por rol − penalización.
+   */
+  function inventoryLimits(role, objects, penalty) {
+    let keyCap = role === 'HIGH_ROLLER' ? 2 : 1;
+    if ((objects || []).includes('TREASURE_RING')) keyCap += 1;
+    const base = role === 'TANK' ? 3 : role === 'SCOUT' ? 1 : 2;
+    return { keyCap, objSlots: Math.max(0, base - (penalty || 0)) };
+  }
+
+  return { DB, lookup, pretty, icon, kind, ROLE_ES, inventoryLimits };
 })();

@@ -323,6 +323,7 @@ HALI.app = (() => {
         // consecuencias de la acción anterior, luego la acción que viene
         if (frame.E && frame.E.length) { _logEvents(frame.E); _showCards(frame.E); }
         if (frame.a) _log(data.describeAction(frame), 'lg-act');
+        _diceFromStep(prev && prev.a, frame.E);
       }
     }
     if (frame.done && !S.outcomeShown) _showOutcome(frame.outcome);
@@ -339,6 +340,9 @@ HALI.app = (() => {
       for (const entry of newEntries) {
         if (entry && entry.type && entry.actor) {
           _log(data.describeAction({ actor: entry.actor, r: entry.round, a: { t: entry.type, d: entry.data || {} } }), 'lg-act');
+          if (entry.type === 'KING_ENDROUND' && entry.d6 != null) {
+            _rollDice({ value: entry.d6, label: 'El Rey cierra la ronda' });
+          }
         }
       }
       // eventos inferidos (cartas, cordura, monstruos…)
@@ -348,7 +352,7 @@ HALI.app = (() => {
       if (lastActor) {
         for (const ev of evs) if (ev.t === 'CARD' && ev.p == null) ev.p = lastActor.actor;
       }
-      if (evs.length) { _logEvents(evs); _showCards(evs); }
+      if (evs.length) { _logEvents(evs); _showCards(evs); _diceFromStep(null, evs); }
     }
     S.lastRich = rich;
     S.lastLogLen = (rawState.action_log || []).length;
@@ -538,22 +542,47 @@ HALI.app = (() => {
       const sMax = p.sanityMax != null ? p.sanityMax : 5;
       const s01 = Math.max(0, Math.min(1, (p.sanity + 5) / (sMax + 5)));
       const isMine = S.live && claims[pid] === S.clientId;
+
+      // límites: los del server si vienen (live); si no, espejo por rol (replay)
+      const lim = HALI.cards.inventoryLimits(p.role, p.objects, 0);
+      const kc = p.kc != null ? p.kc : lim.keyCap;
+      const os = p.os != null ? p.os : lim.objSlots;
+
+      // llaves: ocupadas + huecos
+      const keysHtml = '🗝'.repeat(Math.min(p.keys, kc)) +
+        `<span class="slot-empty">${'·'.repeat(Math.max(0, kc - p.keys))}</span>`;
+
+      // objetos: chips con icono (soulbound ∞ aparte, no ocupan slot)
+      const sb = new Set(p.sb || []);
+      const normal = (p.objects || []).filter((o) => !sb.has(o));
+      const soul = (p.objects || []).filter((o) => sb.has(o));
+      const chip = (o, isSoul) => {
+        const e = HALI.cards.lookup(o);
+        const charge = p.oc && p.oc[o] != null ? `<sup>${p.oc[o]}</sup>` : '';
+        return `<span class="chip${isSoul ? ' soul' : ''}" title="${(e && e.name) || o}${isSoul ? ' (alma vinculada)' : ''}">${HALI.cards.icon(o)}${charge}</span>`;
+      };
+      const slotsHtml =
+        normal.map((o) => chip(o, false)).join('') +
+        '<span class="chip empty"></span>'.repeat(Math.max(0, os - normal.length)) +
+        soul.map((o) => chip(o, true)).join('');
+
       const el = document.createElement('div');
       el.className = 'pcard' + (frame.actor === pid ? ' active' : '') + (p.atMinus5 ? ' broken' : '');
       el.innerHTML = `
         <div class="pcard-head">
           <span class="pcard-dot" style="background:${art.PAL.players[pid] || '#888'}"></span>
           <span class="pcard-name">${pid}${isMine ? ' ✦' : ''}</span>
-          <span class="pcard-role">${p.role}</span>
+          <span class="pcard-role" title="${p.role}">${HALI.cards.ROLE_ES[p.role] || p.role}</span>
         </div>
         <div class="sanity-track"><div class="sanity-fill${p.sanity <= 0 ? ' low' : ''}" style="width:${(s01 * 100).toFixed(0)}%"></div></div>
         <div class="pcard-row">
-          <span class="mono">${p.sanity}/${sMax}</span>
+          <span class="mono" title="cordura actual / máxima">🕯 ${p.sanity}/${sMax}</span>
+          ${p.sh > 0 ? `<span class="shield" title="escudo del Tanque">🛡${p.sh}</span>` : ''}
           ${frame.ph === 'PLAYER' && p.ra != null ? `<span class="acts" title="acciones restantes">◈${p.ra}</span>` : ''}
-          <span class="keys">${'🗝'.repeat(p.keys) || '—'}</span>
+          <span class="keys" title="llaves ${p.keys}/${kc}">${keysHtml}</span>
         </div>
-        ${p.statuses.length ? `<div class="pcard-status">${p.statuses.join(' · ')}</div>` : ''}
-        ${p.objects.length ? `<div class="pcard-obj">${p.objects.join(', ')}</div>` : ''}`;
+        <div class="pcard-slots" title="objetos ${normal.length}/${os}${soul.length ? ` · ${soul.length} vinculados` : ''}">${slotsHtml}</div>
+        ${p.statuses.length ? `<div class="pcard-status">${p.statuses.join(' · ')}</div>` : ''}`;
       cards.appendChild(el);
     }
 
@@ -627,6 +656,57 @@ HALI.app = (() => {
       if (_cardQueue.length) _pumpCards();
       else document.getElementById('card-panel').classList.add('hidden');
     }, holdMs);
+  }
+
+  // ── Tirada de dados ─────────────────────────────────────────────────────
+  const DIE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+  let _diceSpin = null, _diceHide = null;
+
+  /** Anima una tirada. {value, label, bonus?, total?, ok?} — bonus = cordura. */
+  function _rollDice(roll) {
+    const panel = document.getElementById('dice-panel');
+    const cube = document.getElementById('dice-cube');
+    const label = document.getElementById('dice-label');
+    const result = document.getElementById('dice-result');
+    if (!panel || roll.value == null) return;
+
+    clearInterval(_diceSpin); clearTimeout(_diceHide);
+    panel.classList.remove('hidden', 'settled');
+    label.textContent = roll.label || 'Tirada';
+    result.textContent = '';
+
+    const settle = () => {
+      clearInterval(_diceSpin); _diceSpin = null;
+      cube.textContent = DIE_FACES[Math.max(0, Math.min(5, roll.value - 1))];
+      panel.classList.add('settled');
+      let txt = `d6 = ${roll.value}`;
+      if (roll.bonus != null && roll.total != null) {
+        txt += ` ${roll.bonus >= 0 ? '+' : '−'} cordura(${Math.abs(roll.bonus)}) = ${roll.total}`;
+      }
+      if (roll.ok != null) txt += roll.ok ? ' → éxito' : ' → fallo';
+      result.textContent = txt;
+      _diceHide = setTimeout(() => panel.classList.add('hidden'), 2400);
+    };
+
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { settle(); return; }
+    let spins = 0;
+    _diceSpin = setInterval(() => {
+      cube.textContent = DIE_FACES[Math.floor(Math.random() * 6)];
+      if (++spins >= 11) settle();
+    }, 65);
+  }
+
+  /** Dispara dados a partir de una acción o lista de eventos. */
+  function _diceFromStep(action, evs) {
+    for (const ev of evs || []) {
+      if (ev.t === 'ESCAPE') {
+        _rollDice({ value: ev.d6, bonus: ev.sanity, total: ev.total, ok: ev.ok, label: 'Intento de escape' });
+        return;
+      }
+    }
+    if (action && action.t === 'KING_ENDROUND' && action.d && action.d.d6 != null) {
+      _rollDice({ value: action.d.d6, label: 'El Rey cierra la ronda' });
+    }
   }
 
   const KIND_ES = { event: 'evento', object: 'objeto', state: 'estado', monster: 'monstruo', omen: 'presagio' };

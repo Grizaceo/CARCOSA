@@ -47,16 +47,23 @@ HALI.data = (() => {
     const fs = rec.full_state;
     const P = {};
     for (const [pid, p] of Object.entries(fs.players || {})) {
+      const role = p.role_id || 'DEFAULT';
+      const lim = HALI.cards.inventoryLimits(role, p.objects || [], p.object_slots_penalty || 0);
       P[pid] = {
         room: p.room,
         sanity: p.sanity,
         sanityMax: p.sanity_max,
         keys: p.keys || 0,
-        role: p.role_id || 'DEFAULT',
+        role,
         statuses: (p.statuses || []).map((s) => s.status_id),
         objects: p.objects || [],
         atMinus5: !!p.at_minus5,
         ra: (fs.remaining_actions || {})[pid],
+        kc: lim.keyCap,
+        os: lim.objSlots,
+        sb: p.soulbound_items || [],
+        oc: p.object_charges || {},
+        sh: p.shield || 0,
       };
     }
     const D = {}, SP = {};
@@ -137,6 +144,11 @@ HALI.data = (() => {
         objects: p.objects || [],
         atMinus5: !!p.at_minus5,
         ra: p.remaining_actions,
+        kc: p.keys_capacity,      // límites que calcula el server (autoritativos)
+        os: p.object_slots,
+        sb: p.soulbound_items || [],
+        oc: p.object_charges || {},
+        sh: p.shield || 0,
       };
     }
     const D = {}, SP = {};
