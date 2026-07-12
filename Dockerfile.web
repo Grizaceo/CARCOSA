@@ -30,6 +30,9 @@ COPY web/PLAN.md ./static/
 COPY web/css/ ./static/css/
 COPY web/js/ ./static/js/
 
+# Motor HALI (representación 2.5D isométrica, ruta /hali)
+COPY web/hali/ ./static/hali/
+
 # Verificar archivos estáticos
 RUN ls -la /app/static/ && ls -la /app/static/css/ && ls -la /app/static/js/
 

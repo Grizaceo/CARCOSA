@@ -1,0 +1,315 @@
+/* ============================================================================
+ * HALI · hoja de estilos — decadencia fin-de-siècle
+ * Hueso sobre noche; oro enfermizo con mucha moderación.
+ * ==========================================================================*/
+:root {
+  --void: #0d0b14;
+  --hueso: #e6d8b4;
+  --palido: #f2e8c4;
+  --oro: #d4a017;
+  --oro-sucio: #9a7a1e;
+  --vino: #6b2e3e;
+  --hali: #26203a;
+  --panel: rgba(20, 16, 30, 0.82);
+  --borde: rgba(230, 216, 180, 0.16);
+  --display: 'Didot', 'Bodoni MT', 'Cochin', 'Playfair Display', Georgia, serif;
+  --body: Georgia, 'Times New Roman', serif;
+  --mono: 'IBM Plex Mono', 'Courier New', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--void);
+  color: var(--hueso);
+  font-family: var(--body);
+}
+
+#stage { position: fixed; inset: 0; cursor: grab; }
+#stage:active { cursor: grabbing; }
+
+.hidden { display: none !important; }
+
+/* ── Cartucho de título ── */
+#hud-title {
+  position: fixed; top: 18px; left: 22px;
+  pointer-events: none;
+  user-select: none;
+}
+#hud-title h1 {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: 0.42em;
+  color: var(--palido);
+  text-shadow: 0 0 18px rgba(212, 160, 23, 0.35);
+}
+#hud-title .sub {
+  font-size: 11px;
+  letter-spacing: 0.30em;
+  color: var(--oro-sucio);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+#hud-round, #hud-phase, #hud-keys {
+  font-size: 13px;
+  margin-top: 6px;
+  color: var(--hueso);
+  opacity: 0.85;
+}
+#hud-phase { font-style: italic; color: var(--oro); opacity: 0.9; }
+
+#hud-sign {
+  position: fixed; top: 16px; left: 50%;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 8px rgba(212, 160, 23, 0.4));
+  pointer-events: none;
+}
+
+/* ── Fichas de jugadores ── */
+#hud-players {
+  position: fixed; top: 18px; right: 18px;
+  display: flex; flex-direction: column; gap: 8px;
+  width: 208px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.pcard {
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 2px;
+  padding: 8px 10px;
+  backdrop-filter: blur(3px);
+  transition: border-color 0.3s;
+}
+.pcard.active { border-color: var(--oro); box-shadow: 0 0 12px rgba(212, 160, 23, 0.18); }
+.pcard.broken { border-color: var(--vino); }
+.pcard-head { display: flex; align-items: baseline; gap: 7px; }
+.pcard-dot { width: 9px; height: 9px; border-radius: 50%; align-self: center; }
+.pcard-name { font-family: var(--display); letter-spacing: 0.12em; font-size: 14px; }
+.pcard-role { margin-left: auto; font-size: 10px; letter-spacing: 0.14em; color: var(--oro-sucio); text-transform: uppercase; }
+.sanity-track { height: 4px; background: rgba(230,216,180,0.12); margin: 7px 0 5px; }
+.sanity-fill { height: 100%; background: var(--oro); transition: width 0.4s; }
+.sanity-fill.low { background: var(--vino); }
+.pcard-row { display: flex; justify-content: space-between; font-size: 12px; }
+.mono { font-family: var(--mono); font-size: 11px; }
+.keys { color: var(--oro); font-size: 11px; letter-spacing: 0.1em; }
+.pcard-status { margin-top: 4px; font-size: 10px; color: var(--vino); font-style: italic; letter-spacing: 0.06em; }
+.pcard-obj { margin-top: 3px; font-size: 10px; opacity: 0.6; }
+
+/* ── Ticker de acciones ── */
+#ticker {
+  position: fixed; left: 22px; bottom: 92px;
+  width: 320px;
+  pointer-events: none;
+  font-style: italic;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+#ticker div { opacity: 0.9; }
+#ticker div:nth-child(2) { opacity: 0.6; }
+#ticker div:nth-child(3) { opacity: 0.4; }
+#ticker div:nth-child(4) { opacity: 0.25; }
+#ticker div:nth-child(5) { opacity: 0.12; }
+
+#status-line {
+  position: fixed; left: 22px; bottom: 66px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--oro-sucio);
+  letter-spacing: 0.04em;
+}
+
+/* ── Timeline ── */
+#timeline-bar {
+  position: fixed; left: 50%; bottom: 16px;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  padding: 9px 16px;
+  border-radius: 2px;
+  backdrop-filter: blur(4px);
+}
+#btn-play {
+  background: none; border: 1px solid var(--oro-sucio);
+  color: var(--oro); width: 32px; height: 26px;
+  cursor: pointer; font-size: 11px; border-radius: 2px;
+}
+#btn-play:hover { border-color: var(--oro); box-shadow: 0 0 8px rgba(212,160,23,0.3); }
+#timeline {
+  width: min(380px, 38vw);
+  accent-color: var(--oro);
+}
+#timeline-label { font-family: var(--mono); font-size: 10.5px; min-width: 120px; opacity: 0.8; }
+#speed {
+  background: var(--void); color: var(--hueso);
+  border: 1px solid var(--borde); font-family: var(--mono);
+  font-size: 11px; padding: 3px;
+}
+
+/* ── Selector de piso ── */
+#floor-nav {
+  position: fixed; right: 18px; bottom: 16px;
+  display: flex; gap: 6px;
+}
+#floor-nav button {
+  background: var(--panel); color: var(--hueso);
+  border: 1px solid var(--borde);
+  width: 34px; height: 28px; cursor: pointer;
+  font-family: var(--display); font-size: 12px;
+  border-radius: 2px;
+}
+#floor-nav button.on { border-color: var(--oro); color: var(--oro); }
+
+/* ── Panel de fuente (replay / live) ── */
+#source-panel {
+  position: fixed; left: 22px; top: 158px;
+  width: 235px;
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 2px;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  backdrop-filter: blur(4px);
+}
+#source-panel summary {
+  cursor: pointer; letter-spacing: 0.18em; font-size: 10.5px;
+  text-transform: uppercase; color: var(--oro-sucio);
+  user-select: none;
+}
+#source-panel .row { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+#source-panel label { font-size: 10px; opacity: 0.65; letter-spacing: 0.08em; }
+#source-panel input, #source-panel select {
+  background: rgba(0,0,0,0.4); border: 1px solid var(--borde);
+  color: var(--hueso); padding: 4px 6px; font-family: var(--mono); font-size: 11px;
+  width: 100%;
+}
+.sp-label {
+  margin-top: 8px; margin-bottom: 4px;
+  font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--oro-sucio);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.seat-grid {
+  display: grid; grid-template-columns: 24px 1fr 24px 1fr;
+  gap: 5px 6px; align-items: center; margin-bottom: 6px;
+}
+.seat-grid label { align-self: center; font-family: var(--display); font-size: 12px; opacity: 0.85; }
+.row-inline { display: flex; gap: 6px; margin-top: 6px; align-items: stretch; }
+.row-inline button { margin-top: 0 !important; }
+.linkish {
+  background: none !important; border: none !important; color: var(--oro) !important;
+  font-size: 9.5px !important; letter-spacing: 0.1em; cursor: pointer;
+  padding: 0 !important; margin: 0 !important; text-transform: lowercase;
+}
+#games-list {
+  list-style: none; margin-top: 4px; max-height: 110px; overflow-y: auto;
+  scrollbar-width: thin;
+}
+#games-list li {
+  padding: 3px 4px; cursor: pointer; font-size: 10.5px;
+  border-bottom: 1px solid rgba(230,216,180,0.06);
+}
+#games-list li:hover { color: var(--oro); background: rgba(212,160,23,0.06); }
+#games-list li.muted { cursor: default; opacity: 0.45; font-style: italic; }
+#games-list li.muted:hover { color: var(--hueso); background: none; }
+
+#live-tools { position: fixed; left: 22px; bottom: 16px; }
+#live-tools button {
+  background: var(--panel); border: 1px solid var(--oro-sucio); color: var(--oro);
+  padding: 6px 14px; cursor: pointer; font-family: var(--body);
+  font-size: 11.5px; letter-spacing: 0.08em; border-radius: 2px;
+}
+#live-tools button:hover { border-color: var(--oro); }
+
+.act-actor {
+  font-family: var(--display); font-size: 13px; letter-spacing: 0.15em;
+  color: var(--oro); align-self: center; margin-right: 4px;
+}
+.overlay-btn {
+  background: none; border: 1px solid var(--oro-sucio); color: var(--oro);
+  padding: 8px 26px; cursor: pointer; font-family: var(--body);
+  letter-spacing: 0.2em; font-size: 12px; text-transform: uppercase;
+}
+.overlay-btn:hover { border-color: var(--oro); }
+#source-panel button, #source-panel .file-label {
+  margin-top: 8px;
+  background: none; border: 1px solid var(--oro-sucio); color: var(--oro);
+  padding: 5px 10px; cursor: pointer; font-family: var(--body);
+  font-size: 11.5px; letter-spacing: 0.08em; border-radius: 2px;
+  display: inline-block; text-align: center;
+}
+#source-panel button:hover, #source-panel .file-label:hover { border-color: var(--oro); }
+#file-replay { display: none; }
+.divider { border-top: 1px solid var(--borde); margin: 10px 0 2px; }
+
+/* ── Barra de acciones (live) ── */
+#action-bar {
+  position: fixed; left: 50%; bottom: 64px;
+  transform: translateX(-50%);
+  display: flex; flex-wrap: wrap; gap: 6px;
+  max-width: 74vw; justify-content: center;
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  padding: 8px 12px; border-radius: 2px;
+}
+.act-btn {
+  background: none; border: 1px solid var(--oro-sucio); color: var(--hueso);
+  font-family: var(--body); font-size: 11.5px;
+  padding: 4px 10px; cursor: pointer; border-radius: 2px;
+}
+.act-btn:hover { border-color: var(--oro); color: var(--oro); }
+.act-hint { font-size: 11px; font-style: italic; color: var(--oro-sucio); align-self: center; }
+
+/* ── Overlay de fin de partida ── */
+#overlay-gameover {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(13,11,20,0.55), rgba(13,11,20,0.92));
+  z-index: 30;
+  animation: fadein 1.6s ease;
+}
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+#gameover-title {
+  font-family: var(--display);
+  font-size: clamp(28px, 6vw, 64px);
+  font-weight: 400;
+  letter-spacing: 0.28em;
+  text-align: center;
+  color: var(--palido);
+  text-shadow: 0 0 34px rgba(212, 160, 23, 0.5);
+}
+#gameover-sub {
+  margin-top: 18px; font-style: italic; font-size: 15px;
+  color: var(--oro-sucio); letter-spacing: 0.06em;
+}
+#source-panel {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* ── Ayuda de teclado ── */
+#kbd-help {
+  position: fixed; right: 18px; bottom: 52px;
+  font-family: var(--mono); font-size: 9.5px;
+  color: rgba(230,216,180,0.35);
+  text-align: right; line-height: 1.7;
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  #hud-players { width: 160px; }
+  #source-panel { display: none; }
+  #ticker { width: 220px; }
+  #kbd-help { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sanity-fill, .pcard { transition: none; }
+  #overlay-gameover { animation: none; }
+}

@@ -136,8 +136,15 @@ if not os.path.exists(STATIC_DIR):
     if not os.path.exists(STATIC_DIR):
         STATIC_DIR = "web"
 
-# Servir frontend estático en /static
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Servir frontend estático en /static (html=True: /static/hali/ sirve su index.html)
+app.mount("/static", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+
+
+# Atajo al motor HALI (representación 2.5D)
+@app.get("/hali", include_in_schema=False)
+async def serve_hali():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/hali/")
 
 # Servir index.html en root con headers anti-cache para forzar reload del frontend
 @app.get("/", include_in_schema=False)
@@ -459,6 +466,9 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
         "chambers_tales_attached": state.chambers_tales_attached,
         "taberna_used_this_turn": {str(k): bool(v) for k, v in state.taberna_used_this_turn.items()},
         "armory_storage": {str(k): [str(i) for i in v] for k, v in state.armory_storage.items()},
+        # Escaleras por piso: sin esto el frontend no puede renderizar la conectividad
+        # vertical canónica (canon 4.2). {"1": "F1_R1", ...}
+        "stairs": {str(f): str(rid) for f, rid in state.stairs.items()},
     }
 
     if session is not None:
