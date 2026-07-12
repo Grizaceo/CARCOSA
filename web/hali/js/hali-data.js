@@ -56,6 +56,7 @@ HALI.data = (() => {
         statuses: (p.statuses || []).map((s) => s.status_id),
         objects: p.objects || [],
         atMinus5: !!p.at_minus5,
+        ra: (fs.remaining_actions || {})[pid],
       };
     }
     const D = {}, SP = {};
@@ -83,7 +84,7 @@ HALI.data = (() => {
 
   function distillJsonl(text) {
     const frames = [];
-    let firstFs = null, last = null;
+    let firstFs = null, last = null, prevRich = null;
     for (const line of text.split('\n')) {
       const t = line.trim();
       if (!t) continue;
@@ -91,7 +92,17 @@ HALI.data = (() => {
       try { rec = JSON.parse(t); } catch (e) { continue; }
       if (!rec.full_state) continue;
       if (!firstFs) firstFs = rec.full_state;
-      frames.push(_frameFromRecord(rec));
+      const frame = _frameFromRecord(rec);
+      // eventos causados por la acción anterior (diff de estados consecutivos)
+      const rich = HALI.events.richFromFullState(rec.full_state);
+      frame.E = prevRich ? HALI.events.infer(prevRich, rich) : [];
+      // atribución de reveals sin dueño: el actor de la acción anterior
+      const causer = frames.length ? frames[frames.length - 1].actor : null;
+      if (causer && causer !== 'KING') {
+        for (const ev of frame.E) if (ev.t === 'CARD' && ev.p == null) ev.p = causer;
+      }
+      prevRich = rich;
+      frames.push(frame);
       last = rec;
     }
     if (!firstFs) throw new Error('jsonl sin registros con full_state');
@@ -125,6 +136,7 @@ HALI.data = (() => {
         statuses: p.statuses || [],
         objects: p.objects || [],
         atMinus5: !!p.at_minus5,
+        ra: p.remaining_actions,
       };
     }
     const D = {}, SP = {};

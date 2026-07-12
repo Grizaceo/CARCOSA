@@ -66,9 +66,28 @@
     <input type="file" id="file-replay" accept=".json,.jsonl">
   </details>
 
-  <!-- Narración -->
-  <div id="ticker"></div>
+  <!-- Crónica de la partida -->
+  <div id="game-log">
+    <div id="game-log-head">
+      <span>Crónica</span>
+      <button id="btn-log-toggle" title="plegar/desplegar">▾</button>
+    </div>
+    <div id="game-log-body"></div>
+  </div>
   <div id="status-line">crea una partida, únete a una, o carga un replay</div>
+
+  <!-- Carta revelada -->
+  <div id="card-panel" class="hidden" title="clic para cerrar">
+    <div id="card-head">
+      <span id="card-icon">🃏</span>
+      <div>
+        <div id="card-name">—</div>
+        <div id="card-kind">—</div>
+      </div>
+    </div>
+    <div id="card-desc"></div>
+    <div id="card-where">—</div>
+  </div>
 
   <!-- Herramientas live -->
   <div id="live-tools" class="hidden">
@@ -113,6 +132,8 @@
 
   <script src="js/hali-core.js"></script>
   <script src="js/hali-art.js"></script>
+  <script src="js/hali-cards.js"></script>
+  <script src="js/hali-events.js"></script>
   <script src="js/hali-data.js"></script>
   <script src="js/hali-main.js"></script>
 </body>

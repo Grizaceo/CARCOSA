@@ -31,6 +31,8 @@ HALI.app = (() => {
     legalActor: null,     // asiento al que pertenecen S.legal
     outcomeShown: false,
     clientId: null,
+    lastRich: null,       // snapshot para inferir eventos en live
+    lastLogLen: 0,        // action_log ya procesado (live)
   };
 
   function _cid() {
@@ -104,7 +106,10 @@ HALI.app = (() => {
     S.outcomeShown = false;
     S.anim.clear();
     S.legal = []; S.legalActor = null;
+    S.lastRich = null; S.lastLogLen = 0;
     _renderActionBar([]);
+    _clearLog();
+    _log(`Crónica de la partida — seed ${session.meta.seed}, ${session.frames.length} pasos`, 'lg-special');
     _applyFrame(session.frames[0], true);
     _updateTimeline();
     _setStatus(`Replay: ${session.meta.policy || 'humano'} · seed ${session.meta.seed} · ${session.frames.length} pasos · ${data.describeOutcome(session.meta.outcome) || 'parcial'}`);
@@ -140,21 +145,25 @@ HALI.app = (() => {
     S.anim.clear();
     S.outcomeShown = false;
 
+    S.lastRich = null; S.lastLogLen = 0;
     S.live = new data.LiveClient(baseUrl, gameId, {
       clientId: _cid(),
-      onFrame: (frame) => {
+      onFrame: (frame, rawState) => {
         if (S.live && S.live.stairs) S.stairs = S.live.stairs;
+        _processLiveChronicle(rawState);
         _applyFrame(frame, !S.view);
         _syncTurn(frame);
       },
     });
     try {
+      _clearLog();
       await S.live.fetchState();
       S.live.connect();
       document.getElementById('live-tools').classList.remove('hidden');
       document.getElementById('overlay-gameover').classList.add('hidden');
       const seats = S.live.mySeats();
       _setStatus(`Live: ${gameId} · tus asientos: ${seats.length ? seats.join(', ') : 'observador'}`);
+      _log(`Conectado a la partida ${gameId}${seats.length ? ` como ${seats.join(', ')}` : ' (observador)'}`, 'lg-special');
       _syncTurn(S.live.lastFrame);
     } catch (e) {
       _setStatus('No se pudo conectar: ' + e.message);
@@ -307,9 +316,42 @@ HALI.app = (() => {
     }
 
     _renderHUD(frame);
-    if (frame.a) _ticker(data.describeAction(frame));
+    if (S.session) {
+      if (snap) {
+        _rebuildLog();
+      } else {
+        // consecuencias de la acción anterior, luego la acción que viene
+        if (frame.E && frame.E.length) { _logEvents(frame.E); _showCards(frame.E); }
+        if (frame.a) _log(data.describeAction(frame), 'lg-act');
+      }
+    }
     if (frame.done && !S.outcomeShown) _showOutcome(frame.outcome);
     _updateTimeline();
+  }
+
+  /** Live: crónica desde el diff del action_log del server + eventos inferidos. */
+  function _processLiveChronicle(rawState) {
+    if (!rawState) return;
+    const rich = HALI.events.richFromLiveState(rawState);
+    if (S.lastRich) {
+      // acciones nuevas del log del engine (incluye bots y fase del Rey)
+      const newEntries = (rawState.action_log || []).slice(S.lastLogLen);
+      for (const entry of newEntries) {
+        if (entry && entry.type && entry.actor) {
+          _log(data.describeAction({ actor: entry.actor, r: entry.round, a: { t: entry.type, d: entry.data || {} } }), 'lg-act');
+        }
+      }
+      // eventos inferidos (cartas, cordura, monstruos…)
+      const evs = HALI.events.infer(S.lastRich, rich);
+      // atribución de reveals sin dueño: el último actor humano/bot del tramo
+      const lastActor = [...newEntries].reverse().find((e) => e && e.actor && e.actor !== 'KING');
+      if (lastActor) {
+        for (const ev of evs) if (ev.t === 'CARD' && ev.p == null) ev.p = lastActor.actor;
+      }
+      if (evs.length) { _logEvents(evs); _showCards(evs); }
+    }
+    S.lastRich = rich;
+    S.lastLogLen = (rawState.action_log || []).length;
   }
 
   function _float(rid, text, color) {
@@ -475,10 +517,13 @@ HALI.app = (() => {
   function _renderHUD(frame) {
     document.getElementById('hud-round').textContent = `Ronda ${frame.r}`;
     const mine = S.live && S.live.myTurnActor(frame);
+    const actorP = frame.actor && frame.P[frame.actor];
+    const raStr = frame.ph === 'PLAYER' && actorP && actorP.ra != null
+      ? ` · ${actorP.ra} ${actorP.ra === 1 ? 'acción' : 'acciones'}` : '';
     document.getElementById('hud-phase').textContent =
       frame.ph === 'KING' ? 'La fase del Rey'
-        : mine ? `Tu turno — ${mine}`
-        : `Turno de ${frame.actor || '—'}`;
+        : mine ? `Tu turno — ${mine}${raStr}`
+        : `Turno de ${frame.actor || '—'}${raStr}`;
 
     const signCanvas = document.getElementById('hud-sign');
     const sctx = signCanvas.getContext('2d');
@@ -504,6 +549,7 @@ HALI.app = (() => {
         <div class="sanity-track"><div class="sanity-fill${p.sanity <= 0 ? ' low' : ''}" style="width:${(s01 * 100).toFixed(0)}%"></div></div>
         <div class="pcard-row">
           <span class="mono">${p.sanity}/${sMax}</span>
+          ${frame.ph === 'PLAYER' && p.ra != null ? `<span class="acts" title="acciones restantes">◈${p.ra}</span>` : ''}
           <span class="keys">${'🗝'.repeat(p.keys) || '—'}</span>
         </div>
         ${p.statuses.length ? `<div class="pcard-status">${p.statuses.join(' · ')}</div>` : ''}
@@ -517,13 +563,88 @@ HALI.app = (() => {
       (frame.kd ? ` · ${frame.kd} destruidas` : '');
   }
 
-  function _ticker(text) {
-    if (!text) return;
-    const el = document.getElementById('ticker');
+  // ── Crónica (log de partida) ────────────────────────────────────────────
+  const LOG_MAX = 300;
+
+  function _clearLog() {
+    const body = document.getElementById('game-log-body');
+    if (body) body.innerHTML = '';
+  }
+
+  function _log(html, cls) {
+    const body = document.getElementById('game-log-body');
+    if (!body || !html) return;
     const line = document.createElement('div');
-    line.textContent = text;
-    el.prepend(line);
-    while (el.children.length > 5) el.removeChild(el.lastChild);
+    line.className = 'lg ' + (cls || 'lg-info');
+    line.innerHTML = html;
+    body.appendChild(line);
+    while (body.children.length > LOG_MAX) body.removeChild(body.firstChild);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function _logEvents(evs) {
+    for (const ev of evs || []) {
+      const f = HALI.events.format(ev);
+      _log(f.html, f.cls);
+    }
+  }
+
+  /** Reconstruye la crónica completa hasta el frame actual (seek con salto). */
+  function _rebuildLog() {
+    if (!S.session) return;
+    _clearLog();
+    const upto = S.frameIdx;
+    const from = Math.max(0, upto - 80); // suficiente contexto sin costo
+    if (from > 0) _log(`… (${from} pasos anteriores omitidos)`, 'lg-info');
+    for (let i = from; i <= upto; i++) {
+      const f = S.session.frames[i];
+      if (i > from && f.E && f.E.length) _logEvents(f.E);
+      if (f.a) _log(data.describeAction(f), 'lg-act');
+    }
+  }
+
+  // ── Carta revelada (panel central) ──────────────────────────────────────
+  const _cardQueue = [];
+  let _cardTimer = null;
+
+  function _showCards(evs) {
+    for (const ev of evs || []) {
+      if (ev.t === 'CARD' || ev.t === 'PEEK') {
+        _cardQueue.push(ev);
+        while (_cardQueue.length > 3) _cardQueue.shift();
+      }
+    }
+    _pumpCards();
+  }
+
+  function _pumpCards() {
+    if (_cardTimer || !_cardQueue.length) return;
+    const ev = _cardQueue.shift();
+    _renderCardPanel(ev);
+    const holdMs = Math.max(1300, 3000 / (S.playing ? S.speed : 1));
+    _cardTimer = setTimeout(() => {
+      _cardTimer = null;
+      if (_cardQueue.length) _pumpCards();
+      else document.getElementById('card-panel').classList.add('hidden');
+    }, holdMs);
+  }
+
+  const KIND_ES = { event: 'evento', object: 'objeto', state: 'estado', monster: 'monstruo', omen: 'presagio' };
+
+  function _renderCardPanel(ev) {
+    const C = HALI.cards;
+    const panel = document.getElementById('card-panel');
+    const kind = C.kind(ev.card);
+    const entity = C.lookup(ev.card);
+    panel.className = 'card-' + kind; // limpia .hidden y colorea por tipo
+    document.getElementById('card-icon').textContent = C.icon(ev.card);
+    document.getElementById('card-name').textContent = C.pretty(ev.card);
+    document.getElementById('card-kind').textContent = KIND_ES[kind] || kind;
+    document.getElementById('card-desc').innerHTML = entity && entity.desc ? entity.desc : '';
+    document.getElementById('card-where').textContent =
+      ev.t === 'PEEK'
+        ? `atisbada en ${String(ev.room).replace('_', '·')}`
+        : `${ev.p || '—'} · ${String(ev.room).replace('_', '·')}`;
   }
 
   function _showOutcome(outcome) {
@@ -712,6 +833,8 @@ HALI.app = (() => {
     });
     on('btn-close-gameover', () =>
       document.getElementById('overlay-gameover').classList.add('hidden'));
+    on('card-panel', () => document.getElementById('card-panel').classList.add('hidden'));
+    on('btn-log-toggle', () => document.getElementById('game-log').classList.toggle('collapsed'));
   }
 
   return { init, loadReplayObject, loadReplayText, connectLive, createGame, seek, refreshGamesList, state: S };

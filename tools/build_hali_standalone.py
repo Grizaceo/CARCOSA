@@ -26,7 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 HALI = ROOT / "web" / "hali"
-JS_ORDER = ["hali-core.js", "hali-art.js", "hali-data.js", "hali-main.js"]
+JS_ORDER = ["hali-core.js", "hali-art.js", "hali-cards.js", "hali-events.js", "hali-data.js", "hali-main.js"]
 
 
 def build(out_path: str, replay_path: str | None, no_live: bool, title: str) -> Path:
