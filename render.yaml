@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: carcosa
+    runtime: docker
+    dockerfilePath: ./Dockerfile.web
+    plan: free
+    region: frankfurt
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      # El valor real vive en el dashboard de Render (sync:false evita que un
+      # sync del Blueprint lo pise con un placeholder y rompa la persistencia PG).
+      - key: DATABASE_URL
+        sync: false

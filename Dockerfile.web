@@ -1,0 +1,47 @@
+# Dockerfile.web - SOLO servidor web + frontend estático (ligero, sin ML)
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Solo deps del servidor (fastapi, uvicorn, websockets, numpy, asyncpg)
+RUN pip install --no-cache-dir \
+    fastapi>=0.110.0 \
+    uvicorn[standard]>=0.29.0 \
+    websockets>=12.0 \
+    numpy>=1.23.0 \
+    pydantic>=2.0 \
+    asyncpg>=0.29.0
+
+# Copiar código del servidor
+COPY sim/ ./sim/
+COPY engine/ ./engine/
+
+# Copiar frontend estático (desde web/ que no está en .dockerignore)
+COPY web/index.html ./static/
+COPY web/PLAN.md ./static/
+COPY web/css/ ./static/css/
+COPY web/js/ ./static/js/
+
+# Motor HALI (representación 2.5D isométrica, ruta /hali)
+COPY web/hali/ ./static/hali/
+
+# Verificar archivos estáticos
+RUN ls -la /app/static/ && ls -la /app/static/css/ && ls -la /app/static/js/
+
+# Copiar script de parcheo
+COPY patch_static.py /app/patch_static.py
+
+# Ejecutar parcheo
+RUN python /app/patch_static.py
+
+EXPOSE 8080
+
+CMD uvicorn sim.game_server:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1

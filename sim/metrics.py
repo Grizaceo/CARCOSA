@@ -150,6 +150,15 @@ def write_jsonl(path: str, records: List[Dict[str, Any]]) -> None:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
+def write_jsonl_to_string(records: List[Dict[str, Any]]) -> str:
+    """Escribe records a un string en formato JSONL."""
+    import io
+    buffer = io.StringIO()
+    for r in records:
+        buffer.write(json.dumps(r, ensure_ascii=False) + "\n")
+    return buffer.getvalue()
+
+
 def default_run_path(prefix: str = "runs/run") -> str:
     ts = time.strftime("%Y%m%d_%H%M%S")
     return f"{prefix}_{ts}.jsonl"

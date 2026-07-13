@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HALI · el lago a través del cual se ve CARCOSA</title>
+  <link rel="stylesheet" href="hali.css">
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <!-- Cartucho -->
+  <div id="hud-title">
+    <h1>CARCOSA</h1>
+    <div class="sub">motor HALI · representación 2.5D</div>
+    <div id="hud-round">—</div>
+    <div id="hud-phase">—</div>
+    <div id="hud-keys">—</div>
+  </div>
+
+  <!-- La Señal Amarilla: medidor de tensión -->
+  <canvas id="hud-sign" width="72" height="72" title="Tensión de la Casa"></canvas>
+
+  <!-- Fichas de las Pobres Almas -->
+  <div id="hud-players"></div>
+
+  <!-- Panel de partida -->
+  <details id="source-panel" open>
+    <summary>Partida</summary>
+
+    <div class="sp-label">servidor</div>
+    <input id="live-url" placeholder="http://127.0.0.1:8765">
+
+    <div class="divider"></div>
+    <div class="sp-label">nueva partida</div>
+    <div class="seat-grid">
+      <label>P1</label><select id="seat-P1"><option value="local">yo</option><option value="bot">bot</option><option value="remote">amigo</option></select>
+      <label>P2</label><select id="seat-P2"><option value="bot">bot</option><option value="local">yo</option><option value="remote">amigo</option></select>
+      <label>P3</label><select id="seat-P3"><option value="bot">bot</option><option value="local">yo</option><option value="remote">amigo</option></select>
+      <label>P4</label><select id="seat-P4"><option value="bot">bot</option><option value="local">yo</option><option value="remote">amigo</option></select>
+    </div>
+    <div class="row-inline">
+      <input id="new-seed" placeholder="seed (azar)" style="width:45%">
+      <select id="new-drawmode" style="width:55%">
+        <option value="RANDOM_UNIQUE">roles al azar</option>
+        <option value="FIXED">roles fijos</option>
+      </select>
+    </div>
+    <button id="btn-create">Crear y jugar</button>
+
+    <div class="divider"></div>
+    <div class="sp-label">unirse a una partida</div>
+    <input id="live-game" placeholder="game_id">
+    <div class="row-inline">
+      <button id="btn-connect" style="flex:1">Conectar</button>
+      <input id="claim-seat" placeholder="P2" style="width:52px" title="asiento a reclamar">
+      <button id="btn-claim" title="reclamar asiento remoto">Reclamar</button>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sp-label">partidas guardadas <button id="btn-games-refresh" class="linkish">actualizar</button></div>
+    <ul id="games-list"><li class="muted">pulsa actualizar</li></ul>
+
+    <div class="divider"></div>
+    <label class="file-label" for="file-replay">Cargar replay (.json / .jsonl)</label>
+    <input type="file" id="file-replay" accept=".json,.jsonl">
+  </details>
+
+  <!-- Crónica de la partida -->
+  <div id="game-log">
+    <div id="game-log-head">
+      <span>Crónica</span>
+      <button id="btn-log-toggle" title="plegar/desplegar">▾</button>
+    </div>
+    <div id="game-log-body"></div>
+  </div>
+  <div id="status-line">crea una partida, únete a una, o carga un replay</div>
+
+  <!-- Tirada de dados -->
+  <div id="dice-panel" class="hidden">
+    <div id="dice-label">—</div>
+    <div id="dice-cube">⚄</div>
+    <div id="dice-result"></div>
+  </div>
+
+  <!-- Carta revelada -->
+  <div id="card-panel" class="hidden" title="clic para cerrar">
+    <div id="card-head">
+      <span id="card-icon">🃏</span>
+      <div>
+        <div id="card-name">—</div>
+        <div id="card-kind">—</div>
+      </div>
+    </div>
+    <div id="card-desc"></div>
+    <div id="card-where">—</div>
+  </div>
+
+  <!-- Herramientas live -->
+  <div id="live-tools" class="hidden">
+    <button id="btn-save" title="guarda la partida (también parciales) para reproducirla luego">Guardar partida</button>
+  </div>
+
+  <!-- Reporte de errores (siempre visible) -->
+  <div id="report-fab">
+    <button id="btn-report" title="¿algo funcionó raro? cuéntanos y lo revisamos">⚠ Reportar error</button>
+  </div>
+
+  <!-- Modal de reporte -->
+  <div id="report-modal" class="hidden">
+    <div id="report-box">
+      <div id="report-title">Reportar un error</div>
+      <div class="report-hint">Cuéntanos qué pasó con tus palabras. El contexto de la partida (ronda, jugadas recientes) se adjunta solo.</div>
+      <select id="report-category">
+        <option value="regla">Una regla se aplicó mal</option>
+        <option value="visual">Algo se ve mal en el tablero</option>
+        <option value="interfaz">Un botón o menú no funciona</option>
+        <option value="otro" selected>Otra cosa</option>
+      </select>
+      <textarea id="report-desc" rows="5" maxlength="4000"
+        placeholder="Ej: usé el Vial y no recuperé cordura / la araña se movió dos veces / …"></textarea>
+      <div id="report-status"></div>
+      <div class="row-inline" style="justify-content:flex-end">
+        <button id="btn-report-cancel">Cancelar</button>
+        <button id="btn-report-send">Enviar reporte</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Acciones legales (live) -->
+  <div id="action-bar" class="hidden"></div>
+
+  <!-- Timeline (replay) -->
+  <div id="timeline-bar" class="hidden">
+    <button id="btn-play" title="Espacio">▶</button>
+    <input type="range" id="timeline" min="0" max="0" value="0" step="1">
+    <span id="timeline-label">—</span>
+    <select id="speed" title="velocidad">
+      <option value="0.5">½×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+    </select>
+  </div>
+
+  <!-- Selector de piso -->
+  <div id="floor-nav">
+    <button data-floor="3" title="tecla 3">F3</button>
+    <button data-floor="2" title="tecla 2">F2</button>
+    <button data-floor="1" title="tecla 1">F1</button>
+    <button data-floor="0" class="on" title="tecla 0">✦</button>
+  </div>
+
+  <div id="kbd-help">arrastrar: mover · rueda: zoom<br>0-3: piso · espacio: play · ←→: paso</div>
+
+  <!-- Fin de partida -->
+  <div id="overlay-gameover" class="hidden">
+    <div id="gameover-title">—</div>
+    <div id="gameover-sub">—</div>
+    <div class="row-inline" style="margin-top:34px; gap:12px">
+      <button id="btn-watch-replay" class="overlay-btn hidden">ver el replay</button>
+      <button id="btn-close-gameover" class="overlay-btn">contemplar el tablero</button>
+    </div>
+  </div>
+
+  <script src="js/hali-core.js"></script>
+  <script src="js/hali-art.js"></script>
+  <script src="js/hali-cards.js"></script>
+  <script src="js/hali-events.js"></script>
+  <script src="js/hali-data.js"></script>
+  <script src="js/hali-main.js"></script>
+</body>
+</html>

@@ -86,6 +86,7 @@ class Config:
     # --- Termination (sim-only) ---
     # 0 desactiva. Si round > MAX_ROUNDS => TIMEOUT
     MAX_ROUNDS: int = 60
+    TIMEOUT_OUTCOME: str = "TIMEOUT"
     # MCTS Configuration
     MCTS_ROLLOUTS: int = 100
     MCTS_DEPTH: int = 50
