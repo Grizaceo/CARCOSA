@@ -5,9 +5,11 @@ services:
     dockerfilePath: ./Dockerfile.web
     plan: free
     region: frankfurt
-    branch: feat/html-canvas-playtest
+    branch: main
     autoDeploy: true
     healthCheckPath: /
     envVars:
+      # El valor real vive en el dashboard de Render (sync:false evita que un
+      # sync del Blueprint lo pise con un placeholder y rompa la persistencia PG).
       - key: DATABASE_URL
-        value: postgresql://carcosa_games_db_user:***@dpg-d8kvfshkh4rs73fjricg-a.oregon-postgres.render.com:5432/carcosa_games_db
+        sync: false

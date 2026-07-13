@@ -1019,9 +1019,14 @@ async def submit_report(req: ReportRequest) -> Dict[str, Any]:
     if len(description) > 4000:
         description = description[:4000]
 
+    category = (req.category or "otro")[:32]
+
+    # Contexto acotado y SIEMPRE JSON válido: si excede el límite, se reemplaza
+    # por un marcador (nunca se corta a media cadena — eso rompía /reports).
     context_json = json.dumps(_json_safe(req.context or {}), ensure_ascii=False)
     if len(context_json) > 60_000:
-        context_json = context_json[:60_000]
+        context_json = json.dumps({"_truncated": True, "original_size": len(context_json)})
+    context_stored = json.loads(context_json)
 
     report_id = str(uuid.uuid4())[:8]
     created_at = datetime.now()
@@ -1036,7 +1041,7 @@ async def submit_report(req: ReportRequest) -> Dict[str, Any]:
                     VALUES ($1, $2, $3, $4, $5, $6, $7)
                     """,
                     report_id, req.game_id, req.client_id,
-                    (req.category or "otro")[:32], description, context_json, created_at,
+                    category, description, context_json, created_at,
                 )
             saved_to = "postgresql://carcosa_reports"
         except Exception as e:
@@ -1050,9 +1055,9 @@ async def submit_report(req: ReportRequest) -> Dict[str, Any]:
                     "id": report_id,
                     "game_id": req.game_id,
                     "client_id": req.client_id,
-                    "category": req.category,
+                    "category": category,
                     "description": description,
-                    "context": req.context,
+                    "context": context_stored,
                     "created_at": created_at.isoformat(),
                 }, ensure_ascii=False) + "\n")
             saved_to = FS_REPORTS_PATH
@@ -1066,6 +1071,17 @@ async def submit_report(req: ReportRequest) -> Dict[str, Any]:
 @app.get("/reports")
 async def list_reports(limit: int = 100) -> Dict[str, Any]:
     """Lista los reportes de error acumulados (para recolectarlos y triarlos)."""
+    limit = max(1, min(1000, int(limit)))
+
+    def _safe_ctx(raw: Any) -> Any:
+        # Una fila con JSON corrupto no debe tumbar todo el listado.
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {"_corrupt": True}
+
     if _db_pool:
         try:
             async with _db_pool.acquire() as conn:
@@ -1078,7 +1094,7 @@ async def list_reports(limit: int = 100) -> Dict[str, Any]:
                     {
                         "id": r["id"], "game_id": r["game_id"], "client_id": r["client_id"],
                         "category": r["category"], "description": r["description"],
-                        "context": json.loads(r["context"]) if r["context"] else {},
+                        "context": _safe_ctx(r["context"]),
                         "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                     }
                     for r in rows
