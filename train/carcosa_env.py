@@ -34,6 +34,7 @@ from engine.board import floor_of, neighbors
 from engine.tension import compute_features, tension_T
 from sim.memory import PRIORITY_EVENT, PRIORITY_KEY, PRIORITY_MONSTER, PRIORITY_OMEN, PRIORITY_TREASURE, card_priority
 from sim.runner import make_smoke_state
+from sim.policies import _keys_total
 
 
 class CarcosaEnv(gym.Env):
@@ -171,8 +172,9 @@ class CarcosaEnv(gym.Env):
         self.curriculum_far_player_prob = max(0.0, min(1.0, float(curriculum_far_player_prob)))
         
         # Observation space: 24 features [-1.0, 1.0]
+        # Observation space: 10 base + 14 local + 45 node_block(15×3) + 92 player_block(4×23) + 6 global = 167
         self.observation_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(24,), dtype=np.float32
+            low=-1.0, high=1.0, shape=(167,), dtype=np.float32
         )
         
         # Action space: Discrete con número fijo de acciones
@@ -329,7 +331,60 @@ class CarcosaEnv(gym.Env):
                     dist_key_norm, key_here, deck_empty, critical_team, king_risk, keys_missing
                 ]
         
-        obs = np.array(base_obs + local_obs, dtype=np.float32)
+        # --- OBSERVACIÓN AMPLIADA: tablero completo (Fase 1, línea [092]) ---
+        # 15 nodos × 3 features: [remaining_norm, especial_revelado, especial_destruido]
+        # (pasillo/escalera no necesitan one-hot: remaining=0 y son structura fija)
+        node_block = []
+        ALL_NODES = ["F1_R1", "F1_R2", "F1_R3", "F1_R4", "F1_P",
+                     "F2_R1", "F2_R2", "F2_R3", "F2_R4", "F2_P",
+                     "F3_R1", "F3_R2", "F3_R3", "F3_R4", "F3_P"]
+        room_by_id = {str(rid): room for rid, room in self.state.rooms.items()} if self.state else {}
+        for nid in ALL_NODES:
+            if room_by_id and nid in room_by_id:
+                rm = room_by_id[nid]
+                deck = getattr(rm, "deck", None)
+                rem = float(deck.remaining()) / 15.0 if deck else 0.0
+                special_revealed = 1.0 if getattr(rm, "special_revealed", False) else 0.0
+                special_destroyed = 1.0 if getattr(rm, "special_destroyed", False) else 0.0
+            else:
+                rem, special_revealed, special_destroyed = 0.0, 0.0, 0.0
+            node_block.extend([rem, special_revealed, special_destroyed])
+
+        # 4 jugadores × 17 features:
+        # [room one-hot(15), sanity_norm, keys_norm, object_slots, at_minus5,
+        #  remaining_actions, status_count, has_stairs, king_risk]
+        player_block = []
+        players = self.state.players if self.state else {}
+        for pid in ["P1", "P2", "P3", "P4"]:
+            if pid in players:
+                p = players[pid]
+                room_oh = [1.0 if str(p.room) == nid else 0.0 for nid in ALL_NODES]
+                sanity_n = max(-5.0, min(5.0, float(p.sanity))) / 5.0
+                keys_n = float(p.keys) / 4.0
+                obj_slots = float(getattr(p, "object_slots", 0)) / 3.0
+                at_minus5 = 1.0 if getattr(p, "at_minus5", False) else 0.0
+                rem_act = float(getattr(p, "remaining_actions", 0)) / 2.0
+                status_count = min(1.0, float(len(getattr(p, "statuses", []) or [])) / 3.0)
+                has_stairs = 1.0 if any("TREASURE_STAIRS" in str(o) for o in (getattr(p, "objects", []) or [])) else 0.0
+                king_risk = 1.0 if (self.state and floor_of(p.room) == self.state.king_floor and p.sanity <= 0) else 0.0
+                player_block.extend(room_oh + [sanity_n, keys_n, obj_slots, at_minus5, rem_act, status_count, has_stairs, king_risk])
+            else:
+                player_block.extend([0.0] * 23)
+
+        # Globales (6): tension, ronda_norm, keys_total_norm, keys_destroyed_norm,
+        # king_floor_norm, false_king_floor_norm
+        if self.state:
+            rounds_n = min(1.0, float(self.state.round) / 60.0)
+            keys_total_n = float(_keys_total(self.state)) / 6.0
+            keys_destroyed_n = float(getattr(self.state, "keys_destroyed", 0)) / 6.0
+            king_floor_n = float(self.state.king_floor) / 3.0
+            fk = getattr(self.state, "false_king_floor", None)
+            fk_n = float(fk) / 3.0 if fk else 0.0
+        else:
+            rounds_n = keys_total_n = keys_destroyed_n = king_floor_n = fk_n = 0.0
+        global_block = [tension, rounds_n, keys_total_n, keys_destroyed_n, king_floor_n, fk_n]
+
+        obs = np.array(base_obs + local_obs + node_block + player_block + global_block, dtype=np.float32)
         return np.clip(obs, -1.0, 1.0)
     
     def _get_legal_action_mask(self) -> np.ndarray:
