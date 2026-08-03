@@ -1,20 +1,21 @@
-[gd_scene load_steps=5 format=3 uid="uid://carcosa_main_v1"]
+[gd_scene format=3 uid="uid://dsd883argbodu"]
 
-[ext_resource type="Script" path="res://scripts/Main.gd" id="1_main"]
-[ext_resource type="Script" path="res://scripts/BoardView.gd" id="2_board"]
-[ext_resource type="Script" path="res://scripts/ActionPanel.gd" id="3_action"]
+[ext_resource type="Script" uid="uid://fkpcj2any5eu" path="res://scripts/Main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://bnadbpkytpper" path="res://scripts/BoardView.gd" id="2_board"]
 [ext_resource type="PackedScene" path="res://scenes/ActionPanel.tscn" id="4_action_panel"]
+[ext_resource type="PackedScene" uid="uid://c1b6d03p7tied" path="res://scenes/Board3D.tscn" id="4_vcsgt"]
+[ext_resource type="Script" uid="uid://pghmpu5b1vc7" path="res://scripts/Board3D.gd" id="5_c01mt"]
 
-; ── Raíz ──────────────────────────────────────────────────────────────────────
-[node name="Main" type="Control"]
+[node name="Main" type="Control" unique_id=1801945240]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1_main")
 
-; ── LOBBY PANEL ───────────────────────────────────────────────────────────────
-[node name="LobbyPanel" type="PanelContainer" parent="."]
+[node name="LobbyPanel" type="PanelContainer" parent="." unique_id=669917736]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -22,100 +23,95 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="LobbyPanel"]
+[node name="MarginContainer" type="MarginContainer" parent="LobbyPanel" unique_id=1760293003]
 layout_mode = 2
 theme_override_constants/margin_left = 60
 theme_override_constants/margin_top = 60
 theme_override_constants/margin_right = 60
 theme_override_constants/margin_bottom = 60
 
-[node name="VBox" type="VBoxContainer" parent="LobbyPanel/MarginContainer"]
+[node name="VBox" type="VBoxContainer" parent="LobbyPanel/MarginContainer" unique_id=738000167]
 layout_mode = 2
 theme_override_constants/separation = 18
 
-[node name="Title" type="Label" parent="LobbyPanel/MarginContainer/VBox"]
+[node name="Title" type="Label" parent="LobbyPanel/MarginContainer/VBox" unique_id=848110487]
 layout_mode = 2
+theme_override_font_sizes/font_size = 28
 text = "CARCOSA — Partida Humana"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 28
 
-[node name="Separator1" type="HSeparator" parent="LobbyPanel/MarginContainer/VBox"]
+[node name="Separator1" type="HSeparator" parent="LobbyPanel/MarginContainer/VBox" unique_id=322108872]
 layout_mode = 2
 
-[node name="SeedRow" type="HBoxContainer" parent="LobbyPanel/MarginContainer/VBox"]
+[node name="SeedRow" type="HBoxContainer" parent="LobbyPanel/MarginContainer/VBox" unique_id=148442147]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="SeedLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox/SeedRow"]
+[node name="SeedLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox/SeedRow" unique_id=1431172103]
 layout_mode = 2
 text = "Seed:"
 vertical_alignment = 1
 
-[node name="SeedInput" type="SpinBox" parent="LobbyPanel/MarginContainer/VBox/SeedRow"]
+[node name="SeedInput" type="SpinBox" parent="LobbyPanel/MarginContainer/VBox/SeedRow" unique_id=1048062243]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 1.0
 max_value = 999999.0
 value = 1.0
 
-[node name="RandomSeedBtn" type="Button" parent="LobbyPanel/MarginContainer/VBox/SeedRow"]
+[node name="RandomSeedBtn" type="Button" parent="LobbyPanel/MarginContainer/VBox/SeedRow" unique_id=851314820]
 layout_mode = 2
-text = "?"
 tooltip_text = "Seed aleatoria"
+text = "?"
 
-; ── Selector de cantidad de jugadores ─────────────────────────────────────────
-[node name="PlayerCountRow" type="HBoxContainer" parent="LobbyPanel/MarginContainer/VBox"]
+[node name="PlayerCountRow" type="HBoxContainer" parent="LobbyPanel/MarginContainer/VBox" unique_id=1869419251]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="PlayerCountLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox/PlayerCountRow"]
+[node name="PlayerCountLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox/PlayerCountRow" unique_id=713685660]
 layout_mode = 2
 text = "Jugadores:"
 vertical_alignment = 1
 
-[node name="PlayerCountInput" type="SpinBox" parent="LobbyPanel/MarginContainer/VBox/PlayerCountRow"]
+[node name="PlayerCountInput" type="SpinBox" parent="LobbyPanel/MarginContainer/VBox/PlayerCountRow" unique_id=474712879]
 layout_mode = 2
-size_flags_horizontal = 1
 min_value = 1.0
 max_value = 4.0
 value = 2.0
-step = 1.0
 
-; ── Nombres de jugadores (poblado dinámicamente por Main.gd) ─────────────────
-[node name="PlayerNamesContainer" type="VBoxContainer" parent="LobbyPanel/MarginContainer/VBox"]
+[node name="PlayerNamesContainer" type="VBoxContainer" parent="LobbyPanel/MarginContainer/VBox" unique_id=345341697]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-; ── Sprint 5: URL del servidor (configurable para LAN / VPS) ─────────────────
-[node name="ServerRow" type="HBoxContainer" parent="LobbyPanel/MarginContainer/VBox"]
+[node name="ServerRow" type="HBoxContainer" parent="LobbyPanel/MarginContainer/VBox" unique_id=1107989175]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="ServerLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox/ServerRow"]
+[node name="ServerLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox/ServerRow" unique_id=109956796]
 layout_mode = 2
 text = "Servidor:"
 vertical_alignment = 1
 
-[node name="ServerInput" type="LineEdit" parent="LobbyPanel/MarginContainer/VBox/ServerRow"]
+[node name="ServerInput" type="LineEdit" parent="LobbyPanel/MarginContainer/VBox/ServerRow" unique_id=1384038728]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "http://127.0.0.1:8765"
 placeholder_text = "http://IP:8765"
 
-[node name="StartButton" type="Button" parent="LobbyPanel/MarginContainer/VBox"]
+[node name="StartButton" type="Button" parent="LobbyPanel/MarginContainer/VBox" unique_id=762407899]
 layout_mode = 2
-text = "Nueva partida"
 theme_override_font_sizes/font_size = 16
+text = "Nueva partida"
 
-[node name="HintLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox"]
+[node name="HintLabel" type="Label" parent="LobbyPanel/MarginContainer/VBox" unique_id=2067336778]
+modulate = Color(0.7, 0.7, 0.7, 1)
 layout_mode = 2
-text = "Inicia el servidor:  uvicorn sim.game_server:app --host 0.0.0.0 --port 8765\nPara LAN: cambia la URL al IP del host (ej. http://192.168.1.10:8765)"
+text = "Inicia el servidor:  uvicorn sim.game_server:app --host 0.0.0.0 --port 8765
+Para LAN: cambia la URL al IP del host (ej. http://192.168.1.10:8765)"
 horizontal_alignment = 1
 autowrap_mode = 3
-modulate = Color(0.7, 0.7, 0.7, 1.0)
 
-; ── GAME PANEL ────────────────────────────────────────────────────────────────
-[node name="GamePanel" type="VBoxContainer" parent="."]
+[node name="GamePanel" type="VBoxContainer" parent="." unique_id=783395297]
 visible = false
 layout_mode = 1
 anchors_preset = 15
@@ -125,98 +121,107 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 4
 
-[node name="StatusLabel" type="Label" parent="GamePanel"]
+[node name="StatusLabel" type="Label" parent="GamePanel" unique_id=1302442182]
 layout_mode = 2
+theme_override_font_sizes/font_size = 14
 text = "Iniciando..."
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 14
 
-[node name="HSplit" type="HSplitContainer" parent="GamePanel"]
+[node name="HSplit" type="HSplitContainer" parent="GamePanel" unique_id=1111096336]
 layout_mode = 2
 size_flags_vertical = 3
+split_offsets = PackedInt32Array(820)
 split_offset = 820
 
-; ── BoardView (ScrollContainer con script BoardView.gd) ───────────────────────
-[node name="BoardView" type="ScrollContainer" parent="GamePanel/HSplit"]
+[node name="BoardView" type="ScrollContainer" parent="GamePanel/HSplit" unique_id=1145080644]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 script = ExtResource("2_board")
 
-[node name="ScrollContent" type="VBoxContainer" parent="GamePanel/HSplit/BoardView"]
+[node name="ScrollContent" type="VBoxContainer" parent="GamePanel/HSplit/BoardView" unique_id=575721968]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 20
 
-[node name="BoardContainer" type="VBoxContainer" parent="GamePanel/HSplit/BoardView/ScrollContent"]
+[node name="BoardContainer" type="VBoxContainer" parent="GamePanel/HSplit/BoardView/ScrollContent" unique_id=670768114]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 16
 
-[node name="Content" type="RichTextLabel" parent="GamePanel/HSplit/BoardView/ScrollContent"]
+[node name="Content" type="RichTextLabel" parent="GamePanel/HSplit/BoardView/ScrollContent" unique_id=653898086]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 bbcode_enabled = true
 fit_content = true
 scroll_active = false
-text = ""
 
-; ── ActionPanel (ScrollContainer con script ActionPanel.gd) ───────────────────
-[node name="ActionsContainer" type="HBoxContainer" parent="GamePanel/HSplit"]
+[node name="ActionsContainer" type="HBoxContainer" parent="GamePanel/HSplit" unique_id=1642972343]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 10
 
-[node name="ActionPanel1" parent="GamePanel/HSplit/ActionsContainer" instance=ExtResource("4_action_panel")]
+[node name="ActionPanel1" parent="GamePanel/HSplit/ActionsContainer" unique_id=1839967672 instance=ExtResource("4_action_panel")]
 layout_mode = 2
 
-[node name="ActionPanel2" parent="GamePanel/HSplit/ActionsContainer" instance=ExtResource("4_action_panel")]
+[node name="ActionPanel2" parent="GamePanel/HSplit/ActionsContainer" unique_id=262994020 instance=ExtResource("4_action_panel")]
 layout_mode = 2
 
-[node name="EventLogPanel" type="PanelContainer" parent="GamePanel"]
+[node name="Board3DContainer" type="SubViewportContainer" parent="GamePanel/HSplit" unique_id=404149478]
+custom_minimum_size = Vector2(600, 400)
 layout_mode = 2
+stretch = true
+
+[node name="Board3DViewport" type="SubViewport" parent="GamePanel/HSplit/Board3DContainer" unique_id=1306600641]
+size = Vector2i(2, 2)
+
+[node name="Board3D" type="Node3D" parent="GamePanel/HSplit/Board3DContainer/Board3DViewport" unique_id=1674821689 instance=ExtResource("4_vcsgt")]
+script = ExtResource("5_c01mt")
+
+[node name="EventLogPanel" type="PanelContainer" parent="GamePanel" unique_id=70318013]
 custom_minimum_size = Vector2(0, 130)
+layout_mode = 2
 
-[node name="Margin" type="MarginContainer" parent="GamePanel/EventLogPanel"]
+[node name="Margin" type="MarginContainer" parent="GamePanel/EventLogPanel" unique_id=915556666]
 layout_mode = 2
 theme_override_constants/margin_left = 8
-theme_override_constants/margin_right = 8
 theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 4
 
-[node name="VBox" type="VBoxContainer" parent="GamePanel/EventLogPanel/Margin"]
+[node name="VBox" type="VBoxContainer" parent="GamePanel/EventLogPanel/Margin" unique_id=1303132117]
 layout_mode = 2
 theme_override_constants/separation = 2
 
-[node name="EventLogHeader" type="Label" parent="GamePanel/EventLogPanel/Margin/VBox"]
+[node name="EventLogHeader" type="Label" parent="GamePanel/EventLogPanel/Margin/VBox" unique_id=548924337]
+modulate = Color(0.45, 0.45, 0.45, 1)
 layout_mode = 2
-text = "Historial"
 theme_override_font_sizes/font_size = 11
-modulate = Color(0.45, 0.45, 0.45, 1.0)
+text = "Historial"
 
-[node name="EventLogScroll" type="ScrollContainer" parent="GamePanel/EventLogPanel/Margin/VBox"]
+[node name="EventLogScroll" type="ScrollContainer" parent="GamePanel/EventLogPanel/Margin/VBox" unique_id=111546542]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="EventLogText" type="RichTextLabel" parent="GamePanel/EventLogPanel/Margin/VBox/EventLogScroll"]
+[node name="EventLogText" type="RichTextLabel" parent="GamePanel/EventLogPanel/Margin/VBox/EventLogScroll" unique_id=408905129]
 layout_mode = 2
 size_flags_horizontal = 3
 bbcode_enabled = true
+text = "[color=#444]— inicia una partida —[/color]"
 fit_content = true
 scroll_active = false
-text = "[color=#444]— inicia una partida —[/color]"
 
-[node name="SaveButton" type="Button" parent="GamePanel"]
+[node name="SaveButton" type="Button" parent="GamePanel" unique_id=927553976]
 layout_mode = 2
 text = "Guardar sesión"
 
-; ── RESULT PANEL ──────────────────────────────────────────────────────────────
-[node name="ResultPanel" type="PanelContainer" parent="."]
+[node name="ResultPanel" type="PanelContainer" parent="." unique_id=459912168]
 visible = false
 layout_mode = 1
+anchors_preset = -1
 anchor_left = 0.2
 anchor_top = 0.25
 anchor_right = 0.8
@@ -224,27 +229,28 @@ anchor_bottom = 0.75
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBox" type="VBoxContainer" parent="ResultPanel"]
+[node name="VBox" type="VBoxContainer" parent="ResultPanel" unique_id=846088468]
 layout_mode = 2
 theme_override_constants/separation = 20
 
-[node name="ResultLabel" type="Label" parent="ResultPanel/VBox"]
+[node name="ResultLabel" type="Label" parent="ResultPanel/VBox" unique_id=62334788]
 layout_mode = 2
+theme_override_font_sizes/font_size = 16
 text = "Partida terminada."
 horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
-theme_override_font_sizes/font_size = 16
 
-[node name="NewGameButton" type="Button" parent="ResultPanel/VBox"]
+[node name="NewGameButton" type="Button" parent="ResultPanel/VBox" unique_id=1698834057]
 layout_mode = 2
-text = "Nueva partida"
 theme_override_font_sizes/font_size = 14
+text = "Nueva partida"
 
-; ── ERROR LABEL ───────────────────────────────────────────────────────────────
-[node name="ErrorLabel" type="Label" parent="."]
+[node name="ErrorLabel" type="Label" parent="." unique_id=302749742]
 visible = false
+modulate = Color(1, 0.3, 0.3, 1)
 layout_mode = 1
+anchors_preset = -1
 anchor_left = 0.05
 anchor_top = 0.88
 anchor_right = 0.95
@@ -254,4 +260,3 @@ grow_vertical = 2
 text = "Error"
 horizontal_alignment = 1
 vertical_alignment = 1
-modulate = Color(1.0, 0.3, 0.3, 1.0)

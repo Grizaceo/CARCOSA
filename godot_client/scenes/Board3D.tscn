@@ -1,0 +1,87 @@
+[gd_scene format=3 uid="uid://c1b6d03p7tied"]
+
+[ext_resource type="Script" uid="uid://pghmpu5b1vc7" path="res://scripts/Board3D.gd" id="1_88qj3"]
+[ext_resource type="PackedScene" uid="uid://ww47ke82yoru" path="res://assets/city_capital.glb" id="1_aoh5g"]
+
+[sub_resource type="Environment" id="Environment_88qj3"]
+background_mode = 1
+background_color = Color(0.04, 0.03, 0.02, 1)
+ambient_light_color = Color(0.15, 0.1, 0.06, 1)
+ambient_light_energy = 0.3
+tonemap_mode = 3
+tonemap_exposure = 1.2
+ssao_enabled = true
+ssao_intensity = 1.5
+glow_enabled = true
+glow_intensity = 0.8
+fog_enabled = true
+fog_light_color = Color(0.12, 0.08, 0.05, 1)
+fog_light_energy = 0.5
+fog_density = 0.08
+
+[node name="Board3D" type="Node3D" unique_id=1674821689]
+script = ExtResource("1_88qj3")
+
+[node name="IsometricCamera" type="Camera3D" parent="." unique_id=28655066]
+transform = Transform3D(0.70710677, -0.40824434, 0.577353, 0, 0.8165005, 0.5773447, -0.70710677, -0.40824434, 0.577353, 10, 10, 10)
+projection = 1
+size = 12.0
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1786269498]
+transform = Transform3D(0.70710677, -0.49999997, 0.49999997, 0, 0.70710677, 0.70710677, -0.70710677, -0.49999997, 0.49999997, 0, 0, 0)
+shadow_enabled = true
+
+[node name="Floors" type="Node3D" parent="." unique_id=1520757333]
+
+[node name="Floor_1" type="Node3D" parent="Floors" unique_id=1587341306]
+
+[node name="F1_R1" parent="Floors/Floor_1" unique_id=676332490 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 3)
+
+[node name="F1_R2" parent="Floors/Floor_1" unique_id=1398859846 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 3)
+
+[node name="F1_P" parent="Floors/Floor_1" unique_id=79166215 instance=ExtResource("1_aoh5g")]
+
+[node name="F1_R3" parent="Floors/Floor_1" unique_id=1510692701 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -3)
+
+[node name="F1_R4" parent="Floors/Floor_1" unique_id=1035880413 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, -3)
+
+[node name="Floor_2" type="Node3D" parent="Floors" unique_id=1774441491]
+
+[node name="F2_R1" parent="Floors/Floor_2" unique_id=1547030563 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 3.5, 3)
+
+[node name="F2_R2" parent="Floors/Floor_2" unique_id=1709966321 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 3.5, 3)
+
+[node name="F2_P" parent="Floors/Floor_2" unique_id=1115112207 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.5, 0)
+
+[node name="F2_R3" parent="Floors/Floor_2" unique_id=882941257 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 3.5, -3)
+
+[node name="F2_R4" parent="Floors/Floor_2" unique_id=1593814178 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 3.5, -3)
+
+[node name="Floor_3" type="Node3D" parent="Floors" unique_id=1997067064]
+
+[node name="F3_R1" parent="Floors/Floor_3" unique_id=493991689 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 7, 3)
+
+[node name="F3_R2" parent="Floors/Floor_3" unique_id=1800693914 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 7, 3)
+
+[node name="F3_P" parent="Floors/Floor_3" unique_id=1045337928 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, 0)
+
+[node name="F3_R3" parent="Floors/Floor_3" unique_id=751540880 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 7, -3)
+
+[node name="F3_R4" parent="Floors/Floor_3" unique_id=809076769 instance=ExtResource("1_aoh5g")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 7, -3)
+
+[node name="WorldEnv" type="WorldEnvironment" parent="." unique_id=1634362563]
+environment = SubResource("Environment_88qj3")
