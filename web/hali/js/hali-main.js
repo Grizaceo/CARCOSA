@@ -235,6 +235,26 @@ HALI.app = (() => {
     }
   }
 
+  async function watchBotsGame() {
+    const base = _serverBase();
+    const seedRaw = document.getElementById('new-seed').value.trim();
+    const seed = seedRaw ? parseInt(seedRaw, 10) : Math.floor(Math.random() * 1e6);
+    const players_config = ['P1', 'P2', 'P3', 'P4'].map((pid) => ({ pid, control: 'bot' }));
+    try {
+      _setStatus('Creando partida 100% bots (espectador)…');
+      const res = await data.LiveClient.startGame(base, {
+        seed, players_config,
+        draw_mode: document.getElementById('new-drawmode').value,
+        client_id: _cid(),
+      });
+      document.getElementById('live-game').value = res.game_id;
+      await connectLive(base, res.game_id);
+      _setStatus(`Espectador ${res.game_id} · seed ${seed} · 4 bots GOAL en vivo hasta game_over`);
+    } catch (e) {
+      _setStatus('No se pudo crear: ' + e.message + ' — ¿está corriendo el server? (uvicorn sim.game_server:app)');
+    }
+  }
+
   async function saveCurrentGame() {
     if (!S.live) return;
     try {
@@ -961,6 +981,7 @@ HALI.app = (() => {
 
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
     on('btn-create', createGame);
+    on('btn-watch-bots', watchBotsGame);
     on('btn-connect', () => {
       const gid = document.getElementById('live-game').value.trim();
       if (!gid) { _setStatus('Falta el game_id'); return; }
@@ -997,7 +1018,7 @@ HALI.app = (() => {
     });
   }
 
-  return { init, loadReplayObject, loadReplayText, connectLive, createGame, seek, refreshGamesList, state: S };
+  return { init, loadReplayObject, loadReplayText, connectLive, createGame, watchBotsGame, seek, refreshGamesList, state: S };
 })();
 
 document.addEventListener('DOMContentLoaded', HALI.app.init);

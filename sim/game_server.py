@@ -572,13 +572,16 @@ async def _auto_advance_until_human(game_id: str) -> None:
 
     session = _get_session(game_id)
     human_ids: set = session.get("human_ids", set())
+    has_human: bool = session.get("has_human", bool(human_ids))
     cfg: Config = session["cfg"]
     rng: RNG = session["rng"]
 
     kpol = get_king_policy(getattr(cfg, "KING_POLICY", "RANDOM"), cfg)
     ppol = get_player_policy("GOAL", cfg)
 
-    max_iter: int = 200  # safety valve
+    # Si no hay humanos, la partida es 100% bots: correr hasta game_over.
+    # Si hay humanos, tope de seguridad para no bloquear la respuesta HTTP.
+    max_iter: int = 5000 if not has_human else 200
     it: int = 0
 
     while it < max_iter:
@@ -587,8 +590,8 @@ async def _auto_advance_until_human(game_id: str) -> None:
             break
 
         actor: str = _active_actor(state)
-        # ¿Es humano? → parar y esperar input
-        if actor in human_ids:
+        # ¿Es humano? → parar y esperar input (solo aplica si hay humanos)
+        if has_human and actor in human_ids:
             break
 
         try:
@@ -754,9 +757,6 @@ async def start_game(req: StartRequest) -> Dict[str, Any]:
         human_ids = {p for p in req.players if p in valid_pids}
         local_ids = set(human_ids)
 
-    if not human_ids:
-        raise HTTPException(status_code=400, detail="Debe haber al menos un jugador humano.")
-
     # Siempre crear estado completo (4 jugadores). El engine lo requiere.
     state = make_smoke_state(seed=req.seed, cfg=cfg)
 
@@ -779,6 +779,11 @@ async def start_game(req: StartRequest) -> Dict[str, Any]:
     all_ids = [str(pid) for pid in state.players.keys()]
     bot_ids = [pid for pid in all_ids if pid not in human_ids]
 
+    # Validación: debe haber al menos un jugador (humano o bot).
+    # Permitimos 0 humanos (partida 100% bots = modo espectador en vivo).
+    if not human_ids and not bot_ids:
+        raise HTTPException(status_code=400, detail="Debe haber al menos un jugador (humano o bot).")
+
     seat_claims: Dict[str, str] = {}
     if req.client_id:
         for pid in local_ids:
@@ -793,6 +798,7 @@ async def start_game(req: StartRequest) -> Dict[str, Any]:
         "step_idx": 0,
         "human_ids": human_ids,
         "bot_ids": set(bot_ids),
+        "has_human": bool(human_ids),
         "seat_claims": seat_claims,
         "saved_to": None,
     }
