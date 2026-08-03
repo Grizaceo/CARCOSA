@@ -563,10 +563,13 @@ def _single_step(session: Dict[str, Any], actor: str, action_type: str, action_d
     return next_state
 
 
-async def _auto_advance_until_human(game_id: str) -> None:
+async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
     """
     Avanza el estado automáticamente mientras el actor activo NO sea humano.
     Maneja tanto bots (policy=GOAL) como fases del KING.
+
+    Si delay > 0 (modo espectador 100% bots), espera `delay` segundos entre
+    pasos para que el cliente vea la partida a ritmo humano vía WebSocket.
     """
     from sim.policies import get_king_policy, get_player_policy
 
@@ -621,6 +624,10 @@ async def _auto_advance_until_human(game_id: str) -> None:
         # Broadcast state after each bot action
         await _broadcast_state(game_id)
         it += 1
+
+        # Ritmo de espectador: pausa para que el cliente vea los frames a velocidad humana
+        if delay > 0:
+            await asyncio.sleep(delay)
 
 
 # ── Persistencia de partidas terminadas ───────────────────────────────────────
@@ -803,8 +810,15 @@ async def start_game(req: StartRequest) -> Dict[str, Any]:
         "saved_to": None,
     }
 
-    # Avanzar automáticamente si el primer turno es de un bot o de KING
-    await _auto_advance_until_human(game_id)
+    # Avanzar automáticamente si el primer turno es de un bot o de KING.
+    # En modo espectador (sin humanos) lo corremos en background con ritmo
+    # humano, para que el cliente reciba el game_id al instante y vea los
+    # frames llegar por WebSocket a velocidad visible (no un burst final).
+    if not human_ids:
+        BOT_STEP_DELAY = 0.35  # segundos entre pasos en modo espectador
+        asyncio.create_task(_auto_advance_until_human(game_id, delay=BOT_STEP_DELAY))
+    else:
+        await _auto_advance_until_human(game_id)
 
     # Guardar sesión activa en disco
     save_session_to_disk(game_id)
