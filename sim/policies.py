@@ -1065,8 +1065,12 @@ class HabitanteDeCarcosaPolicy(GoalDirectedPlayerPolicy):
     endgame_force_umbral: bool = True
 
     def __post_init__(self) -> None:
-        # Mantener parÃ¡metros fijos (no cargar policy_params.json)
-        return
+        # Mantener parámetros fijos (no cargar policy_params.json).
+        # Pero sí debemos inicializar los atributos privados que usa choose(),
+        # igual que la clase padre, para no romper en runtime.
+        self._role_sanity_bias = {}
+        self._team_memory = None
+        self._bot_memories = None
 @dataclass
 class HeuristicKingPolicy(KingPolicy):
     cfg: Config = Config()
@@ -1311,6 +1315,8 @@ class RandomPolicy(PlayerPolicy):
     Política Aleatoria (Baseline):
     - Elige cualquier acción legal con probabilidad uniforme.
     """
+    cfg: Config = Config()
+
     def choose(self, state: GameState, rng: RNG) -> Action:
         actor = _get_active_actor(state)
         acts = get_legal_actions(state, actor)
