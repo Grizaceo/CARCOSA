@@ -1,439 +1,101 @@
 # CARCOSA
 
-Motor de simulacion, entrenamiento y documentacion canonica para el juego CARCOSA.
+Motor de simulación, entrenamiento y documentación canónica para el juego de mesa cooperativo **CARCOSA** (universo *The Yellow King / Carcosa*): 3 pisos, 12 habitaciones + pasillos, 4 jugadores vs monstruos y el Rey, recolectar 4 llaves y escapar por el Umbral.
 
 El repositorio combina tres capas:
 
-- `engine/`: reglas, estado, tablero, cartas, monstruos, habitaciones especiales y condiciones de victoria/derrota.
-- `sim/` y `train/`: simulacion, evaluacion, behavioral cloning y reinforcement learning.
-- `docs/` y `documentos/`: canon operativo, reportes tecnicos y material de referencia.
+- `engine/`: reglas, estado, tablero, cartas, monstruos, habitaciones especiales y condiciones de victoria/derrota. **Fuente única de verdad del juego.**
+- `sim/` y `train/`: simulación headless, server multijugador, políticas de bots, behavioral cloning y reinforcement learning.
+- `web/`, `web/hali/`, `godot_client/`: tres frontends jugables (2D canvas, isométrico 2.5D, y 3D Godot).
+- `docs/` y `documentos/`: canon operativo, reportes técnicos y material de referencia.
 
-## Estado del proyecto
+## Regla de oro
 
-- Tablero canonico de 3 pisos con mazos ciclicos por habitacion.
-- Sistema de roles, objetos, estados, monstruos y habitaciones especiales.
-- Entorno para entrenamiento de agentes y pruebas automatizadas extensas.
-- Flujo de trabajo principal basado en Docker para desarrollo y experimentacion.
+**El motor (`engine/`) es la única fuente de verdad de las reglas.** Los frontends (`web/`, `web/hali/`, `godot_client/`) NO implementan reglas: leen `GET /legal` + `GET /state` y envían `POST /act`. Para cambiar una regla, se edita `engine/`, no el JS/GDP.
 
-## Inicio rapido
+## Estado del proyecto (2026-08-03)
 
-### Docker
+- Motor de reglas determinista (verificado byte-a-byte, seed 42, 300 pasos, 2 corridas idénticas).
+- **439 tests pasan** (1 deseleccionado: `test_smoke_pipeline`, requiere `sb3_contrib` ausente localmente — no es regresión).
+- Server multijugador FastAPI funcional: hotseat local + asientos remotos + bots de relleno (política GOAL).
+- Tres frontends: `web/` (2D canvas playtest), `web/hali/` (isométrico 2.5D jugable), `godot_client/` (3D con Godot MCP Native).
+- Material Print & Play fiel al código actual: `docs/releases/Carcosa_Reglas_PnP_v2026-08-02.pdf`.
 
-Build de dependencias:
+### Deuda conocida (auditoría 2026-07-12, abierta)
 
-```bash
-docker build -f Dockerfile.deps -t carcosa:deps .
-```
+- **Bots**: 2 políticas crashean al instante (`RandomPolicy`, `HabitanteDeCarcosa`); pathfinding no cruza pisos (suben por suerte); anti-stall muertos.
+- **RL**: el agente elige solo tipo de acción (no destino); 59/60 episodios no llegan a `game_over` → señal terminal casi nula. BCNN/HYBRID dan `FileNotFoundError` (falta `models_bc/bc_mlp_all_best.pt`).
+- **Sesiones**: `GameState.from_dict` pierde `role_id` / double-roll / monster stun al restaurar.
 
-Build de la app:
+## Inicio rápido
 
-```bash
-docker build -f Dockerfile.app -t carcosa:app .
-```
-
-Ejecutar una simulacion:
+### Server multijugador (recomendado para jugar)
 
 ```bash
-docker run --rm -it -v ${PWD}:/app -w /app carcosa:app python -m sim.runner --seed 1 --max-steps 400
+cd ~/.hermes/workspace/ACTIVE/CARCOSA
+pip install -e .            # entorno con FastAPI/uvicorn
+CONDA_NO_PLUGINS=true uvicorn sim.game_server:app --host 0.0.0.0 --port 8765
 ```
 
-### Python local
+Luego abre en el navegador:
+
+- `http://localhost:8765/` → frontend 2D (playtest)
+- `http://localhost:8765/hali` → frontend isométrico 2.5D
+
+Contrato de API (única fuente que consumen los frontends):
+
+- `POST /start` → `{game_id, state}` (configura asientos con `players_config`: `control` = `local` | `remote` | `bot`)
+- `GET /state?game_id=...` → estado resumido
+- `GET /legal?game_id=...&actor=...` → acciones legales (el frontend solo muestra lo que el server dice)
+- `POST /act` → aplica acción y devuelve nuevo estado
+- `POST /claim` → reclamar asiento humano (multijugador remoto)
+
+### Simulación headless
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-pytest -q
+python -m sim.runner --seed 1 --max-steps 400 --policy GOAL
+# genera runs/<ts>_<policy>/seedN.jsonl + _summary.json (replay renderizable paso a paso)
 ```
+
+### Tests
+
+```bash
+pytest -q                       # 439 pasan (excluye e2e_web / smoke_pipeline por defecto)
+pytest -q -k "not e2e_web"      # suite completa sin el e2e de navegador
+```
+
+### Godot 3D client
+
+```bash
+cd godot_client
+./launch_carcosa_mcp.sh         # levanta Godot 4.x + MCP server en puerto 9080
+```
+
+Requiere Godot 4.6+ y el addon `godot_client/addons/godot_mcp/`.
 
 ## Estructura
 
 ```text
-engine/      Motor principal del juego
-sim/         Runner, politicas y metricas
-train/       Entornos y pipelines de entrenamiento
-tests/       Suite de pruebas funcionales y canonicidad
-tools/       Scripts de analisis y soporte
-docs/        Documentacion tecnica y canon
-documentos/  Reportes operativos y experimentales
+engine/          Motor principal del juego (reglas, estado, transiciones, legalidad, RNG)
+sim/             Runner headless, server multijugador, políticas de bots, métricas
+train/           Entornos y pipelines BC / RL (torch + sb3_contrib)
+web/              Frontend 2D canvas (playtest)
+web/hali/        Frontend isométrico 2.5D jugable
+godot_client/     Cliente 3D Godot + MCP Native
+tests/           Suite de pruebas funcionales y canonicidad (439 tests)
+tools/           Scripts de análisis y soporte (run_versioned, ai_ready_export, experiment)
+docs/            Documentación técnica y canon (incl. releases/ con PnP)
+documentos/      Reportes operativos y experimentales
 ```
+
+## Documentación canónica
+
+Para la fuente de verdad de las reglas del juego:
+
+- [docs/releases/Carcosa_Reglas_PnP_v2026-08-02.pdf](docs/releases/Carcosa_Reglas_PnP_v2026-08-02.pdf) — reglas PnP fieles al código actual
+- [docs/Carcosa_Canon_Actualizado_PnP_v0_4.pdf](docs/Carcosa_Canon_Actualizado_PnP_v0_4.pdf) — canon base de comparación
+- [docs/AUDIT_SIM_BOTS_RL_2026-07-12.md](docs/AUDIT_SIM_BOTS_RL_2026-07-12.md) — auditoría funcional de sim/bots/RL
 
 ## Licencia
 
-Este repositorio se publica bajo `CC BY-NC-SA 4.0`. Esta licencia es adecuada para contenido de juego, reglas, documentos y material creativo del proyecto. Ver [LICENSE](LICENSE).
-
-## Workflow de Docker
-
-This README documents the recommended Docker workflow for development and experiments.
-
-Quick commands
-
-- Build deps image (heavy, do rarely):
-  ```bash
-  docker build -f Dockerfile.deps -t carcosa:deps .
-  ```
-
-- Build app image (fast):
-  ```bash
-  docker build -f Dockerfile.app -t carcosa:app .
-  ```
-
-- Dev run (mounts project, no rebuild needed):
-  ```bash
-  docker run --rm -it -v ${PWD}:/app -w /app carcosa:app python -m sim.runner --seed 1 --max-steps 400
-  ```
-
-- Generate Behavioral Cloning dataset from `runs/*.jsonl`:
-  ```bash
-  docker run --rm -v ${PWD}:/app -w /app carcosa:app python tools/ai_ready_export.py --input runs/*.jsonl --mode bc --output data/bc_training.csv
-  ```
-
-- Quick BC training (1 epoch, CPU):
-  ```bash
-  docker run --rm -v ${PWD}:/app -w /app carcosa:app python train/train_bc.py --data data/bc_training.csv --epochs 1 --batch-size 32 --device cpu --save-dir models_dev --log-dir runs/dev
-  ```
-
-GPU notes
-
-- If you want to use the NVIDIA GPU (e.g., RTX 4060), build the GPU image and run with `--gpus all`:
-  ```bash
-  docker build -f Dockerfile.gpu -t carcosa:gpu .
-  docker run --gpus all --rm -it -v ${PWD}:/app -w /app carcosa:gpu python -c "import torch; print(torch.cuda.is_available())"
-  ```
-
-Dev helpers
-
-- Use `Makefile` targets on Unix / WSL or `run.ps1` on Windows to simplify common tasks.
-
-Tips to avoid rebuilding frequently
-
-- Keep `carcosa:deps` built and only rebuild `carcosa:app` when you change code.
-- Use volumes (`-v ${PWD}:/app`) to mount host code into containers for iterative development.
-- Enable BuildKit and use cache mounts if you need to rebuild dependencies often.
-# CARCOSA - Core Simulation Engine (P0 Canonical)
-
-A deterministic game engine for CARCOSA (P0 core), ready for iteration.
-
-## Installation (WSL)
-
-### Prerequisites
-- Windows 10/11 with WSL 2 (Ubuntu 22.04+)
-- Python 3.11+
-- pip
-
-### Setup
-
-**Important:** WSL uses its own Linux filesystem. Do not mix Windows paths with WSL paths. These commands assume you have a separate clone in WSL at `/home/<user>/CARCOSA` (adjust to your actual WSL path).
-
-**Windows PowerShell (native)**
-```powershell
-python -m pip install -e .
-```
-
-**WSL bash**
-
-```bash
-cd /home/<user>/CARCOSA
-python -m pip install -e .
-```
-
-### Working with a virtual environment (recommended)
-Use a local venv for all commands in this repo.
-
-**Windows PowerShell**
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e .
-```
-
-**WSL bash**
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-```
-
-## Running Tests
-
-**Windows PowerShell (native)**
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m pytest tests/ -q
-```
-
-**WSL bash**
-
-```bash
-cd /home/<user>/CARCOSA
-source .venv/bin/activate
-export PYTHONPATH=/home/<user>/CARCOSA:$PYTHONPATH
-pytest -q
-```
-
-**Note:** If you use the venv, activate it before running tests.
-
-## Project Structure
-
-```
-engine/          # Core simulation engine
-  board.py          # P0.1: Canonical room adjacencies (neighbors)
-  config.py         # Configuration constants (KING_PRESENCE_START_ROUND, etc.)
-  state.py          # Game state dataclasses
-  transition.py     # P0.2-P0.5: Game logic transitions
-  types.py          # Type definitions
-  rng.py            # Deterministic RNG with seed
-  effects/          # Card/effect system (WIP)
-
-sim/              # Simulation & AI policies
-  runner.py         # Simulation runner
-  policies.py       # Player policies
-  metrics.py        # Metrics tracking
-
-tests/            # Test suite (65 tests)
-  test_p0_canon.py  # P0 canonical tests (P0.1-P0.5)
-  test_p0_updates.py  # P0 updates (keys, attract, presence)
-  test_*.py         # Other functional tests
-
-tools/            # Development utilities
-  setup/           # Historical implementation scripts
-  debug/           # Debugging tools
-  validate/        # Validation scripts
-
-docs/             # Canon documentation
-  Carcosa_Canon_Actualizado_PnP_v0_4.pdf   # Canon vigente (print & play, base de comparación)
-  Carcosa_Libro_Tecnico_CANON.md           # Resumen operativo (derivado, revisar con canon vigente)
-  Carcosa_Libro_Tecnico_CANON_LEGACY.pdf   # Legacy PDF reference
-  Carcosa_Canon_P0_extracted.md            # P0 canonical rules (supporting, legacy)
-```
-
-## Running Simulations
-
-The simulator uses **versioned runs** to ensure clean data isolation between code versions.
-
-### Generate Runs
-
-Generate 5 seed runs for the current code version:
-
-**Windows PowerShell**
-```powershell
-.\.venv\Scripts\Activate.ps1
-python tools\run_versioned.py --all-seeds
-```
-
-**WSL bash**
-```bash
-cd /home/<user>/CARCOSA
-source .venv/bin/activate
-python tools/run_versioned.py --all-seeds
-```
-
-This creates a directory like `runs/runs_v4fee5ba_main_20260112_161915/` with:
-- `metadata.json` - Commit hash, branch, timestamp
-- `seed{1-5}.jsonl` - 5 complete game simulations
-
-### Analyze Runs
-
-Analyze d6 distribution (RNG uniformity):
-
-**Windows PowerShell**
-```powershell
-.\.venv\Scripts\Activate.ps1
-python tools\analyze_version.py
-
-# Specific version
-python tools\analyze_version.py runs/runs_v4fee5ba_main_20260112_161915
-
-# Compare multiple versions
-python tools\compare_versions.py
-```
-
-**WSL bash**
-```bash
-cd /home/<user>/CARCOSA
-source .venv/bin/activate
-
-# Latest version
-python tools/analyze_version.py
-
-# Specific version
-python tools/analyze_version.py runs/runs_v4fee5ba_main_20260112_161915
-
-# Compare multiple versions
-python tools/compare_versions.py
-```
-
-### Run Organization
-
-- **`runs/runs_v{COMMIT}_{BRANCH}_{TIMESTAMP}/`** - Current code version runs
-- **`runs_archive/`** - Archived runs from previous code versions
-
-See [docs/RUNS_ORGANIZATION.md](docs/RUNS_ORGANIZATION.md) for detailed structure.
-
-## Running Specific Test Classes
-
-**Windows PowerShell**
-```powershell
-.\.venv\Scripts\Activate.ps1
-
-# P0.1 - Canonical adjacencies (R1<->R2, R3<->R4)
-python -m pytest tests/test_p0_canon.py::TestP01Adjacencies -v
-
-# P0.2 - King expel (move to stair room in adjacent floor)
-python -m pytest tests/test_p0_canon.py::TestP02ExpelFromFloor -v
-
-# P0.3 - Stair reroll (1d4 per floor at end of round)
-python -m pytest tests/test_p0_canon.py::TestP03StairsReroll -v
-
-# P0.4 - Event on crossing to -5 (key/object destruction, sanity loss for others)
-python -m pytest tests/test_p0_canon.py::TestP04MinusFiveEvent -v
-
-# P0.5 - King presence damage (per round)
-python -m pytest tests/test_p0_canon.py::TestP05KingPresenceDamage -v
-```
-
-**WSL bash**
-```bash
-cd /home/<user>/CARCOSA
-source .venv/bin/activate
-
-# P0.1 - Canonical adjacencies (R1<->R2, R3<->R4)
-pytest tests/test_p0_canon.py::TestP01Adjacencies -v
-
-# P0.2 - King expel (move to stair room in adjacent floor)
-pytest tests/test_p0_canon.py::TestP02ExpelFromFloor -v
-
-# P0.3 - Stair reroll (1d4 per floor at end of round)
-pytest tests/test_p0_canon.py::TestP03StairsReroll -v
-
-# P0.4 - Event on crossing to -5 (key/object destruction, sanity loss for others)
-pytest tests/test_p0_canon.py::TestP04MinusFiveEvent -v
-
-# P0.5 - King presence damage (per round)
-pytest tests/test_p0_canon.py::TestP05KingPresenceDamage -v
-```
-
-## Windows (venv) End-to-End (Experiment pipeline)
-
-This short section shows how to run an end-to-end reproducible experiment on Windows (native venv, CPU). It uses the new `tools/experiment.py` orchestrator.
-
-1. Create and activate venv (PowerShell):
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e .
-python -m pip install pyyaml
-```
-
-2. Run the default experiment (this runs simulation -> export -> train (BC) -> eval -> index):
-
-```powershell
-python tools\experiment.py --config configs\experiment.default.yaml
-```
-
-3. Inspect results:
-
-- Summary and artifacts: `reports/<exp_id>/summary.json` and `reports/<exp_id>/summary.md`
-- Index of experiments: `reports/experiments.csv`
-
-4. Optional: run a smoke experiment (quick, CPU) by creating a small YAML and running the same script; see `tests/test_smoke_pipeline.py` for an example.
-
-
-## Command Usage Format (for future edits)
-When adding or editing commands in this README, always include both variants and keep Windows and WSL paths separate.
-
-**Windows PowerShell**
-```powershell
-.\.venv\Scripts\Activate.ps1
-<COMMAND>
-```
-
-**WSL bash**
-```bash
-cd /home/<user>/CARCOSA
-source .venv/bin/activate
-<COMMAND>
-```
-
-## Core Features (P0)
-
-### P0.1 - Canonical Adjacencies
-- **File**: `engine/board.py::neighbors()`
-- **Rule**: Rooms connect to corridor (1 move), plus direct connections R1<->R2 and R3<->R4
-- **Tests**: 6 tests in `TestP01Adjacencies`
-
-### P0.2 - King Expel (Move by Stairs)
-- **File**: `engine/transition.py::_expel_players_from_floor()`
-- **Rule**: Players on King's floor move to stair room in adjacent floor
-  - F1 -> F2 stair room
-  - F2 -> F1 stair room
-  - F3 -> F2 stair room
-- **Tests**: 4 tests in `TestP02ExpelFromFloor`
-
-### P0.3 - Stair Reroll
-- **File**: `engine/transition.py::_roll_stairs()`
-- **Rule**: Each floor rerolls stairs (1d4 per piso) at end of round using seeded RNG
-- **Tests**: 3 tests in `TestP03StairsReroll` (determinism verified)
-
-### P0.4 - Event on Crossing to -5
-- **File**: `engine/transition.py::_apply_minus5_transitions()`
-- **Rules**:
-  - Destroy player's keys and objects when crossing to <= -5
-  - Other players lose 1 sanity when someone crosses
-  - Player at -5 has 1 action per turn; restores 2 actions when leaving to -4
-  - Event fires only once on crossing (tracked by `at_minus5` flag)
-- **Tests**: 9 tests (basic + keys coherence + multiple players)
-
-### P0.4b - Attract (Atraer) with False King Exception
-- **File**: `engine/transition.py::_attract_players_to_floor()`
-- **Rule**: All players move to corridor of specified floor, EXCEPT those on the crown holder floor
-- **State**: `GameState.flags["CROWN_HOLDER"]` (player id)
-- **Tests**: 3 tests in `TestP04bAttractWithFalseKing`
-
-### P0.5 - King Presence Damage (REVISED TABLE)
-- **File**: `engine/transition.py::_presence_damage_for_round()`
-- **Canon Table** (confirmed):
-  - Rounds 1-3: 1 damage per round
-  - Rounds 4-6: 2 damage per round
-  - Rounds 7-9: 3 damage per round
-  - Rounds 10+: 4 damage per round
-- **Application**: Only to players on King's floor
-- **Tests**: 15 tests (4 in old P05, 12 parametrized in test_p0_updates)
-
-## Test Summary
-
-- **Total**: 65 tests passing OK
-  - P0.1 Adjacencies: 6 tests
-  - P0.2 Expel: 4 tests
-  - P0.3 Stairs: 3 tests
-  - P0.4a Minus5: 9 tests (+ keys coherence)
-  - P0.4b Attract: 3 tests
-  - P0.5 Presence: 15 tests (updated table)
-  - Other integration: 25 tests
-
-All tests are **deterministic**, use **fixed seeds**, and **no warnings**.
-
-
-## Implementation Status (v0.4.0 - Canon Compliant)
-
-| Feature | Implementation | Status |
-|---------|---|---|
-| **P0 Core** | Adjacencies, Expel, Stairs, Events, Presence | ✅ COMPLETED |
-| **Canon: Motemey** | Deck (14 cards), Buy/Sell, Key Logic | ✅ COMPLETED |
-| **Canon: Monsters** | Attack Phase, Stun, Trapped (3 turns) | ✅ COMPLETED |
-| **Canon: Keys** | Role Capacity, Return-to-Deck, Camera Letal | ✅ COMPLETED |
-| **Canon: Rooms** | Yellow Doors (Targeted), Armory (Infinite), etc. | ✅ COMPLETED |
-| **RNG** | Chi-Squared Verified Uniformity | ✅ COMPLETED |
-
-## Official Documentation
-For the canonical source of truth regarding game rules, refer to:
-- [docs/Carcosa_Canon_Actualizado_PnP_v0_4.pdf](docs/Carcosa_Canon_Actualizado_PnP_v0_4.pdf)
-- [docs/Carcosa_Libro_Tecnico_CANON.md](docs/Carcosa_Libro_Tecnico_CANON.md)
-
-## Development Utilities
-
-See `tools/README.md` for:
-- **Setup scripts**: Historical implementation records
-- **Debug tools**: Step-by-step debugging
-- **Validation**: Syntax, imports, and quick P0 checks
+Este repositorio se publica bajo `CC BY-NC-SA 4.0`. Ver [LICENSE](LICENSE).
