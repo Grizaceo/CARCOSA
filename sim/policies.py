@@ -628,10 +628,15 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         idx = sorted_pids.index(str(pid)) if str(pid) in sorted_pids else 0
         floors = [1, 2, 3, 2]  # P1→F1, P2→F2(Umbral), P3→F3, P4→F2
         return floors[idx % 4]
-    def _best_room_for_player(self, state: GameState, pid: PlayerId) -> Optional[RoomId]:
-        """Mejor habitación para explorar, priorizando el piso asignado al jugador."""
+    def _best_room_for_player(self, state: GameState, pid: PlayerId, need_keys: bool = False) -> Optional[RoomId]:
+        """Mejor habitación para explorar.
+
+        Por defecto prioriza el piso asignado al jugador (división de trabajo),
+        pero si faltan llaves para ganar (need_keys) y el piso asignado no tiene
+        cartas restantes, considera TODOS los pisos (cross-floor) para obligar al
+        bot a usar las escaleras en vez de quedarse atrapado en su piso.
+        """
         preferred = self._preferred_floor(pid, state)
-        # Primero intentar en piso preferido
         best_preferred: Optional[Tuple[int, str, RoomId]] = None
         best_global: Optional[Tuple[int, str, RoomId]] = None
         for rid, room in state.rooms.items():
@@ -647,6 +652,10 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                     best_preferred = cand
             if best_global is None or cand > best_global:
                 best_global = cand
+        # Si falta llegar a KEYS_TO_WIN y el piso asignado está agotado,
+        # soltar la restricción de piso y permitir cruzar a otro piso.
+        if need_keys and best_preferred is None and best_global is not None:
+            return best_global[2]
         # Prefer assigned floor if it has cards, else fallback global
         if best_preferred is not None:
             return best_preferred[2]
@@ -886,7 +895,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             if key_special:
                 return finalize(key_special)
 
-            goal = self._best_room_for_player(state, pid)
+            goal = self._best_room_for_player(state, pid, need_keys=need_keys)
             current_rem = _room_remaining(state, p.room)
             same_floor_goal = goal is not None and floor_of(goal) == floor_of(p.room)
             search_allowed = (current_rem >= self.search_local_min_remaining) or same_floor_goal
