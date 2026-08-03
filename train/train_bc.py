@@ -15,13 +15,54 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from train.carcosa_env import CarcosaEnv
 from sb3_contrib import MaskablePPO
 
-def train_bc(data_path="train/goldset_500_wins.pkl", model_save_path="models/bc_goldset_v1", epochs=200, lr=1e-3):
+def train_bc(data_path="train/goldset_500_wins.pkl", model_save_path="models/bc_goldset_v1", epochs=200, lr=1e-3, batch_size=64, device="cpu"):
     # Load data
-    with open(data_path, "rb") as f:
-        data = pickle.load(f)
-    
-    obs = torch.tensor(data["observations"], dtype=torch.float32)
-    actions = torch.tensor(data["actions"], dtype=torch.long)
+    if str(data_path).endswith(".csv"):
+        import csv
+        from train.carcosa_env import CarcosaEnv
+        
+        action_types_list = [a.value for a in CarcosaEnv.ACTION_TYPES]
+        observations = []
+        actions = []
+        
+        obs_cols = [
+            "obs_P_sanity",
+            "obs_P_keys",
+            "obs_P_mon",
+            "obs_P_umbral",
+            "obs_P_debuff",
+            "obs_P_king_risk",
+            "obs_P_crown",
+            "obs_P_round",
+            "obs_tension",
+            "obs_king_floor_norm"
+        ]
+        
+        with open(data_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                obs_row = []
+                for col in obs_cols:
+                    obs_row.append(float(row.get(col, 0.0)))
+                # Pad with 14 zeros to match the 24-feature shape expected by CarcosaEnv
+                obs_row.extend([0.0] * 14)
+                observations.append(obs_row)
+                
+                act_str = row.get("action", "")
+                if act_str in action_types_list:
+                    act_idx = action_types_list.index(act_str)
+                else:
+                    act_idx = 0
+                actions.append(act_idx)
+                
+        obs = torch.tensor(observations, dtype=torch.float32)
+        actions = torch.tensor(actions, dtype=torch.long)
+    else:
+        with open(data_path, "rb") as f:
+            data = pickle.load(f)
+        
+        obs = torch.tensor(data["observations"], dtype=torch.float32)
+        actions = torch.tensor(data["actions"], dtype=torch.long)
     
     print(f"Loaded {len(obs)} samples.")
     
@@ -35,8 +76,8 @@ def train_bc(data_path="train/goldset_500_wins.pkl", model_save_path="models/bc_
     val_dataset = TensorDataset(obs[val_indices], actions[val_indices])
     
     # Smaller batch size for better noise/generalization
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
     # Minimalist architecture from the training guide
     policy_kwargs = dict(
@@ -50,8 +91,8 @@ def train_bc(data_path="train/goldset_500_wins.pkl", model_save_path="models/bc_
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=15)
     criterion = nn.CrossEntropyLoss()
     
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    policy.to(device)
+    device_obj = torch.device(device if (device == "cuda" and torch.cuda.is_available()) else "cpu")
+    policy.to(device_obj)
     
     print(f"Training on {device} for {epochs} epochs (Minimalist Guide Strategy)...")
     
@@ -135,6 +176,23 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str, default="models/bc_goldset_v1")
     parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--save-dir", type=str, default=None)
+    parser.add_argument("--log-dir", type=str, default=None)
+    parser.add_argument("--device", type=str, default="cpu")
     args = parser.parse_args()
     
-    train_bc(data_path=args.data, model_save_path=args.output, epochs=args.epochs, lr=args.lr)
+    # Si se define save-dir, se prioriza sobre el path default de output
+    save_path = args.output
+    if args.save_dir:
+        from pathlib import Path
+        save_path = str(Path(args.save_dir) / "bc_model")
+        
+    train_bc(
+        data_path=args.data, 
+        model_save_path=save_path, 
+        epochs=args.epochs, 
+        lr=args.lr, 
+        batch_size=args.batch_size, 
+        device=args.device
+    )

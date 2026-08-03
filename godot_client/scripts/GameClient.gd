@@ -80,10 +80,10 @@ signal autoplay_state(state: Dictionary, actor: String)
 signal autoplay_finished(outcome: String, turns: int)
 
 func enable_autoplay(enabled: bool, speed: float = 0.5, max_turns: int = 1000) -> void:
-    autoplay_enabled = enabled
-    autoplay_speed = max(0.01, speed)
-    autoplay_max_turns = max_turns
-    autoplay_turn_count = 0
+	autoplay_enabled = enabled
+	autoplay_speed = max(0.01, speed)
+	autoplay_max_turns = max_turns
+	autoplay_turn_count = 0
 
 # ── API pública ───────────────────────────────────────────────────────────────
 

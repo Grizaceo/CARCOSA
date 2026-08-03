@@ -150,9 +150,9 @@ func _get_player_names() -> Array:
 
 func _on_start_pressed() -> void:
 	# Use autoplay args if provided
-	var seed: int = _autoplay_mode ? _autoplay_seed : int(seed_input.value)
+	var seed: int = _autoplay_seed if _autoplay_mode else int(seed_input.value)
 	var display_names: Array = _get_player_names()
-	var count: int = _autoplay_mode ? 4 : display_names.size()  # Default to 4 players in autoplay
+	var count: int = 4 if _autoplay_mode else display_names.size()  # Default to 4 players in autoplay
 	
 	# Los PIDs canónicos del engine siempre son P1, P2, P3, P4.
 	# Los nombres del lobby son solo para display en el diálogo hot-seat.

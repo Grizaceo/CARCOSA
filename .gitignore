@@ -48,3 +48,6 @@ Thumbs.db
 # ─── OS / editor ──────────────────────────────────────────────────────────────
 .DS_Store
 .vscode/
+
+# Godot editor cache (regenerable)
+.godot/

@@ -61,7 +61,10 @@ func add_monster_token(monster_id: String) -> void:
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color("#ef5350")
 	style.bg_color.a = 0.2
-	style.border_width_all = 1
+	style.border_width_left = 1
+	style.border_width_right = 1
+	style.border_width_top = 1
+	style.border_width_bottom = 1
 	style.border_color = Color("#ef5350")
 	style.corner_radius_top_left = 8
 	style.corner_radius_top_right = 8
@@ -81,7 +84,10 @@ func add_king_token() -> void:
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color("#ce93d8")
 	style.bg_color.a = 0.2
-	style.border_width_all = 1
+	style.border_width_left = 1
+	style.border_width_right = 1
+	style.border_width_top = 1
+	style.border_width_bottom = 1
 	style.border_color = Color("#ce93d8")
 	
 	lbl.add_theme_stylebox_override("normal", style)
