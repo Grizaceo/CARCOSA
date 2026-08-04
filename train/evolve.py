@@ -57,7 +57,8 @@ def train_continue(model_zip, steps, lr=1e-4):
     tmp_env = CarcosaEnv()
     model = PPO.load(model_zip, env=tmp_env, learning_rate=lr)
     model.learn(total_timesteps=steps, progress_bar=False)
-    out = model_zip.replace(".zip", "_trained.zip")
+    stem = Path(model_zip).stem  # sin .zip
+    out = str(Path(model_zip).parent / f"{stem}_trained.zip")
     model.save(out)
     tmp_env.close()
     return out
