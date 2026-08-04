@@ -61,7 +61,9 @@ def test_phase2_reward_increases_when_team_gets_closer_to_umbral():
     assert reward > 0
 
 
-def test_phase1_does_not_reward_umbral_convergence_before_key_goal():
+def test_umbral_shaping_active_before_key_goal():
+    """Línea [092]: el shaping de umbral es SIEMPRE activo (no solo phase2),
+    para dar gradiente de victoria en cada paso."""
     env = CarcosaEnv(
         reward_key=0.0,
         reward_key_lost=0.0,
@@ -92,7 +94,7 @@ def test_phase1_does_not_reward_umbral_convergence_before_key_goal():
         illegal_action_intent=False,
     )
 
-    assert reward == 0.0
+    assert reward > 0
 
 
 def test_phase2_sync_bonus_applies_when_all_players_reach_umbral():

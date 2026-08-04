@@ -109,6 +109,7 @@ class CarcosaEnv(gym.Env):
         reward_phase2_sync_all: float = 2.5,
         phase2_info_scale: float = 0.15,
         penalty_phase2_explore: float = -0.06,
+        penalty_timeout: float = -5.0,
         info_decay: float = 0.28,
         info_memory_max_age: int = 18,
         curriculum_keys34_prob: float = 0.0,
@@ -156,6 +157,7 @@ class CarcosaEnv(gym.Env):
         self.reward_phase2_sync_all = reward_phase2_sync_all
         self.phase2_info_scale = phase2_info_scale
         self.penalty_phase2_explore = penalty_phase2_explore
+        self.penalty_timeout = penalty_timeout
         self.info_decay = info_decay
         self.info_memory_max_age = info_memory_max_age
         self.curriculum_keys34_prob = max(0.0, min(1.0, float(curriculum_keys34_prob)))
@@ -1046,6 +1048,11 @@ class CarcosaEnv(gym.Env):
         # Terminación
         terminated = self.state.game_over
         truncated = self.step_count >= self.max_steps
+
+        # Penalización de TIMEOUT: si se corta sin game_over, señal negativa
+        # para que el agente aprenda a TERMINAR (llegar a WIN/LOSE) en vez de stall.
+        if truncated and not terminated:
+            reward += self.penalty_timeout
         
         obs = self._get_obs()
         info = self._get_info()
@@ -1078,7 +1085,7 @@ class CarcosaEnv(gym.Env):
         else:
             reward = 0.0
 
-            # Ganar llaves
+            # Ganar llaves (siempre activo)
             if curr_keys > prev_keys:
                 reward += self.reward_key * (curr_keys - prev_keys)
 
@@ -1089,6 +1096,25 @@ class CarcosaEnv(gym.Env):
             # Pérdida de sanity
             if curr_sanity < prev_sanity:
                 reward += self.reward_sanity_loss * (prev_sanity - curr_sanity)
+
+            # --- SHAPING DENSO SIEMPRE ACTIVO (línea [092]) ---
+            # Premia acercar al equipo al Umbral y penaliza alejarse,
+            # independiente de phase2, para dar gradiente de "victoria" en cada paso.
+            prev_team_umbral_dist = self._team_umbral_distance(prev_state)
+            curr_team_umbral_dist = self._team_umbral_distance(next_state)
+            if curr_team_umbral_dist < prev_team_umbral_dist:
+                reward += self.reward_phase2_umbral_progress * (prev_team_umbral_dist - curr_team_umbral_dist)
+            elif curr_team_umbral_dist > prev_team_umbral_dist:
+                reward += self.penalty_phase2_umbral_regress * (curr_team_umbral_dist - prev_team_umbral_dist)
+
+            prev_near_umbral = sum(
+                1 for player in prev_state.players.values() if self._distance_to_umbral(prev_state, player.room) <= 1
+            )
+            curr_near_umbral = sum(
+                1 for player in next_state.players.values() if self._distance_to_umbral(next_state, player.room) <= 1
+            )
+            if curr_near_umbral > prev_near_umbral:
+                reward += self.reward_phase2_sync_step * (curr_near_umbral - prev_near_umbral)
 
             prev_critical = sum(
                 1
@@ -1103,36 +1129,13 @@ class CarcosaEnv(gym.Env):
             if curr_critical > prev_critical:
                 reward += self.penalty_critical_sanity * (curr_critical - prev_critical)
 
-            if phase2_active:
-                prev_team_umbral_dist = self._team_umbral_distance(prev_state)
-                curr_team_umbral_dist = self._team_umbral_distance(next_state)
-
-                if curr_team_umbral_dist < prev_team_umbral_dist:
-                    reward += self.reward_phase2_umbral_progress * (prev_team_umbral_dist - curr_team_umbral_dist)
-                elif curr_team_umbral_dist > prev_team_umbral_dist:
-                    reward += self.penalty_phase2_umbral_regress * (curr_team_umbral_dist - prev_team_umbral_dist)
-
-                prev_near_umbral = sum(
-                    1 for player in prev_state.players.values() if self._distance_to_umbral(prev_state, player.room) <= 1
-                )
-                curr_near_umbral = sum(
-                    1 for player in next_state.players.values() if self._distance_to_umbral(next_state, player.room) <= 1
-                )
-                if curr_near_umbral > prev_near_umbral:
-                    reward += self.reward_phase2_sync_step * (curr_near_umbral - prev_near_umbral)
-
-                if action.type in {
-                    ActionType.SEARCH,
-                    ActionType.PEEK_ROOM_DECK,
-                    ActionType.USE_TABERNA_ROOMS,
-                }:
-                    reward += self.penalty_phase2_explore
-
-                if curr_keys >= keys_needed and all(
-                    self._distance_to_umbral(next_state, player.room) == 0
-                    for player in next_state.players.values()
-                ):
-                    reward += self.reward_phase2_sync_all
+            # Bonus de victoria inminente: todos con llaves necesarias Y en el Umbral.
+            # Siempre activo (no gated por phase2) para reforzar la meta final.
+            if curr_keys >= keys_needed and all(
+                self._distance_to_umbral(next_state, player.room) == 0
+                for player in next_state.players.values()
+            ):
+                reward += self.reward_phase2_sync_all
 
         if illegal_action_intent and actor in prev_state.players:
             reward += self.penalty_illegal_intent
