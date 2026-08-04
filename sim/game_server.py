@@ -502,6 +502,10 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
         # Contador monotónico: el frontend descarta estados que lleguen fuera de orden
         # (la respuesta HTTP de /act y los broadcasts WS viajan por canales distintos).
         summary["step"] = session.get("step_idx", 0)
+        # Acción más reciente (para el visualizador de red en vivo, línea [092])
+        la = session.get("last_action")
+        if la is not None:
+            summary["last_action"] = {"actor": la.get("actor"), "type": la.get("type"), "data": la.get("data", {})}
 
     return summary
 
@@ -556,6 +560,7 @@ def _single_step(session: Dict[str, Any], actor: str, action_type: str, action_d
 
     record = transition_record(state, action_dict, next_state, cfg, step_idx)
     record["policy"] = policy_label
+    session["last_action"] = action_dict  # para el visualizador de red en vivo (línea [092])
 
     session["records"].append(record)
     session["state"] = next_state
