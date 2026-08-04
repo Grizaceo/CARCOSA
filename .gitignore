@@ -58,3 +58,4 @@ models/*.zip
 
 # Godot shader/editor caches
 *.vulkan.cache
+train/logs/
