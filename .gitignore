@@ -55,3 +55,6 @@ Thumbs.db
 # BC/RL probe data
 train/expert_data*.pkl
 models/*.zip
+
+# Godot shader/editor caches
+*.vulkan.cache
