@@ -16,6 +16,7 @@ import sys, os, argparse, json
 from pathlib import Path
 import numpy as np
 import torch
+import uuid
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from train.carcosa_env import CarcosaEnv
@@ -48,7 +49,9 @@ def mutate_model(src_zip, sigma):
             if p.requires_grad:
                 noise = torch.randn_like(p) * sigma
                 p.add_(noise)
-    out = src_zip.replace(".zip", f"_mut_{np.random.randint(1000000)}.zip")
+    stem = Path(src_zip).stem  # sin .zip (defensa: evita doble .zip en generaciones recursivas)
+    uid = uuid.uuid4().hex[:8]
+    out = str(Path(src_zip).parent / f"{stem}_mut_{uid}.zip")
     model.save(out)
     tmp_env.close()
     return out
