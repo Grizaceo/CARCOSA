@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List, Tuple, Dict, Any
 import json
+import inspect
 from pathlib import Path
 
 from engine.actions import Action, ActionType
@@ -1537,6 +1538,98 @@ class HybridBCNNGoalPolicy(BCNNPlayerPolicy):
         return goal_action
 
 
+class PPOCARCOPlayerPolicy(PlayerPolicy):
+    """
+    [092] Andamiaje PPO → bots del servidor (INACTIVO POR DEFECTO).
+
+    Carga un modelo PPO de Stable-Baselines3 (.zip) entrenado por evolve*.py y
+    lo expone como PlayerPolicy para el modo espectador 4-bots de game_server.
+
+    DISEÑO SIN DRIFT:
+      - No reimplementa la observación. Reusa CarcosaEnv._get_obs() clonando el
+        GameState actual al env (mismo 167-dim, misma normalización).
+      - No reimplementa el mapeo acción→Action. Usa CarcosaEnv.ACTION_TYPES
+        (lista fija idéntica a la del entrenamiento).
+      - El entorno del server (step/engine) valida legalidad y hace el masking
+        real; aquí sólo devolvemos Action(actor, type) y el server corrige si
+        hiciera falta (game_server._auto_advance_until_human ya tiene fallback).
+
+    ACTIVACIÓN:
+      Sólo vía game_server /start con bot_policy="PPO" y ppo_model_path=<.zip>.
+      NUNCA se usa por defecto. Regla [092]: si no supera a GOAL en eval, se
+      mantiene la heurística. Este policy es el conducto, no la decisión.
+
+    NOTA: requiere stable_baselines3 + torch en el venv del server.
+    """
+
+    def __init__(self, cfg: Config = None, model_path: str = None):
+        self.cfg: Config = cfg or Config()
+        if not model_path:
+            raise ValueError(
+                "PPOCARCOPlayerPolicy requiere model_path (ruta a .zip SB3 PPO). "
+                "No se activa sin un modelo explícito."
+            )
+        import torch
+        from stable_baselines3 import PPO as _SB3PPO
+        from train.carcosa_env import CarcosaEnv
+
+        self._torch = torch
+        self._model_path = model_path
+        # Env dummy para reusar _get_obs y ACTION_TYPES sin entrenar.
+        self._env = CarcosaEnv()
+        self._model = _SB3PPO.load(model_path, env=self._env, device="cpu")
+        self._action_types = self._env.ACTION_TYPES
+
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        import numpy as np
+
+        actor = _get_active_actor(state)
+
+        # Fase KING: el actor activo es "KING", no el jugador del turn_order.
+        # El server ya la maneja aparte (kpol), pero por robustez autónoma
+        # devolvemos KING_ENDROUND (siempre legal en fase KING).
+        if state.phase == "KING":
+            return Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+
+        # Clonar el estado actual al env para que _get_obs lea este tablero.
+        self._env.state = state
+        try:
+            obs = self._env._get_obs()
+        except Exception as e:
+            # Si la obs falla (estado incompatible), caer a END_TURN seguro.
+            print(f"[PPOCARCO] obs failed for {actor}: {e}. END_TURN fallback.")
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
+
+        with self._torch.no_grad():
+            action_id, _ = self._model.predict(obs, deterministic=True)
+
+        # model.predict devuelve np.ndarray 0-dim o 1-dim; normalizar a int.
+        if isinstance(action_id, (list, tuple, np.ndarray)):
+            action_id = int(np.asarray(action_id).flatten()[0])
+        else:
+            action_id = int(action_id)
+
+        if 0 <= action_id < len(self._action_types):
+            atype = self._action_types[action_id]
+        else:
+            atype = ActionType.END_TURN
+
+        # El modelo PPO sólo predice el TIPO de acción (Discrete sobre ACTION_TYPES).
+        # El training resuelve data/{} via _pick_action_for_type; el server aplica la
+        # accion directo al engine, asi que debemos materializar la accion CONCRETA aqui
+        # (mismo metodo que usa CarcosaEnv.step), sin reimplementar nada.
+        legal = get_legal_actions(state, actor)
+        concrete = self._env._pick_action_for_type(legal, atype, actor)
+        if concrete is not None:
+            return concrete
+        # Fallback de robustez: si el type predicho no es materializable en este
+        # estado, devolver la PRIMERA accion legal real (nunca END_TURN ciego, que
+        # el engine puede rechazar). Imita el fallback deterministico del env.
+        if legal:
+            return legal[0]
+        return Action(actor=actor, type=ActionType.END_TURN, data={})
+
+
 PLAYER_POLICY_REGISTRY = {
     "GOAL": GoalDirectedPlayerPolicy,
     "HABITANTEDECARCOSA": HabitanteDeCarcosaPolicy,
@@ -1546,6 +1639,7 @@ PLAYER_POLICY_REGISTRY = {
     "RANDOM": RandomPolicy,
     "BCNN": BCNNPlayerPolicy,
     "HYBRID": HybridBCNNGoalPolicy,
+    "PPO": PPOCARCOPlayerPolicy,  # [092] andamiaje; inactivo por defecto (requiere model_path)
 }
 
 KING_POLICY_REGISTRY = {
@@ -1554,11 +1648,13 @@ KING_POLICY_REGISTRY = {
 }
 
 
-def get_player_policy(policy_name: str, cfg: Config) -> PlayerPolicy:
+def get_player_policy(policy_name: str, cfg: Config, model_path: Optional[str] = None) -> PlayerPolicy:
     name = (policy_name or "GOAL").upper()
     cls = PLAYER_POLICY_REGISTRY.get(name)
     if cls is None:
         raise ValueError(f"Unknown player policy: {policy_name}")
+    if "model_path" in inspect.signature(cls.__init__).parameters:
+        return cls(cfg, model_path=model_path)
     return cls(cfg)
 
 

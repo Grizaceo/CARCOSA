@@ -340,6 +340,10 @@ class StartRequest(BaseModel):
     players_config: list[Dict[str, Any]] = []
     draw_mode: str = ""
     client_id: Optional[str] = None
+    # [092] Andamiaje PPO (INACTIVO por defecto). Solo si se pasa explícitamente
+    # bot_policy="PPO" + ppo_model_path apunta a un .zip SB3 entrenado por evolve*.py
+    bot_policy: str = "GOAL"
+    ppo_model_path: Optional[str] = None
 
 
 class ActRequest(BaseModel):
@@ -585,7 +589,18 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
     rng: RNG = session["rng"]
 
     kpol = get_king_policy(getattr(cfg, "KING_POLICY", "RANDOM"), cfg)
-    ppol = get_player_policy("GOAL", cfg)
+    # [092] Andamiaje PPO: solo si se pidió explícitamente bot_policy="PPO" y hay .zip.
+    # Por defecto GOAL (heurística). Nunca se activa solo.
+    bot_policy_name = "GOAL"
+    ppo_model_path = getattr(session.get("start_request"), "ppo_model_path", None) if session.get("start_request") else None
+    if getattr(session.get("start_request"), "bot_policy", "GOAL").upper() == "PPO" and ppo_model_path:
+        bot_policy_name = "PPO"
+    try:
+        ppol = get_player_policy(bot_policy_name, cfg, model_path=ppo_model_path)
+    except Exception as e:
+        print(f"[AUTO_ADVANCE] No se pudo cargar policy '{bot_policy_name}': {e}. "
+              f"Usando GOAL.")
+        ppol = get_player_policy("GOAL", cfg)
 
     # Si no hay humanos, la partida es 100% bots: correr hasta game_over.
     # Si hay humanos, tope de seguridad para no bloquear la respuesta HTTP.
@@ -813,6 +828,9 @@ async def start_game(req: StartRequest) -> Dict[str, Any]:
         "has_human": bool(human_ids),
         "seat_claims": seat_claims,
         "saved_to": None,
+        # [092] Andamiaje PPO: guardo el request para que _auto_advance_until_human
+        # lea bot_policy/ppo_model_path sin acoplar la firma. Por defecto GOAL.
+        "start_request": req,
     }
 
     # Avanzar automáticamente si el primer turno es de un bot o de KING.
