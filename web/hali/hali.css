@@ -503,3 +503,73 @@ html, body {
   .sanity-fill, .pcard { transition: none; }
   #overlay-gameover { animation: none; }
 }
+
+/* ── Visualizador de red (línea [092]) ── */
+#net-viz-panel {
+  border-top: 1px solid #3a2e4a;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #c9b8e0;
+}
+#net-viz-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #e0c8ff;
+  letter-spacing: .02em;
+}
+.net-arch {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  background: #1a1426;
+  border: 1px solid #34294a;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 6px 0;
+  color: #9fe0c0;
+}
+.net-legend {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+.net-legend b { color: #e0c8ff; }
+.net-muted { color: #6a5a80; font-style: italic; }
+.net-pid {
+  margin-top: 6px;
+  font-weight: 700;
+  color: #ffd27a;
+}
+.net-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+.net-at {
+  width: 90px;
+  flex: 0 0 90px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: #b8a0d8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.net-bar {
+  flex: 1;
+  height: 10px;
+  background: #221a30;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.net-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #7a5cff, #c08aff);
+}
+.net-pct {
+  width: 34px;
+  flex: 0 0 34px;
+  text-align: right;
+  font-size: 11px;
+  color: #c9b8e0;
+}

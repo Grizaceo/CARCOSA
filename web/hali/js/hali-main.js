@@ -156,6 +156,7 @@ HALI.app = (() => {
         _processLiveChronicle(rawState);
         _applyFrame(frame, !S.view);
         _syncTurn(frame);
+        _netVizCount(frame, rawState);
       },
     });
     try {
@@ -1016,6 +1017,52 @@ HALI.app = (() => {
     document.getElementById('report-modal').addEventListener('click', (e) => {
       if (e.target.id === 'report-modal') e.target.classList.add('hidden');
     });
+
+    // ── Visualizador de red (línea [092]) ──────────────────────────────────
+    // Acumula % de uso de acciones por bot desde los frames del WebSocket.
+    // Cuenta frame.a (action type) del actor activo; si el server emite
+    // rawState.last_action lo prefiere. Renderiza barras por jugador.
+    const ACTION_NAMES = ['MOVE','SEARCH','MEDITATE','END_TURN','SACRIFICE','ACCEPT_SACRIFICE',
+      'DISCARD_SANIDAD','ESCAPE_TRAPPED','USE_OBJECT','USE_HEALER_HEAL','USE_MOTEMEY_BUY_START',
+      'USE_MOTEMEY_BUY_CHOOSE','USE_MOTEMEY_SELL','USE_ARMORY_TAKE','USE_ARMORY_DROP','USE_YELLOW_DOORS',
+      'USE_CAPILLA','USE_BLUNT','USE_PORTABLE_STAIRS','USE_ATTACH_TALE','USE_READ_YELLOW_SIGN',
+      'USE_CAMARA_LETAL_RITUAL','USE_TABERNA_ROOMS','USE_SALON_BELLEZA','PEEK_ROOM_DECK','SKIP_PEEK','KING_ENDROUND'];
+
+    function _netVizCount(frame, rawState) {
+      if (!S.netCounts) S.netCounts = {};  // pid -> {action: count}
+      let actor = frame && frame.actor;
+      let atype = (frame && frame.a) ? frame.a : null;
+      if (!atype && rawState && rawState.last_action) {
+        actor = rawState.last_action.actor || actor;
+        atype = rawState.last_action.type || null;
+      }
+      if (!actor || !atype) return;
+      if (!S.netCounts[actor]) S.netCounts[actor] = {};
+      S.netCounts[actor][atype] = (S.netCounts[actor][atype] || 0) + 1;
+      _netVizRender();
+    }
+
+    function _netVizRender() {
+      const el = document.getElementById('net-action-usage');
+      if (!el || !S.netCounts) return;
+      let html = '';
+      for (const pid of Object.keys(S.netCounts)) {
+        const counts = S.netCounts[pid];
+        const total = Object.values(counts).reduce((a, b) => a + b, 0);
+        if (!total) continue;
+        html += `<div class="net-pid">${pid}</div>`;
+        // top 6 acciones
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+        for (const [at, c] of sorted) {
+          const pct = (100 * c / total).toFixed(0);
+          const label = (typeof at === 'string' && at.startsWith('ActionType.')) ? at.replace('ActionType.', '') : at;
+          html += `<div class="net-row"><span class="net-at">${label}</span>` +
+                  `<span class="net-bar"><span style="width:${pct}%"></span></span>` +
+                  `<span class="net-pct">${pct}%</span></div>`;
+        }
+      }
+      el.innerHTML = html || '<span class="net-muted">sin acciones aún</span>';
+    }
   }
 
   return { init, loadReplayObject, loadReplayText, connectLive, createGame, watchBotsGame, seek, refreshGamesList, state: S };

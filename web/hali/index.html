@@ -102,6 +102,25 @@
     <button id="btn-save" title="guarda la partida (también parciales) para reproducirla luego">Guardar partida</button>
   </div>
 
+  <!-- Visualizador de red (línea [092]) -->
+  <details id="net-viz-panel" open>
+    <summary>🔬 Visualizador de red de bots</summary>
+    <div class="sp-label">arquitectura (CarcosaPolicyNet)</div>
+    <div class="net-arch">
+      obs 167 → [256] → [256] → [128] → logits 27
+    </div>
+    <div class="sp-label">significado de la observación</div>
+    <ul class="net-legend">
+      <li><b>10 base</b>: sanity, llaves, monstruos, umbral, debuff, riesgo-rey, corona, ronda, <i>tension</i>, piso-rey</li>
+      <li><b>14 local</b>: del actor activo (distancia umbral, piso, peligro local, stairs…)</li>
+      <li><b>45 nodos</b> (15×3): remaining / especial revelado / destruido por habitación</li>
+      <li><b>92 jugadores</b> (4×23): one-hot sala(15) + sanity + llaves + slots + minus5 + acciones + status + stairs + riesgo-rey</li>
+      <li><b>6 globales</b>: tension, ronda, llaves total, llaves destruidas, piso-rey, falsa-corona</li>
+    </ul>
+    <div class="sp-label">% de uso de acciones (acumulado en vivo)</div>
+    <div id="net-action-usage"><span class="net-muted">esperando frames…</span></div>
+  </details>
+
   <!-- Reporte de errores (siempre visible) -->
   <div id="report-fab">
     <button id="btn-report" title="¿algo funcionó raro? cuéntanos y lo revisamos">⚠ Reportar error</button>
