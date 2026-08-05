@@ -115,6 +115,84 @@ def _bootstrap_ci(wins, n_iter=2000, seed=42):
     return lo, hi
 
 
+def _run_committee(summary_path):
+    """Analiza union/votacion sobre un benchmark_summary.json ya medido.
+
+    Coverage por seed del 'committee': una seed cuenta como ganada si AL MENOS
+    UN miembro la gana (union), o si la gana la mayoria. No re-evalua nada —
+    usa el detail (seed -> {model: {win}}) ya almacenado. Es la cobertura
+    teorica que un PolicyCommittee real podria alcanzar si pudiera elegir
+    el mejor miembro por seed (oraculo) o votar.
+    """
+    p = Path(summary_path)
+    if not p.exists():
+        raise SystemExit(f"--committee: no existe {p}")
+    data = json.load(open(p))
+    detail = data.get("detail", {})      # model -> {seed -> {win,...}}
+    seeds = data.get("meta", {}).get("seeds", [])
+    if not seeds:
+        # si meta no tiene seeds, inferir de las claves de detail
+        first = next(iter(detail.values()), {})
+        seeds = sorted(int(s) for s in first.keys())
+
+    models = list(detail.keys())
+    if "GOAL" not in models:
+        models.insert(0, "GOAL") if "GOAL" in detail else None
+
+    # Matriz seed x modelos -> win flags
+    wins_by_model = {}
+    for m in models:
+        wins_by_model[m] = set()
+        for s, r in detail.get(m, {}).items():
+            if isinstance(r, dict) and r.get("win"):
+                wins_by_model[m].add(int(s))
+            elif isinstance(r, bool) and r:
+                wins_by_model[m].add(int(s))
+
+    n = len(seeds)
+    union = set()
+    consensus = set()
+    best_member_per_seed = {}
+    for s in seeds:
+        winners = [m for m in models if s in wins_by_model[m]]
+        if winners:
+            union.add(s)
+            # mejor miembro: el que gana esta seed (si varios, el primero del orden)
+            best_member_per_seed[s] = winners
+        if len(winners) == len(models):
+            consensus.add(s)
+
+    print(f"\n=== COMMITTEE ANALYSIS ({Path(summary_path).name}) ===", flush=True)
+    print(f"Seeds: {n}, miembros: {models}", flush=True)
+    for m in models:
+        w = len(wins_by_model[m])
+        print(f"  {m:30s} individual: {w}/{n} = {w/n*100:.1f}%", flush=True)
+    print(f"\n  UNION (>=1 miembro gana):     {len(union)}/{n} = {len(union)/n*100:.1f}%", flush=True)
+    print(f"  CONSENSO (todos ganan):       {len(consensus)}/{n} = {len(consensus)/n*100:.1f}%", flush=True)
+    # ganancia de la union sobre el mejor individual
+    best_ind = max(wins_by_model.values(), key=len)
+    best_name = [m for m,w in wins_by_model.items() if w is best_ind][0]
+    gain = len(union) - len(best_ind)
+    print(f"  Mejor individual: {best_name} ({len(best_ind)} seeds)", flush=True)
+    print(f"  Ganancia de la union sobre el mejor individual: +{gain} seeds "
+          f"(+{gain/n*100:.1f}pp)", flush=True)
+    # seeds que solo cubre cada miembro
+    print("\n  Seeds exclusivas por miembro (solo el las gana):", flush=True)
+    for m in models:
+        excl = sorted(s for s in union if best_member_per_seed.get(s) == [m])
+        if excl:
+            print(f"    {m:30s}: {len(excl)} -> {excl[:12]}", flush=True)
+
+    # salvar analisis junto al json original
+    out = p.parent / "committee_analysis.json"
+    json.dump({"seeds": seeds, "models": models,
+               "union_seeds": sorted(union), "consensus_seeds": sorted(consensus),
+               "wins_by_model": {m: sorted(s) for m,s in wins_by_model.items()},
+               "best_member_per_seed": {str(s): v for s,v in best_member_per_seed.items()}},
+              open(out, "w"), indent=2, default=str)
+    print(f"\nAnalisis completo -> {out}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, default=100)
@@ -128,7 +206,17 @@ def main():
     ap.add_argument("--policy", dest="policies", action="append",
                     help="clase de policy registrada (ej. ENSEMBLE) + CLAVE=model_path, "
                          "formato 'NOMBRE:/ruta/al/model.zip' (repetible).")
+    ap.add_argument("--committee", metavar="SUMMARY_JSON", default=None,
+                    help="analizar la union/votacion de un benchmark_summary.json ya "
+                         "medido (mismo seed set) — no re-evalua, solo cubre el "
+                         "territorio que cada modelo ya cubrio. Reporta cuantas seeds "
+                         "gana AL MENOS UN miembro (union) y cuantas ganan TODOS "
+                         "(consenso), y el mejor-miembro-por-seed.")
     args = ap.parse_args()
+
+    if args.committee:
+        _run_committee(args.committee)
+        return
 
     seeds = list(range(args.seed_start, args.seed_start + args.seeds))
     # GOAL siempre presente como baseline; luego los .zip y clases
