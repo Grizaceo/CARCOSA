@@ -1571,13 +1571,25 @@ class PPOCARCOPlayerPolicy(PlayerPolicy):
             )
         import torch
         from stable_baselines3 import PPO as _SB3PPO
+        from stable_baselines3.common.base_class import BaseAlgorithm
         from train.carcosa_env import CarcosaEnv
 
         self._torch = torch
         self._model_path = model_path
         # Env dummy para reusar _get_obs y ACTION_TYPES sin entrenar.
         self._env = CarcosaEnv()
-        self._model = _SB3PPO.load(model_path, env=self._env, device="cpu")
+        self._is_maskable = False
+        # [092] El modelo puede ser MaskablePPO (train con --action-mask true).
+        # Intentar cargarlo como maskable primero; si el .zip no es maskable,
+        # BaseAlgorithm.load lo levanta igual por clase. Fallback a PPO regular.
+        try:
+            from sb3_contrib import MaskablePPO as _SB3Masked
+            self._model = _SB3Masked.load(model_path, env=self._env, device="cpu")
+            self._is_maskable = True
+            print(f"[PPOCARCO] modelo cargado como MaskablePPO: {model_path}")
+        except Exception:
+            self._model = _SB3PPO.load(model_path, env=self._env, device="cpu")
+            print(f"[PPOCARCO] modelo cargado como PPO regular: {model_path}")
         self._action_types = self._env.ACTION_TYPES
 
     def choose(self, state: GameState, rng: RNG) -> Action:
@@ -1601,7 +1613,13 @@ class PPOCARCOPlayerPolicy(PlayerPolicy):
             return Action(actor=actor, type=ActionType.END_TURN, data={})
 
         with self._torch.no_grad():
-            action_id, _ = self._model.predict(obs, deterministic=True)
+            if self._is_maskable:
+                # MaskablePPO.predict requiere action_masks; el env dummy tiene
+                # action_masks() implementado (máscara del estado actual).
+                masks = self._env.action_masks()
+                action_id, _ = self._model.predict(obs, deterministic=True, action_masks=masks)
+            else:
+                action_id, _ = self._model.predict(obs, deterministic=True)
 
         # model.predict devuelve np.ndarray 0-dim o 1-dim; normalizar a int.
         if isinstance(action_id, (list, tuple, np.ndarray)):
