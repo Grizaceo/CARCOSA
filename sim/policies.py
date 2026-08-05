@@ -1734,11 +1734,18 @@ class PolicyCommittee(PlayerPolicy):
             self._net = PPOCARCOPlayerPolicy(cfg, model_path=model_path)
             self._ensemble = EnsembleGoalNetPolicy(cfg, model_path=model_path)
 
-        # Cargar tabla seed->policy.
-        tpath = table_path or str(Path(__file__).resolve().parent.parent
-                                  / "models" / "seed_to_policy.json")
-        tp = Path(tpath)
-        if tp.exists():
+        # Cargar tabla seed->policy (ruta versionable: configs/). Fallback a models/.
+        repo_root = Path(__file__).resolve().parent.parent
+        candidates = [str(repo_root / "configs" / "seed_to_policy.json")]
+        if table_path:
+            candidates.insert(0, table_path)
+        candidates.append(str(repo_root / "models" / "seed_to_policy.json"))
+        tp = None
+        for cand in candidates:
+            if Path(cand).exists():
+                tp = Path(cand)
+                break
+        if tp is not None:
             try:
                 import json as _json
                 self._table = {int(k): v for k, v in
@@ -1746,7 +1753,7 @@ class PolicyCommittee(PlayerPolicy):
             except Exception as e:
                 print(f"[COMMITTEE] no pude cargar tabla {tp}: {e}")
         else:
-            print(f"[COMMITTEE] tabla no existe ({tp}); usando solo GOAL.")
+            print(f"[COMMITTEE] tabla no existe (configs/ o models/); usando solo GOAL.")
 
     def set_memory(self, team_memory, bot_memories) -> None:
         """Propaga la memoria de cartas a todas las políticas internas."""
