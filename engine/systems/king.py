@@ -195,8 +195,13 @@ def resolve_king_phase(state: GameState, action, rng: RNG, cfg: Config):
     for p in state.players.values():
         apply_sanity_loss(state, p, cfg.HOUSE_LOSS_PER_ROUND, source="HOUSE_LOSS")
 
+    # Curriculum de dificultad: si el Rey está desactivado, skippear la
+    # ruleta d4/presencia/d6 (fuerza king_active=False) pero mantener el
+    # cierre de ronda completo (tick, boxes, sync, round+=1) que sigue abajo.
+    # -- (no return temprano: el cierre de ronda está al final de la función)
+
     # Verificar Vanish
-    king_active = True
+    king_active = cfg.KING_ENABLED
     if state.king_vanished_turns > 0:
         state.king_vanished_turns -= 1
         king_active = False

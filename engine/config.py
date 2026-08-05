@@ -72,6 +72,10 @@ class Config:
     # --- Toggle: presencia del Rey (tu experimento) ---
     KING_PRESENCE_START_ROUND: int = 2
 
+    # Curriculum de dificultad: desactiva TODO el sistema del Rey
+    # (ruleta d4, daño por presencia, efectos d6) manteniendo HOUSE_LOSS.
+    KING_ENABLED: bool = True
+
     # --- Heurística Rey: evitar -5 hasta ronda 10, luego relajar ---
     KING_KILL_AVOID_START_ROUND: int = 10
     KING_KILL_AVOID_FADE_ROUNDS: int = 10

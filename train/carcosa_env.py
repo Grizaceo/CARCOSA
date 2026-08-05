@@ -121,6 +121,10 @@ class CarcosaEnv(gym.Env):
         curriculum_closing_prob: float = 0.0,
         curriculum_keys_start: int = 4,
         curriculum_far_player_prob: float = 0.8,
+        # --- Curriculum de dificultad (línea [092]) ---
+        # Overrides de Config para desactivar/suavizar el Rey.
+        king_enabled: bool = True,
+        king_presence_start_round: int = None,
     ):
         """
         Args:
@@ -132,6 +136,17 @@ class CarcosaEnv(gym.Env):
         super().__init__()
         
         self.cfg = Config()
+        if not king_enabled or king_presence_start_round is not None:
+            # Curriculum de dificultad [092]: sobreescribir el Config
+            # construido por make_smoke_state (King desactivado / más débil).
+            self.cfg = Config(
+                KING_ENABLED=king_enabled,
+                KING_PRESENCE_START_ROUND=(
+                    king_presence_start_round
+                    if king_presence_start_round is not None
+                    else self.cfg.KING_PRESENCE_START_ROUND
+                ),
+            )
         self.seed_value = seed
         self.render_mode = render_mode
         self.max_steps = max_steps
