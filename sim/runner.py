@@ -259,10 +259,11 @@ def run_episode(
     cfg: Optional[Config] = None,
     policy_name: str = "GOAL",
     model_path: Optional[str] = None,
+    initial_state: Optional[GameState] = None,
 ) -> GameState:
     cfg = cfg or Config()
     rng = RNG(seed)
-    state = make_smoke_state(seed=seed, cfg=cfg)
+    state = initial_state if initial_state is not None else make_smoke_state(seed=seed, cfg=cfg)
 
     # Policy Selection
     from sim.policies import (
