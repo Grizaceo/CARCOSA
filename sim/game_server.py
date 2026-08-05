@@ -589,14 +589,15 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
     rng: RNG = session["rng"]
 
     kpol = get_king_policy(getattr(cfg, "KING_POLICY", "RANDOM"), cfg)
-    # [092] Andamiaje PPO: solo si se pidió explícitamente bot_policy="PPO" y hay .zip.
+    # [092] Andamiaje PPO/COMMITTEE: solo si se pidió explícitamente y hay .zip.
     # Por defecto GOAL (heurística). Nunca se activa solo.
     bot_policy_name = "GOAL"
-    ppo_model_path = getattr(session.get("start_request"), "ppo_model_path", None) if session.get("start_request") else None
-    if getattr(session.get("start_request"), "bot_policy", "GOAL").upper() == "PPO" and ppo_model_path:
-        bot_policy_name = "PPO"
+    model_path = getattr(session.get("start_request"), "ppo_model_path", None) if session.get("start_request") else None
+    req_bot_policy = getattr(session.get("start_request"), "bot_policy", "GOAL").upper()
+    if req_bot_policy in ("PPO", "COMMITTEE") and model_path:
+        bot_policy_name = req_bot_policy
     try:
-        ppol = get_player_policy(bot_policy_name, cfg, model_path=ppo_model_path)
+        ppol = get_player_policy(bot_policy_name, cfg, model_path=model_path)
     except Exception as e:
         print(f"[AUTO_ADVANCE] No se pudo cargar policy '{bot_policy_name}': {e}. "
               f"Usando GOAL.")
