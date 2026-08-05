@@ -77,8 +77,6 @@
     "121": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_052952.zip",
     "210": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_052952.zip",
     "116": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_052952.zip",
-    "119": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_072718.zip",
-    "222": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_154245.zip",
-    "252": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_154245.zip"
+    "119": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_072718.zip"
   }
 }
