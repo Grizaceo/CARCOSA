@@ -242,6 +242,8 @@ def main():
     train_parser.add_argument("--algo", type=str, default="maskable_ppo")
     train_parser.add_argument("--timesteps", type=int, default=500_000)
     train_parser.add_argument("--n-envs", type=int, default=4)
+    train_parser.add_argument("--seed", type=int, default=42,
+                              help="[092] Semilla de entrenamiento: variar genera políticas distintas => novelas nuevas")
     train_parser.add_argument("--lr", type=float, default=3e-4)
     train_parser.add_argument("--load-model", type=str, default=None)
     # Curriculum de dificultad [092]
@@ -278,6 +280,7 @@ def main():
             algo=args.algo,
             total_timesteps=args.timesteps,
             n_envs=args.n_envs,
+            seed=args.seed,
             learning_rate=args.lr,
             load_model=args.load_model,
             reward_params=reward_params,
