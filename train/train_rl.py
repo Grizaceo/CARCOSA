@@ -257,6 +257,8 @@ def main():
     train_parser.add_argument("--reward-lose", type=float, default=-10.0)
     train_parser.add_argument("--reward-key", type=float, default=10.0)  # Aumentado
     train_parser.add_argument("--penalty-empty-search", type=float, default=-2.0)
+    train_parser.add_argument("--reward-key-hold", type=float, default=0.0,
+                              help="[092] Reward por paso por MANTENER keys (posesión)")
     
     eval_parser = subparsers.add_parser("eval")
     eval_parser.add_argument("--model", type=str, required=True)
@@ -270,6 +272,7 @@ def main():
             "reward_lose": args.reward_lose,
             "reward_key": args.reward_key,
             "penalty_empty_search": args.penalty_empty_search,
+            "reward_key_hold_per_step": args.reward_key_hold,
         }
         train_rl(
             algo=args.algo,

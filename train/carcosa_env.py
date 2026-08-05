@@ -110,6 +110,9 @@ class CarcosaEnv(gym.Env):
         phase2_info_scale: float = 0.15,
         penalty_phase2_explore: float = -0.06,
         penalty_timeout: float = -5.0,
+        # [092] Reward shaping de posesión de keys: premia MANTENER keys por
+        # paso (gradiente hacia acumular/proteger), no solo el delta de robar.
+        reward_key_hold_per_step: float = 0.0,
         info_decay: float = 0.28,
         info_memory_max_age: int = 18,
         curriculum_keys34_prob: float = 0.0,
@@ -156,6 +159,7 @@ class CarcosaEnv(gym.Env):
         self.reward_lose = reward_lose
         self.reward_key = reward_key
         self.reward_key_lost = reward_key_lost
+        self.reward_key_hold_per_step = reward_key_hold_per_step
         self.reward_sanity_loss = reward_sanity_loss
         self.reward_info_gain = reward_info_gain
         self.reward_info_use = reward_info_use
@@ -1107,6 +1111,11 @@ class CarcosaEnv(gym.Env):
             # Perder llaves (sacrificio o daño)
             if curr_keys < prev_keys:
                 reward += self.reward_key_lost * (prev_keys - curr_keys)
+            if self.reward_key_hold_per_step > 0 and curr_keys > 0:
+                # [092] Reward de posesión: premia MANTENER keys entre pasos.
+                # Gradiente suave: acumular y proteger keys vale por sí mismo,
+                # no solo robar (que el delta ya premia/penaliza).
+                reward += self.reward_key_hold_per_step * curr_keys
 
             # Pérdida de sanity
             if curr_sanity < prev_sanity:
