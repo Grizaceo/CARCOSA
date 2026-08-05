@@ -66,14 +66,29 @@ def _eval_seed_ppo(zip_path, seed, device="cpu"):
             "outcome": info.get("outcome")}
 
 
-def _model_eval(model_key, zip_path, seeds, workers, device):
-    """Evalúa UN modelo sobre todas las seeds, en paralelo."""
+def _eval_seed_class(policy_name, model_path, seed):
+    """Evalúa una clase de policy registrada (ej. ENSEMBLE) vía run_episode."""
+    from sim.runner import run_episode
+    st = run_episode(max_steps=2000, seed=seed, policy_name=policy_name,
+                     model_path=model_path)
+    return {"win": st.outcome == "WIN", "round": st.round,
+            "steps": None, "outcome": st.outcome}
+
+
+def _model_eval(model_key, zip_path, seeds, workers, device, policy_class=False):
+    """Evalúa UN modelo sobre todas las seeds, en paralelo.
+
+    policy_class=True → evaluar una clase registrada (nombre en model_key,
+    model_path en zip_path) vía run_episode; si no, .zip PPO directo.
+    """
     import multiprocessing as mp
     from functools import partial
 
     ctx = mp.get_context("spawn")
     if zip_path is None:  # GOAL
         fn = partial(_eval_seed_goal)
+    elif policy_class:
+        fn = partial(_eval_seed_class, model_key, zip_path)
     else:
         fn = partial(_eval_seed_ppo, zip_path, device=device)
 
@@ -110,11 +125,21 @@ def main():
     ap.add_argument("--tag", default="")
     ap.add_argument("--model", dest="models", action="append",
                     help="ruta a un .zip PPO a evaluar (repetible). GOAL siempre incluido.")
+    ap.add_argument("--policy", dest="policies", action="append",
+                    help="clase de policy registrada (ej. ENSEMBLE) + CLAVE=model_path, "
+                         "formato 'NOMBRE:/ruta/al/model.zip' (repetible).")
     args = ap.parse_args()
 
     seeds = list(range(args.seed_start, args.seed_start + args.seeds))
-    # GOAL siempre presente como baseline; luego los .zip
+    # GOAL siempre presente como baseline; luego los .zip y clases
     entries = [("GOAL", None)] + [(f"PPO:{Path(m).stem[:28]}", m) for m in (args.models or [])]
+    for pc in (args.policies or []):
+        name, _, path = pc.partition(":")
+        entries.append((name.upper(), path))
+        if not path:
+            raise SystemExit(f"--policy {pc}: falta modelo (formato NOMBRE:/ruta.zip)")
+        if not Path(path).exists():
+            raise SystemExit(f"--policy {pc}: no existe {path}")
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     tag = args.tag or "bench"
@@ -128,7 +153,9 @@ def main():
     t0 = time.time()
     for key, zpath in entries:
         t_m = time.time()
-        r = _model_eval(key, zpath, seeds, args.workers, args.device)
+        is_class = key != "GOAL" and not key.startswith("PPO:")
+        r = _model_eval(key, zpath, seeds, args.workers, args.device,
+                        policy_class=is_class)
         all_results[key] = r
         nwin = sum(1 for x in r.values() if x["win"])
         print(f"  [{key}] {nwin}/{len(seeds)} = {nwin/len(seeds)*100:.1f}% "
