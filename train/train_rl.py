@@ -35,6 +35,7 @@ except ImportError:
 
 try:
     from sb3_contrib import MaskablePPO
+    from sb3_contrib.common.callbacks import EvalCallback as MaskableEvalCallback
     HAS_SB3_CONTRIB = True
 except ImportError:
     HAS_SB3_CONTRIB = False
@@ -46,7 +47,8 @@ from train.carcosa_env import CarcosaEnv
 
 
 def make_env(seed: int, rank: int, reward_params: dict = None,
-             king_enabled: bool = True, king_presence_start_round: int = None):
+             king_enabled: bool = True, king_presence_start_round: int = None,
+             use_action_mask: bool = False):
     """Factory function para crear entornos."""
     def _init():
         kwargs = dict(reward_params or {})
@@ -54,6 +56,12 @@ def make_env(seed: int, rank: int, reward_params: dict = None,
         if king_presence_start_round is not None:
             kwargs["king_presence_start_round"] = king_presence_start_round
         env = CarcosaEnv(seed=seed + rank, **kwargs)
+        if use_action_mask:
+            # CRITICO [092]: el env implementa action_masks() pero nunca se
+            # envolvía con ActionMasker => PPO normal exploraba 81% ilegales
+            # (penalty -0.02 ahogaba la señal). Con máscara, 4% ilegales.
+            from sb3_contrib.common.wrappers import ActionMasker
+            env = ActionMasker(env, lambda e: e.action_masks())
         return env
     return _init
 
@@ -74,6 +82,7 @@ def train_rl(
     reward_params: dict = None,
     king_enabled: bool = True,
     king_presence_start_round: int = None,
+    use_action_mask: bool = False,
 ):
     """
     Entrena agente RL.
@@ -92,12 +101,12 @@ def train_rl(
     print(f"Creando {n_envs} entornos paralelos...")
     
     if use_subproc and n_envs > 1:
-        env = SubprocVecEnv([make_env(seed, i, reward_params, king_enabled, king_presence_start_round) for i in range(n_envs)])
+        env = SubprocVecEnv([make_env(seed, i, reward_params, king_enabled, king_presence_start_round, use_action_mask) for i in range(n_envs)])
     else:
-        env = DummyVecEnv([make_env(seed, i, reward_params, king_enabled, king_presence_start_round) for i in range(n_envs)])
+        env = DummyVecEnv([make_env(seed, i, reward_params, king_enabled, king_presence_start_round, use_action_mask) for i in range(n_envs)])
     
     # Entorno de evaluación
-    eval_env = DummyVecEnv([make_env(seed + 1000, 0, reward_params, king_enabled, king_presence_start_round)])
+    eval_env = DummyVecEnv([make_env(seed + 1000, 0, reward_params, king_enabled, king_presence_start_round, use_action_mask)])
     
     # Configurar modelo
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -145,13 +154,16 @@ def train_rl(
     # Callbacks
     Path(save_dir).mkdir(exist_ok=True, parents=True)
     
+    # Para MaskablePPO usar el EvalCallback de sb3_contrib (maneja action_masks)
+    EvalCls = MaskableEvalCallback if (algo.lower() == "maskable_ppo" and HAS_SB3_CONTRIB) else EvalCallback
+    
     callbacks = [
         CheckpointCallback(
             save_freq=50_000 // n_envs,
             save_path=f"{save_dir}/checkpoints_{run_name}",
             name_prefix="rl_model"
         ),
-        EvalCallback(
+        EvalCls(
             eval_env,
             best_model_save_path=f"{save_dir}/best_{run_name}",
             log_path=f"{log_dir}/eval_{run_name}",
@@ -237,6 +249,8 @@ def main():
                               help="King activo en el env (False = fase 1 del curriculum)")
     train_parser.add_argument("--king-presence-round", type=int, default=None,
                               help="Overrides KING_PRESENCE_START_ROUND (None = default)")
+    train_parser.add_argument("--action-mask", type=lambda x: x.lower() in ("true","1","yes"), default=False,
+                              help="Envolver env con ActionMasker (CRITICO: sin el, PPO explora 81% ilegales)")
     
     # Reward params
     train_parser.add_argument("--reward-win", type=float, default=100.0)
@@ -266,6 +280,7 @@ def main():
             reward_params=reward_params,
             king_enabled=args.king_enabled,
             king_presence_start_round=args.king_presence_round,
+            use_action_mask=args.action_mask,
         )
     elif args.command == "eval":
         evaluate_model(args.model, episodes=args.episodes)
