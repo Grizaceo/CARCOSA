@@ -258,6 +258,7 @@ def run_episode(
     out_path: Optional[str] = None,
     cfg: Optional[Config] = None,
     policy_name: str = "GOAL",
+    model_path: Optional[str] = None,
 ) -> GameState:
     cfg = cfg or Config()
     rng = RNG(seed)
@@ -285,7 +286,7 @@ def run_episode(
         # I'll rely on defaults for P0 or simple hack:
         ppol = MCTSPlayerPolicy(cfg, rollouts=getattr(cfg, "MCTS_ROLLOUTS", 100)) 
     else:
-        ppol = get_player_policy(policy_name, cfg)
+        ppol = get_player_policy(policy_name, cfg, model_path=model_path)
 
     kpol = get_king_policy(getattr(cfg, "KING_POLICY", "RANDOM"), cfg)
 

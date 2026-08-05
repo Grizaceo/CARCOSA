@@ -1630,6 +1630,58 @@ class PPOCARCOPlayerPolicy(PlayerPolicy):
         return Action(actor=actor, type=ActionType.END_TURN, data={})
 
 
+class EnsembleGoalNetPolicy(PlayerPolicy):
+    """
+    [092] Ensamble GOAL + red: GOAL es el principal, la red best_evolved cubre
+    donde la heurística no progresa. INACTIVO por defecto (requiere model_path).
+
+    MOTIVACIÓN (hallazgo 2026-08-04, benchmark 100 seeds en bench_multi_seed.py):
+      - GOAL 9.0% en seeds 0-99; best_evolved 3.0% pero en seeds ORTOGONALES
+        (14,58,65 — donde GOAL pierde). overlap=0. GOAL∪best = 12% > 9%.
+      - La red encontró una trayectoria de victoria distinta a la heurística.
+      - Este policy materializa la UNIÓN: no reemplaza a GOAL, lo extiende.
+
+    ESTRATEGIA (integración por tipo de acción, sin reimplementar lógica):
+      - En cada turno pide la acción a GOAL y a la red.
+      - Prioriza acciones que significan PROGRESO sobre END_TURN: si cualquiera
+        de los dos propone algo que no es END_TURN, lo toma. GOAL desempata
+        cuando ambos proponen (su heuristic es la fuente de game-truth).
+      - Si ambos llegan a END_TURN, usa la primera acción legal (nunca ciego).
+      - La red sólo "habla" cuando GOAL estaría pasando: exactamente el caso
+        donde el benchmark le vio ganar seeds que GOAL pierde.
+
+    Activación vía get_player_policy("ENSEMBLE", cfg, model_path=<best_evolved.zip>).
+    """
+
+    def __init__(self, cfg: Config = None, model_path: str = None):
+        # GOAL es el principal — se instancia sin model_path.
+        self._goal = GoalDirectedPlayerPolicy(cfg or Config())
+        self._net = PPOCARCOPlayerPolicy(cfg, model_path=model_path)
+
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        goal_action = self._goal.choose(state, rng)
+        # La red sólo consulta cuando GOAL pasaría — ahorra coste y evita
+        # que una red no-legal pise la decisión de la heurística.
+        if goal_action.type != ActionType.END_TURN:
+            return goal_action
+
+        try:
+            net_action = self._net.choose(state, rng)
+        except Exception as e:
+            print(f"[ENSEMBLE] net fallback failed: {e}. Usando primera legal.")
+            net_action = None
+
+        if net_action is not None and net_action.type != ActionType.END_TURN:
+            return net_action
+
+        # Ambos pasan: primera acción legal real, nunca END_TURN ciego.
+        actor = _get_active_actor(state)
+        legal = get_legal_actions(state, actor)
+        if legal:
+            return legal[0]
+        return goal_action
+
+
 PLAYER_POLICY_REGISTRY = {
     "GOAL": GoalDirectedPlayerPolicy,
     "HABITANTEDECARCOSA": HabitanteDeCarcosaPolicy,
@@ -1640,6 +1692,7 @@ PLAYER_POLICY_REGISTRY = {
     "BCNN": BCNNPlayerPolicy,
     "HYBRID": HybridBCNNGoalPolicy,
     "PPO": PPOCARCOPlayerPolicy,  # [092] andamiaje; inactivo por defecto (requiere model_path)
+    "ENSEMBLE": EnsembleGoalNetPolicy,  # [092] GOAL + red, integracion por tipo; inactivo por defecto (requiere model_path)
 }
 
 KING_POLICY_REGISTRY = {
