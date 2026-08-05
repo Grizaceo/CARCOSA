@@ -22,9 +22,21 @@ from typing import Dict, List, Any, Optional, Tuple
 from collections import defaultdict
 import numpy as np
 import sys
+import inspect
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+
+def _get_predict_params(model) -> list:
+    """Devuelve los nombres de parámetros de model.predict. [] si model es None."""
+    if model is None:
+        return []
+    try:
+        sig = inspect.signature(model.predict)
+        return list(sig.parameters.keys())
+    except (ValueError, TypeError):
+        return []
 
 
 def diagnose_episode(env, model=None, seed: int = 0, max_steps: int = 2000) -> Dict[str, Any]:
@@ -65,13 +77,19 @@ def diagnose_episode(env, model=None, seed: int = 0, max_steps: int = 2000) -> D
     final_reward = 0.0
     reward_accum = 0.0
 
+    # Detectar si el modelo soporta action_masks (MaskablePPO vs PPO estándar)
+    _supports_masks = hasattr(model, 'predict') and 'action_masks' in _get_predict_params(model)
+
     while not done and steps < max_steps:
         if model is not None:
-            try:
-                action_masks = env.action_masks()
-                action, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
-            except Exception:
-                action = env.action_space.sample()
+            if _supports_masks:
+                try:
+                    action_masks = env.action_masks()
+                    action, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
+                except Exception:
+                    action, _ = model.predict(obs, deterministic=True)
+            else:
+                action, _ = model.predict(obs, deterministic=True)
         else:
             legal_mask = info.get("legal_actions", np.ones(env.action_space.n))
             legal_ids = np.where(legal_mask > 0)[0]
@@ -333,12 +351,17 @@ def _diagnose_maskable(env, model, seed: int) -> Dict[str, Any]:
     steps = 0
     reward_accum = 0.0
 
+    _supports_masks = 'action_masks' in _get_predict_params(model)
+
     while not done and steps < 2000:
-        try:
-            action_masks = env.action_masks()
-            action, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
-        except Exception:
-            action = env.action_space.sample()
+        if _supports_masks:
+            try:
+                action_masks = env.action_masks()
+                action, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
+            except Exception:
+                action, _ = model.predict(obs, deterministic=True)
+        else:
+            action, _ = model.predict(obs, deterministic=True)
 
         obs, reward, terminated, truncated, info = env.step(action)
         reward_accum += reward
