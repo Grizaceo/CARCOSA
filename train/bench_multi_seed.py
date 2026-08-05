@@ -46,11 +46,16 @@ def _eval_seed_goal(seed):
 def _eval_seed_ppo(zip_path, seed, device="cpu"):
     import torch
     from stable_baselines3 import PPO
+    from sb3_contrib import MaskablePPO
     from train.carcosa_env import CarcosaEnv
 
     torch.set_num_threads(1)
     env = CarcosaEnv()
-    model = PPO.load(str(zip_path), env=env, device=device)
+    # Detectar si el modelo es MaskablePPO por el nombre del archivo
+    if "maskable" in str(zip_path).lower():
+        model = MaskablePPO.load(str(zip_path), env=env, device=device)
+    else:
+        model = PPO.load(str(zip_path), env=env, device=device)
     obs, info = env.reset(seed=seed)
     done = False
     steps = 0
