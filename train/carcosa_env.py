@@ -113,6 +113,11 @@ class CarcosaEnv(gym.Env):
         # [092] Reward shaping de posesión de keys: premia MANTENER keys por
         # paso (gradiente hacia acumular/proteger), no solo el delta de robar.
         reward_key_hold_per_step: float = 0.0,
+        # [092] Existence punishment (idea: Pezza "AI Gladiators" video):
+        # castigo por CADA ronda transcurrida para forzar victorias rápidas.
+        # Las victorias ocurren ~ronda 15, derrotas se arrastran a 30+. Un
+        # castigo por ronda empuja al agente a terminar YA, no sobrevivir.
+        penalty_existence_per_round: float = 0.0,
         info_decay: float = 0.28,
         info_memory_max_age: int = 18,
         curriculum_keys34_prob: float = 0.0,
@@ -160,6 +165,7 @@ class CarcosaEnv(gym.Env):
         self.reward_key = reward_key
         self.reward_key_lost = reward_key_lost
         self.reward_key_hold_per_step = reward_key_hold_per_step
+        self.penalty_existence_per_round = penalty_existence_per_round
         self.reward_sanity_loss = reward_sanity_loss
         self.reward_info_gain = reward_info_gain
         self.reward_info_use = reward_info_use
@@ -1103,6 +1109,17 @@ class CarcosaEnv(gym.Env):
             reward = self.reward_win if next_state.outcome == "WIN" else self.reward_lose
         else:
             reward = 0.0
+
+            # [092] EXISTENCE PUNISHMENT (Pezza "AI Gladiators" video):
+            # castigo por ronda transcurrida. Las victorias ocurren ~ronda 15,
+            # las derrotas se arrastran a 30+. Cada ronda que pasa sin ganar
+            # acumula penalty, forzando al agente a buscar la victoria rápida
+            # en vez de sobrevivir indefinidamente. Se aplica SOLO cuando la
+            # ronda avanzó (no cada step — dentro de una ronda hay varios
+            # steps de jugadores y King).
+            if self.penalty_existence_per_round > 0 and next_state.round > prev_state.round:
+                rounds_elapsed = next_state.round - prev_state.round
+                reward -= self.penalty_existence_per_round * rounds_elapsed
 
             # Ganar llaves (siempre activo)
             if curr_keys > prev_keys:

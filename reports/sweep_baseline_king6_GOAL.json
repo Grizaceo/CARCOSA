@@ -1,0 +1,67 @@
+{
+  "policy": "GOAL",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "configs": {
+    "baseline": {},
+    "king6": {
+      "KING_PRESENCE_START_ROUND": 6
+    },
+    "king8": {
+      "KING_PRESENCE_START_ROUND": 8
+    },
+    "keys7": {
+      "KEYS_TOTAL": 7
+    },
+    "rounds90": {
+      "MAX_ROUNDS": 90
+    },
+    "comb1": {
+      "KING_PRESENCE_START_ROUND": 6,
+      "KEYS_TOTAL": 7
+    },
+    "comb2": {
+      "KING_PRESENCE_START_ROUND": 6,
+      "KEYS_TOTAL": 7,
+      "MAX_ROUNDS": 90
+    }
+  },
+  "results": {
+    "baseline": {
+      "win_rate": 0.1,
+      "n_wins": 2,
+      "n_seeds": 20,
+      "avg_round": 31.4,
+      "overrides": {}
+    },
+    "king6": {
+      "win_rate": 0.0,
+      "n_wins": 0,
+      "n_seeds": 20,
+      "avg_round": 34.9,
+      "overrides": {
+        "KING_PRESENCE_START_ROUND": 6
+      }
+    }
+  }
+}

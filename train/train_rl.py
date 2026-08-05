@@ -261,6 +261,8 @@ def main():
     train_parser.add_argument("--penalty-empty-search", type=float, default=-2.0)
     train_parser.add_argument("--reward-key-hold", type=float, default=0.0,
                               help="[092] Reward por paso por MANTENER keys (posesión)")
+    train_parser.add_argument("--penalty-existence", type=float, default=0.0,
+                              help="[092] Existence punishment: castigo por ronda transcurrida (Pezza)")
     
     eval_parser = subparsers.add_parser("eval")
     eval_parser.add_argument("--model", type=str, required=True)
@@ -275,6 +277,7 @@ def main():
             "reward_key": args.reward_key,
             "penalty_empty_search": args.penalty_empty_search,
             "reward_key_hold_per_step": args.reward_key_hold,
+            "penalty_existence_per_round": args.penalty_existence,
         }
         train_rl(
             algo=args.algo,
