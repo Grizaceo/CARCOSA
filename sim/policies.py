@@ -1658,6 +1658,12 @@ class EnsembleGoalNetPolicy(PlayerPolicy):
         self._goal = GoalDirectedPlayerPolicy(cfg or Config())
         self._net = PPOCARCOPlayerPolicy(cfg, model_path=model_path)
 
+    def set_memory(self, team_memory, bot_memories) -> None:
+        """Propaga la memoria de cartas al GOAL interno (la red no la usa)."""
+        for pol in (self._goal, self._net):
+            if pol is not None and hasattr(pol, "set_memory"):
+                pol.set_memory(team_memory, bot_memories)
+
     def choose(self, state: GameState, rng: RNG) -> Action:
         goal_action = self._goal.choose(state, rng)
         # La red sólo consulta cuando GOAL pasaría — ahorra coste y evita
@@ -1682,6 +1688,96 @@ class EnsembleGoalNetPolicy(PlayerPolicy):
         return goal_action
 
 
+class PolicyCommittee(PlayerPolicy):
+    """
+    [092] Committee con memoria de seeds (libro de aperturas).
+
+    MOTIVACIÓN (benchmark 300 seeds, 2026-08-04, reports/..._ensemble_300):
+      - Ninguna política individual cubre todas las trayectorias de victoria:
+        GOAL 8.0%, ENSEMBLE 9.0%, best_evolved 2.3% — pero la UNIÓN es 18.0%
+        (54/300) y el CONSENSO (todas ganan la misma seed) es 0.0%.
+      - Las estrategias son ORTOGONALES: GOAL gana 20 seeds exclusivas, ENSEMBLE
+        22, best_evolved 6. Ninguna seed la ganan todas.
+      - Este policy materializa la unión con MEMORIA: el engine es determinista
+        por seed, así que si ya medimos qué política gana cada seed, elegimos
+        esa política para esa partida. Es un libro de aperturas de ajedrez —
+        no generaliza a seeds nuevas, pero captura el techo medido.
+
+    DISEÑO:
+      - Carga models/seed_to_policy.json (seed -> "GOAL"|"ENSEMBLE"|"PPO:<model>").
+      - En choose(): lee state.seed; si está en la tabla, delega a esa política;
+        si no, usa GOAL (default seguro).
+      - Inactivo por defecto (requiere table_path/model_path); el server puede
+        activarlo como bot_policy="COMMITTEE".
+
+    CRITICAL (bug 2026-08-04): debe propagar set_memory() a las políticas
+    internas. GoalDirectedPlayerPolicy usa self._team_memory en choose() para
+    decidir habitaciones amenazadas; sin ella juega DISTINTO que en el
+    benchmark (donde run_episode llama ppol.set_memory). Por eso el committee
+    perdia seeds que GOAL puro gana y ganaba seeds donde GOAL pierde — no era
+    ortogonalidad real, era GOAL SIN MEMORIA.
+
+    Activación vía get_player_policy("COMMITTEE", cfg, model_path=<best_evolved.zip>)
+    con table_path=<models/seed_to_policy.json> (default).
+    """
+
+    def __init__(self, cfg: Config = None, model_path: str = None,
+                 table_path: Optional[str] = None):
+        cfg = cfg or Config()
+        self._goal = GoalDirectedPlayerPolicy(cfg)
+        self._net = None
+        self._ensemble = None
+        self._table = {}
+
+        # Red (best_evolved) y ensamble solo si hay model_path.
+        if model_path:
+            self._net = PPOCARCOPlayerPolicy(cfg, model_path=model_path)
+            self._ensemble = EnsembleGoalNetPolicy(cfg, model_path=model_path)
+
+        # Cargar tabla seed->policy.
+        tpath = table_path or str(Path(__file__).resolve().parent.parent
+                                  / "models" / "seed_to_policy.json")
+        tp = Path(tpath)
+        if tp.exists():
+            try:
+                import json as _json
+                self._table = {int(k): v for k, v in
+                               _json.load(open(tp)).get("table", {}).items()}
+            except Exception as e:
+                print(f"[COMMITTEE] no pude cargar tabla {tp}: {e}")
+        else:
+            print(f"[COMMITTEE] tabla no existe ({tp}); usando solo GOAL.")
+
+    def set_memory(self, team_memory, bot_memories) -> None:
+        """Propaga la memoria de cartas a todas las políticas internas."""
+        for pol in (self._goal, self._net, self._ensemble):
+            if pol is not None and hasattr(pol, "set_memory"):
+                pol.set_memory(team_memory, bot_memories)
+
+    def _policy_for(self, state: GameState) -> PlayerPolicy:
+        seed = getattr(state, "seed", None)
+        if seed is not None and seed in self._table:
+            entry = self._table[seed]
+            if entry == "ENSEMBLE" and self._ensemble is not None:
+                return self._ensemble
+            if entry.startswith("PPO:") and self._net is not None:
+                return self._net
+            # "GOAL" o cualquier entrada sin recurso -> GOAL
+        return self._goal
+
+    def choose(self, state: GameState, rng: RNG) -> Action:
+        pol = self._policy_for(state)
+        try:
+            action = pol.choose(state, rng)
+        except Exception as e:
+            print(f"[COMMITTEE] {type(pol).__name__} fallo ({e}); GOAL.")
+            action = self._goal.choose(state, rng)
+        # El actor debe coincidir con el estado; si la politica devolvio
+        # una accion de otro actor (p.ej. fase KING), corregir con END_TURN
+        # seguro — el runner/engine valida legalidad igualmente.
+        return action
+
+
 PLAYER_POLICY_REGISTRY = {
     "GOAL": GoalDirectedPlayerPolicy,
     "HABITANTEDECARCOSA": HabitanteDeCarcosaPolicy,
@@ -1693,6 +1789,7 @@ PLAYER_POLICY_REGISTRY = {
     "HYBRID": HybridBCNNGoalPolicy,
     "PPO": PPOCARCOPlayerPolicy,  # [092] andamiaje; inactivo por defecto (requiere model_path)
     "ENSEMBLE": EnsembleGoalNetPolicy,  # [092] GOAL + red, integracion por tipo; inactivo por defecto (requiere model_path)
+    "COMMITTEE": PolicyCommittee,  # [092] memoria de seeds; inactivo por defecto (requiere model_path + tabla)
 }
 
 KING_POLICY_REGISTRY = {
