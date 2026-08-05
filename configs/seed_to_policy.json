@@ -1,7 +1,7 @@
 {
   "created": "2026-08-04 22:31",
-  "source": "reports/20260804_223123_ensemble_fix_300",
-  "n_seeds": 49,
+  "source": "reports/*_ensemble_fix + fase1_mask + fase2_mask (2026-08-05)",
+  "n_seeds": 65,
   "table": {
     "4": "GOAL",
     "14": "PPO:best_evolved",
@@ -51,6 +51,22 @@
     "278": "ENSEMBLE",
     "280": "ENSEMBLE",
     "285": "ENSEMBLE",
-    "298": "PPO:best_evolved"
+    "298": "PPO:best_evolved",
+    "296": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_002025.zip",
+    "137": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_002025.zip",
+    "170": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_002025.zip",
+    "78": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_002025.zip",
+    "111": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_002025.zip",
+    "214": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_002025.zip",
+    "87": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_002025.zip",
+    "253": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_002025.zip",
+    "287": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_002025.zip",
+    "288": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_012535.zip",
+    "97": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_012535.zip",
+    "101": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_012535.zip",
+    "76": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_012535.zip",
+    "46": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_012535.zip",
+    "56": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_012535.zip",
+    "283": "PPO_MASK:models/maskable_ppo_carcosa_final_20260805_012535.zip"
   }
 }

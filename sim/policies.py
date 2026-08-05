@@ -1746,6 +1746,9 @@ class PolicyCommittee(PlayerPolicy):
         self._net = None
         self._ensemble = None
         self._table = {}
+        # [092] Cache de nets maskables por ruta para seeds delegadas a
+        # "PPO_MASK:<ruta.zip>" en la tabla (modelos RL entrenados con máscara).
+        self._mask_nets: dict = {}
 
         # Red (best_evolved) y ensamble solo si hay model_path.
         if model_path:
@@ -1778,6 +1781,9 @@ class PolicyCommittee(PlayerPolicy):
         for pol in (self._goal, self._net, self._ensemble):
             if pol is not None and hasattr(pol, "set_memory"):
                 pol.set_memory(team_memory, bot_memories)
+        for pol in self._mask_nets.values():
+            if hasattr(pol, "set_memory"):
+                pol.set_memory(team_memory, bot_memories)
 
     def _policy_for(self, state: GameState) -> PlayerPolicy:
         seed = getattr(state, "seed", None)
@@ -1785,6 +1791,16 @@ class PolicyCommittee(PlayerPolicy):
             entry = self._table[seed]
             if entry == "ENSEMBLE" and self._ensemble is not None:
                 return self._ensemble
+            if entry.startswith("PPO_MASK:"):
+                # [092] Delegar a un modelo RL maskable específico por ruta.
+                rpath = entry[len("PPO_MASK:"):]
+                if rpath not in self._mask_nets:
+                    try:
+                        self._mask_nets[rpath] = PPOCARCOPlayerPolicy(self._goal.cfg, model_path=rpath)
+                    except Exception as e:
+                        print(f"[COMMITTEE] no pude cargar PPO_MASK {rpath}: {e}")
+                        return self._goal
+                return self._mask_nets[rpath]
             if entry.startswith("PPO:") and self._net is not None:
                 return self._net
             # "GOAL" o cualquier entrada sin recurso -> GOAL
