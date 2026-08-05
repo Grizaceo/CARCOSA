@@ -52,7 +52,8 @@ def _eval_seed_ppo(zip_path, seed, device="cpu"):
     torch.set_num_threads(1)
     env = CarcosaEnv()
     # Detectar si el modelo es MaskablePPO por el nombre del archivo
-    if "maskable" in str(zip_path).lower():
+    is_maskable = "maskable" in str(zip_path).lower()
+    if is_maskable:
         model = MaskablePPO.load(str(zip_path), env=env, device=device)
     else:
         model = PPO.load(str(zip_path), env=env, device=device)
@@ -60,7 +61,14 @@ def _eval_seed_ppo(zip_path, seed, device="cpu"):
     done = False
     steps = 0
     while not done and steps < 2000:
-        a, _ = model.predict(obs, deterministic=True)
+        if is_maskable:
+            try:
+                action_masks = env.action_masks()
+                a, _ = model.predict(obs, deterministic=True, action_masks=action_masks)
+            except Exception:
+                a, _ = model.predict(obs, deterministic=True)
+        else:
+            a, _ = model.predict(obs, deterministic=True)
         obs, r, term, trunc, info = env.step(a)
         done = term or trunc
         steps += 1
