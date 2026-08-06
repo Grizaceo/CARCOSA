@@ -1,0 +1,987 @@
+{
+ "meta": {
+  "seeds": 30,
+  "workers": 8,
+  "tag": ""
+ },
+ "results": [
+  {
+   "seed": 4,
+   "variant": "base",
+   "win": true,
+   "outcome": "WIN",
+   "round": 10,
+   "keys": 4
+  },
+  {
+   "seed": 3,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P3)",
+   "round": 28,
+   "keys": 0
+  },
+  {
+   "seed": 5,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P3)",
+   "round": 26,
+   "keys": 0
+  },
+  {
+   "seed": 7,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P1)",
+   "round": 28,
+   "keys": 0
+  },
+  {
+   "seed": 0,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P4)",
+   "round": 31,
+   "keys": 0
+  },
+  {
+   "seed": 1,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 34,
+   "keys": 0
+  },
+  {
+   "seed": 8,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 35,
+   "keys": 1
+  },
+  {
+   "seed": 6,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P4)",
+   "round": 39,
+   "keys": 0
+  },
+  {
+   "seed": 2,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 37,
+   "keys": 0
+  },
+  {
+   "seed": 9,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 29,
+   "keys": 1
+  },
+  {
+   "seed": 12,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 34,
+   "keys": 0
+  },
+  {
+   "seed": 15,
+   "variant": "base",
+   "win": true,
+   "outcome": "WIN",
+   "round": 21,
+   "keys": 4
+  },
+  {
+   "seed": 13,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P1)",
+   "round": 29,
+   "keys": 0
+  },
+  {
+   "seed": 16,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P1)",
+   "round": 22,
+   "keys": 0
+  },
+  {
+   "seed": 17,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 32,
+   "keys": 1
+  },
+  {
+   "seed": 14,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 33,
+   "keys": 0
+  },
+  {
+   "seed": 11,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 44,
+   "keys": 0
+  },
+  {
+   "seed": 10,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P4)",
+   "round": 47,
+   "keys": 0
+  },
+  {
+   "seed": 22,
+   "variant": "base",
+   "win": true,
+   "outcome": "WIN",
+   "round": 17,
+   "keys": 4
+  },
+  {
+   "seed": 18,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 31,
+   "keys": 0
+  },
+  {
+   "seed": 19,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 38,
+   "keys": 0
+  },
+  {
+   "seed": 21,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 36,
+   "keys": 0
+  },
+  {
+   "seed": 23,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 32,
+   "keys": 1
+  },
+  {
+   "seed": 24,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 27,
+   "keys": 2
+  },
+  {
+   "seed": 25,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 33,
+   "keys": 0
+  },
+  {
+   "seed": 27,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P4)",
+   "round": 19,
+   "keys": 0
+  },
+  {
+   "seed": 28,
+   "variant": "base",
+   "win": true,
+   "outcome": "WIN",
+   "round": 11,
+   "keys": 4
+  },
+  {
+   "seed": 26,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 31,
+   "keys": 0
+  },
+  {
+   "seed": 20,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 41,
+   "keys": 2
+  },
+  {
+   "seed": 0,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 23,
+   "keys": 1
+  },
+  {
+   "seed": 29,
+   "variant": "base",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 28,
+   "keys": 1
+  },
+  {
+   "seed": 1,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P1)",
+   "round": 32,
+   "keys": 0
+  },
+  {
+   "seed": 3,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P1)",
+   "round": 34,
+   "keys": 0
+  },
+  {
+   "seed": 4,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 29,
+   "keys": 1
+  },
+  {
+   "seed": 7,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 27,
+   "keys": 0
+  },
+  {
+   "seed": 2,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P3)",
+   "round": 41,
+   "keys": 0
+  },
+  {
+   "seed": 11,
+   "variant": "keys_top",
+   "win": true,
+   "outcome": "WIN",
+   "round": 10,
+   "keys": 4
+  },
+  {
+   "seed": 8,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 24,
+   "keys": 1
+  },
+  {
+   "seed": 6,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 31,
+   "keys": 1
+  },
+  {
+   "seed": 5,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 31,
+   "keys": 0
+  },
+  {
+   "seed": 9,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 32,
+   "keys": 1
+  },
+  {
+   "seed": 10,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P4)",
+   "round": 33,
+   "keys": 0
+  },
+  {
+   "seed": 12,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P3)",
+   "round": 29,
+   "keys": 0
+  },
+  {
+   "seed": 14,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 26,
+   "keys": 1
+  },
+  {
+   "seed": 15,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 25,
+   "keys": 1
+  },
+  {
+   "seed": 16,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P1)",
+   "round": 30,
+   "keys": 0
+  },
+  {
+   "seed": 13,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (COMIDA_SERVIDA -> P2)",
+   "round": 36,
+   "keys": 0
+  },
+  {
+   "seed": 23,
+   "variant": "keys_top",
+   "win": true,
+   "outcome": "WIN",
+   "round": 10,
+   "keys": 4
+  },
+  {
+   "seed": 18,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P1)",
+   "round": 34,
+   "keys": 0
+  },
+  {
+   "seed": 19,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P4)",
+   "round": 31,
+   "keys": 0
+  },
+  {
+   "seed": 17,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 41,
+   "keys": 0
+  },
+  {
+   "seed": 28,
+   "variant": "keys_top",
+   "win": true,
+   "outcome": "WIN",
+   "round": 11,
+   "keys": 4
+  },
+  {
+   "seed": 22,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P4)",
+   "round": 32,
+   "keys": 0
+  },
+  {
+   "seed": 29,
+   "variant": "keys_top",
+   "win": true,
+   "outcome": "WIN",
+   "round": 7,
+   "keys": 4
+  },
+  {
+   "seed": 24,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 28,
+   "keys": 1
+  },
+  {
+   "seed": 20,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 38,
+   "keys": 1
+  },
+  {
+   "seed": 27,
+   "variant": "keys_top",
+   "win": true,
+   "outcome": "WIN",
+   "round": 21,
+   "keys": 4
+  },
+  {
+   "seed": 25,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 32,
+   "keys": 1
+  },
+  {
+   "seed": 21,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 46,
+   "keys": 0
+  },
+  {
+   "seed": 26,
+   "variant": "keys_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P2)",
+   "round": 47,
+   "keys": 0
+  },
+  {
+   "seed": 1,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P4)",
+   "round": 29,
+   "keys": 0
+  },
+  {
+   "seed": 0,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 29,
+   "keys": 1
+  },
+  {
+   "seed": 4,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 31,
+   "keys": 1
+  },
+  {
+   "seed": 3,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P3)",
+   "round": 35,
+   "keys": 0
+  },
+  {
+   "seed": 5,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P2)",
+   "round": 27,
+   "keys": 0
+  },
+  {
+   "seed": 11,
+   "variant": "keys_top_f2",
+   "win": true,
+   "outcome": "WIN",
+   "round": 10,
+   "keys": 4
+  },
+  {
+   "seed": 2,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 37,
+   "keys": 0
+  },
+  {
+   "seed": 6,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P4)",
+   "round": 30,
+   "keys": 0
+  },
+  {
+   "seed": 13,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 21,
+   "keys": 0
+  },
+  {
+   "seed": 7,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 34,
+   "keys": 0
+  },
+  {
+   "seed": 8,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 35,
+   "keys": 1
+  },
+  {
+   "seed": 10,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P2)",
+   "round": 33,
+   "keys": 0
+  },
+  {
+   "seed": 12,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P2)",
+   "round": 29,
+   "keys": 0
+  },
+  {
+   "seed": 14,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 31,
+   "keys": 1
+  },
+  {
+   "seed": 16,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P1)",
+   "round": 22,
+   "keys": 0
+  },
+  {
+   "seed": 17,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P4)",
+   "round": 28,
+   "keys": 0
+  },
+  {
+   "seed": 15,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 34,
+   "keys": 1
+  },
+  {
+   "seed": 18,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 34,
+   "keys": 1
+  },
+  {
+   "seed": 21,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 32,
+   "keys": 0
+  },
+  {
+   "seed": 19,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 37,
+   "keys": 0
+  },
+  {
+   "seed": 9,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 51,
+   "keys": 0
+  },
+  {
+   "seed": 22,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P2)",
+   "round": 37,
+   "keys": 0
+  },
+  {
+   "seed": 20,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 41,
+   "keys": 2
+  },
+  {
+   "seed": 29,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 25,
+   "keys": 0
+  },
+  {
+   "seed": 25,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 30,
+   "keys": 0
+  },
+  {
+   "seed": 27,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P4)",
+   "round": 19,
+   "keys": 0
+  },
+  {
+   "seed": 26,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 31,
+   "keys": 0
+  },
+  {
+   "seed": 24,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 27,
+   "keys": 2
+  },
+  {
+   "seed": 23,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P2)",
+   "round": 43,
+   "keys": 0
+  },
+  {
+   "seed": 28,
+   "variant": "keys_top_f2",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P2)",
+   "round": 34,
+   "keys": 0
+  },
+  {
+   "seed": 0,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P4)",
+   "round": 31,
+   "keys": 0
+  },
+  {
+   "seed": 3,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P3)",
+   "round": 28,
+   "keys": 0
+  },
+  {
+   "seed": 5,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P3)",
+   "round": 26,
+   "keys": 0
+  },
+  {
+   "seed": 2,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P2)",
+   "round": 33,
+   "keys": 0
+  },
+  {
+   "seed": 1,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 32,
+   "keys": 0
+  },
+  {
+   "seed": 7,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P1)",
+   "round": 28,
+   "keys": 0
+  },
+  {
+   "seed": 9,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 29,
+   "keys": 1
+  },
+  {
+   "seed": 4,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P2)",
+   "round": 33,
+   "keys": 0
+  },
+  {
+   "seed": 8,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 35,
+   "keys": 1
+  },
+  {
+   "seed": 6,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P4)",
+   "round": 39,
+   "keys": 0
+  },
+  {
+   "seed": 15,
+   "variant": "motemey_top",
+   "win": true,
+   "outcome": "WIN",
+   "round": 15,
+   "keys": 4
+  },
+  {
+   "seed": 12,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 34,
+   "keys": 0
+  },
+  {
+   "seed": 16,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P1)",
+   "round": 22,
+   "keys": 0
+  },
+  {
+   "seed": 10,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (HOUSE_LOSS -> P4)",
+   "round": 34,
+   "keys": 0
+  },
+  {
+   "seed": 13,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P1)",
+   "round": 29,
+   "keys": 0
+  },
+  {
+   "seed": 20,
+   "variant": "motemey_top",
+   "win": true,
+   "outcome": "WIN",
+   "round": 13,
+   "keys": 4
+  },
+  {
+   "seed": 11,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 44,
+   "keys": 0
+  },
+  {
+   "seed": 14,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 33,
+   "keys": 0
+  },
+  {
+   "seed": 22,
+   "variant": "motemey_top",
+   "win": true,
+   "outcome": "WIN",
+   "round": 17,
+   "keys": 4
+  },
+  {
+   "seed": 18,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P1)",
+   "round": 24,
+   "keys": 0
+  },
+  {
+   "seed": 24,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 26,
+   "keys": 1
+  },
+  {
+   "seed": 17,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 46,
+   "keys": 0
+  },
+  {
+   "seed": 27,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P4)",
+   "round": 19,
+   "keys": 0
+  },
+  {
+   "seed": 19,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 38,
+   "keys": 0
+  },
+  {
+   "seed": 21,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 36,
+   "keys": 0
+  },
+  {
+   "seed": 23,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_KEYS_DESTROYED",
+   "round": 32,
+   "keys": 1
+  },
+  {
+   "seed": 25,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P3)",
+   "round": 33,
+   "keys": 0
+  },
+  {
+   "seed": 28,
+   "variant": "motemey_top",
+   "win": true,
+   "outcome": "WIN",
+   "round": 11,
+   "keys": 4
+  },
+  {
+   "seed": 26,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (KING_PRESENCE -> P2)",
+   "round": 35,
+   "keys": 0
+  },
+  {
+   "seed": 29,
+   "variant": "motemey_top",
+   "win": false,
+   "outcome": "LOSE_ALL_MINUS5 (MINUS_5_TRANSITION -> P4)",
+   "round": 32,
+   "keys": 0
+  }
+ ],
+ "summary": {
+  "base": {
+   "wins": 4,
+   "n": 30
+  },
+  "keys_top": {
+   "wins": 5,
+   "n": 30
+  },
+  "keys_top_f2": {
+   "wins": 1,
+   "n": 30
+  },
+  "motemey_top": {
+   "wins": 4,
+   "n": 30
+  }
+ }
+}

@@ -263,6 +263,13 @@ def main():
                               help="[092] Reward por paso por MANTENER keys (posesión)")
     train_parser.add_argument("--penalty-existence", type=float, default=0.0,
                               help="[092] Existence punishment: castigo por ronda transcurrida (Pezza)")
+    # Spawn randomization (domain randomization, Pezza "AI Gladiators")
+    train_parser.add_argument("--spawn-sanity-jitter", type=int, default=0,
+                              help="Perturbación aleatoria de sanity inicial (0=off, 2=recomendado)")
+    train_parser.add_argument("--spawn-randomize-positions", type=lambda x: x.lower() in ("true","1","yes"), default=False,
+                              help="Shuffle posiciones iniciales de jugadores")
+    train_parser.add_argument("--spawn-key-jitter", type=float, default=0.0,
+                              help="Probabilidad de redistribuir keys iniciales en spawn")
     
     eval_parser = subparsers.add_parser("eval")
     eval_parser.add_argument("--model", type=str, required=True)
@@ -278,6 +285,9 @@ def main():
             "penalty_empty_search": args.penalty_empty_search,
             "reward_key_hold_per_step": args.reward_key_hold,
             "penalty_existence_per_round": args.penalty_existence,
+            "spawn_sanity_jitter": args.spawn_sanity_jitter,
+            "spawn_randomize_positions": args.spawn_randomize_positions,
+            "spawn_key_distribution_jitter": args.spawn_key_jitter,
         }
         train_rl(
             algo=args.algo,

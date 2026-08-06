@@ -129,6 +129,18 @@ class CarcosaEnv(gym.Env):
         curriculum_closing_prob: float = 0.0,
         curriculum_keys_start: int = 4,
         curriculum_far_player_prob: float = 0.8,
+        # --- Spawn randomization (domain randomization, idea Pezza "AI Gladiators") ---
+        # Pezza: agents spawn with randomized stats every round (30-100 HP) to
+        # prevent memorizing one optimal strategy. In CARCOSA, roles are structural
+        # (so sanity_max stays canonical), but we perturb sanity INITIAL and
+        # position to force generalization across starting conditions.
+        # spawn_sanity_jitter: max subtractive perturbation of initial sanity.
+        #   0 = off (canonical). e.g. jitter=2 means SCOUT(3) starts 1-3, TANK(7) starts 5-7.
+        # spawn_randomize_positions: shuffle starting positions across corridors.
+        # spawn_key_distribution_jitter: prob [0,1] of redistributing starting keys.
+        spawn_sanity_jitter: int = 0,
+        spawn_randomize_positions: bool = False,
+        spawn_key_distribution_jitter: float = 0.0,
         # --- Curriculum de dificultad (línea [092]) ---
         # Overrides de Config para desactivar/suavizar el Rey.
         king_enabled: bool = True,
@@ -197,6 +209,10 @@ class CarcosaEnv(gym.Env):
         self.curriculum_closing_prob = max(0.0, min(1.0, float(curriculum_closing_prob)))
         self.curriculum_keys_start = max(0, int(curriculum_keys_start))
         self.curriculum_far_player_prob = max(0.0, min(1.0, float(curriculum_far_player_prob)))
+        # Spawn randomization (domain randomization, Pezza AI Gladiators)
+        self.spawn_sanity_jitter = max(0, int(spawn_sanity_jitter))
+        self.spawn_randomize_positions = bool(spawn_randomize_positions)
+        self.spawn_key_distribution_jitter = max(0.0, min(1.0, float(spawn_key_distribution_jitter)))
         
         # Observation space: 24 features [-1.0, 1.0]
         # Observation space: 10 base + 14 local + 45 node_block(15×3) + 92 player_block(4×23) + 6 global = 167
@@ -922,6 +938,11 @@ class CarcosaEnv(gym.Env):
         self.rng = RNG(self.seed_value)
         self.state = make_smoke_state(seed=self.seed_value, cfg=self.cfg)
 
+        # --- Spawn randomization (domain randomization, Pezza AI Gladiators) ---
+        # Perturba stats iniciales del estado para evitar sobreajuste a un setup fijo.
+        # Se aplica ANTES del curriculum (que opera sobre keys/sanity de jugadores existentes).
+        self._apply_spawn_randomization()
+
         draw = float(self.np_random.random())
         keys34_cutoff = self.curriculum_keys34_prob
         closing_cutoff = min(1.0, self.curriculum_keys34_prob + self.curriculum_closing_prob)
@@ -935,7 +956,58 @@ class CarcosaEnv(gym.Env):
         self._reset_action_debug()
         
         return self._get_obs(), self._get_info()
-    
+
+    def _apply_spawn_randomization(self) -> None:
+        """
+        Domain randomization inspirada en Pezza AI Gladiators.
+        Perturba stats iniciales de los jugadores para evitar sobreajuste a un setup fijo.
+        - sanity_jitter: resta rand_int(0, jitter) a sanity inicial (floor=1).
+        - positions: shuffle posiciones iniciales entre los 4 corridors.
+        - key_distribution_jitter: con prob p, reparte keys iniciales random.
+        """
+        if not self.state or not self.state.players:
+            return
+        import random as _rng_mod
+        local_rng = _rng_mod.Random(self.seed_value ^ 0xDEADBEEF)
+
+        # 1. Sanity jitter
+        if self.spawn_sanity_jitter > 0:
+            for p in self.state.players.values():
+                delta = local_rng.randint(0, self.spawn_sanity_jitter)
+                new_sanity = max(1, p.sanity - delta)
+                p.sanity = new_sanity
+                # sanity_max stays canonical — the role identity is preserved.
+
+        # 2. Position shuffle
+        if self.spawn_randomize_positions:
+            from engine.board import corridor_id
+            corridors = [corridor_id(1), corridor_id(2), corridor_id(1), corridor_id(2)]
+            shuffled = corridors[:]
+            local_rng.shuffle(shuffled)
+            pids = list(self.state.players.keys())
+            local_rng.shuffle(pids)
+            for i, pid in enumerate(pids):
+                if i < len(shuffled):
+                    self.state.players[pid].room = shuffled[i]
+
+        # 3. Key distribution jitter
+        # Por defecto todos arrancan con 0 keys. Esta opción reparte keys iniciales
+        # al azar (útil solo si curriculum no las reparte). Conservador: reparte
+        # 0-2 keys random por jugador, sin superar el total de keys en juego.
+        if self.spawn_key_distribution_jitter > 0.0 and local_rng.random() < self.spawn_key_distribution_jitter:
+            total_keys_available = self.cfg.KEYS_TOTAL  # 6 canónicas
+            # Repartir en rango [0, key_slots] conservando total <= KEYS_TOTAL
+            from engine.roles import get_key_slots
+            pids = list(self.state.players.keys())
+            remaining = total_keys_available
+            for pid in pids:
+                p = self.state.players[pid]
+                max_for_role = get_key_slots(getattr(p, "role_id", "DEFAULT"))
+                # conservador: max 1 key por jugador en spawn
+                give = local_rng.randint(0, min(max_for_role, 1, remaining))
+                p.keys = give
+                remaining -= give
+
     def step(
         self, 
         action_id: int
