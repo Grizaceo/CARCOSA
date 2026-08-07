@@ -1303,10 +1303,16 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (allHumanSeats.length === 0) {
-            alert("Debes elegir al menos un asiento humano (YO o AMIGO).");
-            return;
+            // [SPECTATOR] 100% bots: el server corre el auto-advance en background
+            // con delay; este navegador solo especta vía WebSocket (incluye el
+            // panel del cerebro del bot). No es un error.
+            console.log("[SPECTATOR] Partida 100% bots — modo espectador.");
         }
-        if (humanPlayers.length === 0) {
+        if (humanPlayers.length === 0 && allHumanSeats.length === 0) {
+            // Espectador puro: sin asientos humanos. El WS se conecta como P1
+            // solo para recibir broadcasts (no controla nada).
+            humanPlayers = [];
+        } else if (humanPlayers.length === 0) {
             alert("Debes controlar al menos un asiento (YO) desde este navegador.");
             return;
         }
