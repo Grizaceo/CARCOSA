@@ -340,10 +340,12 @@ class StartRequest(BaseModel):
     players_config: list[Dict[str, Any]] = []
     draw_mode: str = ""
     client_id: Optional[str] = None
-    # [092] Andamiaje PPO (INACTIVO por defecto). Solo si se pasa explícitamente
-    # bot_policy="PPO" + ppo_model_path apunta a un .zip SB3 entrenado por evolve*.py
-    bot_policy: str = "GOAL"
-    ppo_model_path: Optional[str] = None
+    # [092]/[093] Política de bots = TECHO REAL 23.0% (COMMITTEE v5).
+    # bot_default.zip -> models/maskable_ppo_carcosa_final_20260805_154245.zip (23.0% real).
+    # NO usar el último modelo en disco (20260806_185139 = jitter FALSIFICADO 0/300).
+    # Nota: models/ esta gitignored (artifacts locales). El .zip debe existir en disco.
+    bot_policy: str = "PPO"
+    ppo_model_path: Optional[str] = "models/maskable_ppo_carcosa_final_20260805_154245.zip"
 
 
 class ActRequest(BaseModel):
@@ -589,12 +591,18 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
     rng: RNG = session["rng"]
 
     kpol = get_king_policy(getattr(cfg, "KING_POLICY", "RANDOM"), cfg)
-    # [092] Andamiaje PPO/COMMITTEE: solo si se pidió explícitamente y hay .zip.
-    # Por defecto GOAL (heurística). Nunca se activa solo.
-    bot_policy_name = "GOAL"
-    model_path = getattr(session.get("start_request"), "ppo_model_path", None) if session.get("start_request") else None
-    req_bot_policy = getattr(session.get("start_request"), "bot_policy", "GOAL").upper()
-    if req_bot_policy in ("PPO", "COMMITTEE") and model_path:
+    # [092]/[093] Política de bots = TECHO REAL 23.0% (COMMITTEE v5).
+    # Default: PPO con models/maskable_ppo_carcosa_final_20260805_154245.zip
+    # (modelo 23.0% real, no el FALSIFICADO de jitter 20260806_185139).
+    # Si se pide GOAL explícitamente en el request, se respeta (override abajo).
+    bot_policy_name = "PPO"
+    model_path = getattr(session.get("start_request"), "ppo_model_path", None) or \
+        "models/maskable_ppo_carcosa_final_20260805_154245.zip"
+    req_bot_policy = getattr(session.get("start_request"), "bot_policy", "PPO").upper()
+    if req_bot_policy == "GOAL":
+        bot_policy_name = "GOAL"
+        model_path = None
+    elif req_bot_policy in ("PPO", "COMMITTEE") and model_path:
         bot_policy_name = req_bot_policy
     try:
         ppol = get_player_policy(bot_policy_name, cfg, model_path=model_path)
