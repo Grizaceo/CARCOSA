@@ -512,6 +512,15 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
         la = session.get("last_action")
         if la is not None:
             summary["last_action"] = {"actor": la.get("actor"), "type": la.get("type"), "data": la.get("data", {})}
+        # [LIVE-ACT] Activaciones del último paso de bot (PPO). Se envía por WS
+        # para que el frontend pinte el "cerebro" del bot en tiempo real.
+        la_act = session.get("last_activations")
+        if la_act is not None:
+            summary["last_activations"] = la_act
+        # [LIVE-ACT] Nombres de acciones (27) para etiquetar logits
+        an = session.get("action_names")
+        if an is not None:
+            summary["action_names"] = an
 
     return summary
 
@@ -610,6 +619,10 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
         print(f"[AUTO_ADVANCE] No se pudo cargar policy '{bot_policy_name}': {e}. "
               f"Usando GOAL.")
         ppol = get_player_policy("GOAL", cfg)
+    # [LIVE-ACT] Nombres de acciones para el visualizador de activaciones
+    act_names = getattr(ppol, "_action_types", None)
+    if act_names is not None:
+        session["action_names"] = [str(at.value) for at in act_names]
 
     # Si no hay humanos, la partida es 100% bots: correr hasta game_over.
     # Si hay humanos, tope de seguridad para no bloquear la respuesta HTTP.
@@ -637,6 +650,9 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
             else:
                 # Bot
                 action = ppol.choose(state, rng)
+                # [LIVE-ACT] Capturar activaciones del policy PPO (si el policy
+                # las expone; las heurísticas tipo GOAL no tienen).
+                session["last_activations"] = getattr(ppol, "last_activations", None)
                 legal = get_legal_actions(state, actor)
                 if action not in legal:
                     action = legal[0] if legal else Action(actor=actor, type=ActionType.END_TURN, data={})

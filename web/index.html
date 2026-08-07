@@ -173,6 +173,25 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- [LIVE-ACT] Cerebro del Bot: activaciones PPO en vivo -->
+                    <div id="botBrainPanel" class="bot-brain-panel hidden">
+                        <div class="card-title bot-brain-header">
+                            <span>🧠 Cerebro del Bot (PPO 23%)</span>
+                            <span id="botBrainActor" class="bot-brain-actor">—</span>
+                        </div>
+                        <div class="bot-brain-meta">
+                            <span>V(s) = <b id="botBrainValue">—</b></span>
+                            <span>Acción: <b id="botBrainAction">—</b></span>
+                            <span class="bot-brain-toggle" id="botBrainToggle">▾ ocultar detalle</span>
+                        </div>
+                        <div id="botBrainDetail" class="bot-brain-detail">
+                            <div class="bot-brain-section-title">Capas ocultas (64 neuronas, Tanh)</div>
+                            <div id="botBrainHidden" class="bot-brain-bars"></div>
+                            <div class="bot-brain-section-title">Logits de acción (27)</div>
+                            <div id="botBrainLogits" class="bot-brain-bars"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Sidebar Info & Controls -->

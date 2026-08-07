@@ -1795,4 +1795,85 @@ a:focus-visible {
     }
 }
 
+/* [LIVE-ACT] Cerebro del Bot — visualizador de activaciones PPO en vivo */
+.bot-brain-panel {
+    margin-top: 0.6rem;
+    padding: 0.7rem 0.9rem;
+    background: var(--bg-card, #14151c);
+    border: 1px solid var(--color-yellow, #e8c15a);
+    border-radius: 8px;
+    max-height: 380px;
+    overflow-y: auto;
+}
+.bot-brain-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.35rem;
+}
+.bot-brain-actor {
+    font-family: var(--font-mono);
+    color: var(--color-yellow, #e8c15a);
+    font-weight: 700;
+}
+.bot-brain-meta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    color: var(--text-muted, #9a9aae);
+    margin-bottom: 0.4rem;
+}
+.bot-brain-toggle {
+    cursor: pointer;
+    color: var(--color-blue, #4b96ff);
+    user-select: none;
+}
+.bot-brain-section-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted, #9a9aae);
+    margin: 0.5rem 0 0.25rem;
+    font-family: var(--font-mono);
+}
+.bot-brain-bars {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10px, 1fr));
+    gap: 1px;
+    align-items: end;
+    height: 56px;
+    margin-bottom: 0.2rem;
+}
+.bot-brain-bar {
+    width: 100%;
+    min-height: 1px;
+    border-radius: 1px;
+    background: #2a2c3a;
+}
+.bot-brain-bar.pos {
+    background: linear-gradient(to top, #1e6f3e, #34d97b);
+}
+.bot-brain-bar.neg {
+    background: linear-gradient(to top, #6f1e2e, #ff4b6b);
+}
+.bot-brain-bar.zero {
+    background: #3a3d4d;
+}
+.bot-brain-legend {
+    display: flex;
+    gap: 0.9rem;
+    font-size: 0.68rem;
+    color: var(--text-muted, #9a9aae);
+    margin-top: 0.2rem;
+}
+.bot-brain-legend .swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
 

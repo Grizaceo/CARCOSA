@@ -1629,6 +1629,9 @@ document.addEventListener("DOMContentLoaded", () => {
         kingPill.textContent = `REY EN PISO ${state.king_floor}`;
         activeActorSpan.textContent = activeActor;
         
+        // [LIVE-ACT] Cerebro del bot: activaciones PPO en vivo
+        renderBotBrain(state);
+        
         // P0-5: Tue-Tue counter
         const tueRevelations = state.tue_tue_revelations || 0;
         if (tueRevelations > 0) {
@@ -3144,5 +3147,64 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+
+    /**
+     * [LIVE-ACT] Renderiza el "cerebro" del bot PPO: activaciones de la capa
+     * oculta (64 Tanh) y logits de acción (27). Se alimenta de
+     * state.last_activations que el server inyecta tras cada paso de bot.
+     */
+    function renderBotBrain(state) {
+        const panel = document.getElementById("botBrainPanel");
+        if (!panel) return;
+        // Cachear nombres de acciones (27) la primera vez que llegan
+        if (state && Array.isArray(state.action_names) && state.action_names.length) {
+            window.CARCOSA_ACTION_NAMES = state.action_names;
+        }
+        const act = state && state.last_activations;
+        if (!act || !act.policy_hidden || !act.logits) {
+            panel.classList.add("hidden");
+            return;
+        }
+        panel.classList.remove("hidden");
+
+        // Actor + métricas
+        document.getElementById("botBrainActor").textContent = act.actor || "—";
+        document.getElementById("botBrainValue").textContent = (act.value !== undefined) ? act.value.toFixed(2) : "—";
+        const actionNames = window.CARCOSA_ACTION_NAMES || [];
+        const aName = (act.action_idx !== undefined && actionNames[act.action_idx]) ? actionNames[act.action_idx] : `#${act.action_idx}`;
+        document.getElementById("botBrainAction").textContent = aName;
+
+        // Barras de capa oculta (64)
+        renderBars(document.getElementById("botBrainHidden"), act.policy_hidden, 1.0);
+        // Barras de logits (27)
+        renderBars(document.getElementById("botBrainLogits"), act.logits, Math.max(...act.logits.map(Math.abs), 1e-6));
+    }
+
+    function renderBars(container, values, scale) {
+        if (!container) return;
+        container.innerHTML = "";
+        for (let i = 0; i < values.length; i++) {
+            const v = values[i];
+            const bar = document.createElement("div");
+            bar.className = "bot-brain-bar";
+            const mag = Math.min(1, Math.abs(v) / scale);
+            bar.style.height = Math.max(1, Math.round(mag * 52)) + "px";
+            if (v > 0.02) bar.classList.add("pos");
+            else if (v < -0.02) bar.classList.add("neg");
+            else bar.classList.add("zero");
+            bar.title = `n${i}: ${v.toFixed(3)}`;
+            container.appendChild(bar);
+        }
+    }
+
+    // Toggle detalle
+    const bbToggle = document.getElementById("botBrainToggle");
+    if (bbToggle) {
+        bbToggle.addEventListener("click", () => {
+            const detail = document.getElementById("botBrainDetail");
+            const hidden = detail.classList.toggle("hidden");
+            bbToggle.textContent = hidden ? "▸ mostrar detalle" : "▾ ocultar detalle";
+        });
+    }
 
 });

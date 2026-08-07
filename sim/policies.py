@@ -1613,15 +1613,47 @@ class PPOCARCOPlayerPolicy(PlayerPolicy):
             return Action(actor=actor, type=ActionType.END_TURN, data={})
 
         with self._torch.no_grad():
-            if self._is_maskable:
-                # MaskablePPO.predict requiere action_masks; el env dummy tiene
-                # action_masks() implementado (máscara del estado actual).
-                masks = self._env.action_masks()
-                action_id, _ = self._model.predict(obs, deterministic=True, action_masks=masks)
-            else:
-                action_id, _ = self._model.predict(obs, deterministic=True)
+            # [LIVE-ACT] Forward manual para capturar activaciones en vivo.
+            # Replica exactamente model.predict(deterministic=True, action_masks=masks)
+            # pero expone obs / hidden / logits / probs / value.
+            act = None
+            self.last_activations = None
+            try:
+                policy = self._model.policy
+                obs_t = self._torch.as_tensor(obs, dtype=self._torch.float32).unsqueeze(0)
+                latent = policy.extract_features(obs_t, None)
+                policy_latent = policy.mlp_extractor.policy_net(latent)
+                value_latent = policy.mlp_extractor.value_net(latent)
+                logits = policy.action_net(policy_latent)
+                value = policy.value_net(value_latent)
+                masks = None
+                if self._is_maskable:
+                    masks = self._env.action_masks()
+                    if masks is not None:
+                        m_t = self._torch.as_tensor(masks, dtype=self._torch.float32).unsqueeze(0)
+                        logits = self._torch.where(m_t > 0, logits, self._torch.tensor(-1e10))
+                probs = self._torch.softmax(logits, dim=-1)
+                action_id = int(self._torch.argmax(logits, dim=-1).item())
+                self.last_activations = {
+                    "actor": actor,
+                    "obs": [float(x) for x in obs],
+                    "policy_hidden": [float(x) for x in policy_latent.squeeze(0).cpu().numpy()],
+                    "logits": [float(x) for x in logits.squeeze(0).cpu().numpy()],
+                    "probs": [float(x) for x in probs.squeeze(0).cpu().numpy()],
+                    "action_idx": action_id,
+                    "value": float(value.squeeze(0).item()),
+                }
+            except Exception as e:
+                print(f"[PPOCARCO] activations capture failed: {e}")
+                # Fallback al predict estándar (sin activaciones)
+                if self._is_maskable:
+                    masks = self._env.action_masks()
+                    action_id, _ = self._model.predict(obs, deterministic=True, action_masks=masks)
+                else:
+                    action_id, _ = self._model.predict(obs, deterministic=True)
 
         # model.predict devuelve np.ndarray 0-dim o 1-dim; normalizar a int.
+        # (si el forward manual funcionó, action_id ya es int)
         if isinstance(action_id, (list, tuple, np.ndarray)):
             action_id = int(np.asarray(action_id).flatten()[0])
         else:
