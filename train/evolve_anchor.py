@@ -27,9 +27,10 @@ Uso:
       --generations 4 --mutants 4 --mutate-steps 100000 --sigma 0.02 \
       --eval-episodes 30 --fallback-gen 2
 """
-import sys, os, argparse, json
+import sys
+import os
+import argparse
 from pathlib import Path
-import numpy as np
 import torch
 import uuid
 

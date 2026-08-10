@@ -12,9 +12,10 @@ Uso:
   python train/evolve.py --base-model models/ppo_carcosa_final_20260803_224539.zip \
       --generations 4 --mutants 4 --mutate-steps 100000 --sigma 0.02
 """
-import sys, os, argparse, json
+import sys
+import os
+import argparse
 from pathlib import Path
-import numpy as np
 import torch
 import uuid
 

@@ -4,7 +4,6 @@ import numpy as np
 import argparse
 import pickle
 from pathlib import Path
-import time
 import multiprocessing as mp
 from tqdm import tqdm
 
@@ -123,7 +122,7 @@ def main():
                     }
                     with open(args.output, "wb") as f:
                         pickle.dump(data, f)
-            except:
+            except Exception:
                 # Check si los procesos siguen vivos
                 if not any(p.is_alive() for p in processes):
                     print("\nTodos los workers han terminado antes de alcanzar la meta.")

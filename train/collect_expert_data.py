@@ -11,8 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from train.carcosa_env import CarcosaEnv
 from sim.policies import GoalDirectedPlayerPolicy
-from sim.memory import create_team_memory, create_bot_memories, card_priority, CardMemory
-from engine.rng import RNG
+from sim.memory import create_team_memory, create_bot_memories, CardMemory
 from engine.actions import ActionType
 
 def collect_data(num_episodes=1000, max_steps=1000, output_path="train/expert_data.pkl"):
@@ -78,7 +77,6 @@ def collect_data(num_episodes=1000, max_steps=1000, output_path="train/expert_da
             
             # Capture observations (PEEK/SEARCH)
             # Reusing the logic from sim/runner._capture_observed_cards but simplified
-            from engine.boxes import active_deck_for_room
             if actor in next_state.players:
                 target_rooms = []
                 if last_action_type == ActionType.SEARCH:
@@ -119,7 +117,7 @@ def collect_data(num_episodes=1000, max_steps=1000, output_path="train/expert_da
             obs_data.extend(ep_obs)
             action_data.extend(ep_actions)
 
-    print(f"\nCollection finished.")
+    print("\nCollection finished.")
     print(f"Wins: {wins}/{num_episodes} ({wins/num_episodes:.1%})")
     print(f"Total samples collected: {len(obs_data)}")
     

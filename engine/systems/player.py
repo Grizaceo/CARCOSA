@@ -9,7 +9,7 @@ from engine.effects.states_canonical import remove_all_statuses
 from engine.entities import normalize_monster_id
 from engine.effects.event_utils import add_status
 from engine.handlers.special_rooms import handle_special_room_action
-from engine.objects import is_soulbound, use_object
+from engine.objects import use_object
 from engine.roles import brawler_blunt_free
 from engine.rng import RNG
 from engine.state import GameState

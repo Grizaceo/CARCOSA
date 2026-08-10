@@ -4,7 +4,7 @@ from typing import List, Optional
 from engine.actions import Action, ActionType
 from engine.board import neighbors, floor_of, is_corridor, corridor_id
 from engine.boxes import active_deck_for_room
-from engine.state import GameState, RoomState
+from engine.state import GameState
 from engine.types import PlayerId, RoomId
 from engine.effects.states_canonical import has_status
 from engine.objects import is_soulbound

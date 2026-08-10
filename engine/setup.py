@@ -10,8 +10,7 @@ Implementa el setup canónico del juego físico:
 Referencia: V0_3_Fidelity_Notes_Complement.md sección A
 """
 
-from typing import Dict, List
-from engine.state import GameState, RoomState, RoomId, DeckState, BoxState
+from engine.state import GameState, RoomState, RoomId, DeckState
 from engine.boxes import sync_boxes_from_rooms
 from engine.rng import RNG
 

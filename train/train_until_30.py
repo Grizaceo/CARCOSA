@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 from datetime import datetime
-import numpy as np
 
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.vec_env import DummyVecEnv

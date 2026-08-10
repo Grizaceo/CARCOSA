@@ -7,7 +7,8 @@ Uso:
     python train/train_bc_standalone.py --data train/expert_data_probe.pkl \
         --save models/bc_goal_probe.pt --epochs 30 --batch-size 256
 """
-import sys, argparse
+import sys
+import argparse
 from pathlib import Path
 import numpy as np
 import torch

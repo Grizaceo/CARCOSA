@@ -12,7 +12,6 @@ from pathlib import Path
 # Add root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from train.carcosa_env import CarcosaEnv
 from sb3_contrib import MaskablePPO
 
 def train_bc(data_path="train/goldset_500_wins.pkl", model_save_path="models/bc_goldset_v1", epochs=200, lr=1e-3, batch_size=64, device="cpu"):

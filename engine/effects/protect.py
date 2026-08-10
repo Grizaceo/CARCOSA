@@ -6,7 +6,7 @@ Implements PROTECT_ALLY ability:
 - TANK gains +1 shield at round start (absorbs first damage)
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from engine.state import GameState, PlayerState

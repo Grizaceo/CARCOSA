@@ -1,14 +1,12 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional
 
 from engine.state import GameState
 from engine.actions import Action, ActionType
 from engine.config import Config
 from engine.rng import RNG
-from engine.legality import get_legal_actions
 
-from sim.policies import PlayerPolicy, GoalDirectedPlayerPolicy, HeuristicKingPolicy, RandomKingPolicy
+from sim.policies import PlayerPolicy, GoalDirectedPlayerPolicy, RandomKingPolicy
 from sim.mcts import mcts_search
 
 @dataclass

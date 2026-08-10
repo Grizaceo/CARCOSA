@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 from typing import Optional
 
 from engine.actions import Action, ActionType
@@ -6,7 +6,7 @@ from engine.config import Config
 from engine.legality import get_legal_actions
 from engine.rng import RNG
 from engine.state import GameState
-from engine.types import PlayerId, RoomId, CardId
+from engine.types import PlayerId, RoomId
 from engine.rules.actions_cost import consume_action_cost
 from engine.systems.victory import check_victory, check_defeat
 from engine.systems.finalize import finalize_step, finalize_and_return
@@ -15,7 +15,6 @@ from engine.systems.status import apply_end_of_round_status_effects
 from engine.systems.player import apply_player_action
 from engine.systems.king import resolve_king_phase
 from engine.systems.sacrifice import (
-    PENDING_SACRIFICE_FLAG,
     apply_sacrifice_choice,
     apply_minus5_consequences,
     apply_minus5_transitions,
@@ -31,7 +30,6 @@ from engine.compat.legacy import (
     legacy_on_monster_enters_room,
     legacy_monster_phase,
     legacy_move_monsters,
-    legacy_current_false_king_floor,
     legacy_presence_damage_for_round,
     legacy_shuffle_all_room_decks,
     legacy_expel_players_from_floor,
@@ -40,12 +38,10 @@ from engine.compat.legacy import (
     legacy_attract_players_to_floor_except_fk,
     legacy_roll_stairs,
     legacy_false_king_check,
-    legacy_end_of_round_checks,
     legacy_advance_turn_or_king,
     legacy_start_new_round,
     normalize_action_type,
 )
-from engine.effects.states_canonical import has_status, decrement_status_durations
 
 def _apply_minus5_transitions(s, cfg):
     apply_minus5_transitions(s, cfg)

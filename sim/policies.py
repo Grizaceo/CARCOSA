@@ -1571,7 +1571,6 @@ class PPOCARCOPlayerPolicy(PlayerPolicy):
             )
         import torch
         from stable_baselines3 import PPO as _SB3PPO
-        from stable_baselines3.common.base_class import BaseAlgorithm
         from train.carcosa_env import CarcosaEnv
 
         self._torch = torch
@@ -1806,7 +1805,7 @@ class PolicyCommittee(PlayerPolicy):
             except Exception as e:
                 print(f"[COMMITTEE] no pude cargar tabla {tp}: {e}")
         else:
-            print(f"[COMMITTEE] tabla no existe (configs/ o models/); usando solo GOAL.")
+            print("[COMMITTEE] tabla no existe (configs/ o models/); usando solo GOAL.")
 
     def set_memory(self, team_memory, bot_memories) -> None:
         """Propaga la memoria de cartas a todas las políticas internas."""

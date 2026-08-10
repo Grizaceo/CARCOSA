@@ -323,7 +323,6 @@ class CarcosaEnv(gym.Env):
                 
                 king_floor_match = 1.0 if floor_of(p.room) == self.state.king_floor else 0.0
                 
-                from sim.policies import _danger_score_room
                 danger = sum(2 for m in self.state.monsters if m.room == p.room)
                 near = set(neighbors(p.room))
                 danger += sum(1 for m in self.state.monsters if m.room in near)

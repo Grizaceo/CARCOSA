@@ -21,7 +21,6 @@ Uso:
 from __future__ import annotations
 
 import argparse
-import copy
 import json
 import sys
 from datetime import datetime
@@ -29,7 +28,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from engine.config import Config
 from sim.runner import make_smoke_state, run_episode
 
 VARIANTS = ["base", "keys_top", "keys_top_f2", "motemey_top"]

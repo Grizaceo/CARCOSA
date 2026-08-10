@@ -10,7 +10,8 @@ Extrae:
 - Overlap con GOAL y best_evolved
 - Redondeo de techo empírico (unión)
 """
-import sys, json, argparse
+import json
+import argparse
 from pathlib import Path
 
 def extract_wins(summary_path: str) -> dict:

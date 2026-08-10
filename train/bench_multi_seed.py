@@ -23,10 +23,13 @@ USO:
       --model models/best_evolved.zip
   (--models GOAL siempre es el baseline; después añade --model para cada .zip)
 """
-import sys, os, json, time, argparse, random
+import sys
+import json
+import time
+import argparse
+import random
 from pathlib import Path
 from datetime import datetime
-from collections import defaultdict
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))

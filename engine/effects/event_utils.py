@@ -6,7 +6,7 @@ Estas funciones son reutilizadas por múltiples eventos del juego.
 
 from engine.state import GameState, PlayerState, StatusInstance
 from engine.types import PlayerId, RoomId
-from typing import List
+from typing import List, Dict, Any
 
 
 def swap_positions(s: GameState, pid1: PlayerId, pid2: PlayerId) -> None:
@@ -32,7 +32,6 @@ def remove_status(p: PlayerState, status_id: str) -> bool:
     return len(p.statuses) < original_len
 
 
-from typing import List, Dict, Any
 
 def add_status(p: PlayerState, status_id: str, duration: int = 2, metadata: Dict[str, Any] = None) -> None:
     """Agrega un estado con duración y metadata opcional."""

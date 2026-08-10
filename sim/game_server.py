@@ -96,7 +96,7 @@ async def init_db_pool():
             print("[DB] PostgreSQL connection test successful")
         except Exception as e:
             print(f"[DB] PostgreSQL connection FAILED: {type(e).__name__}: {e}")
-            print(f"[DB] Falling back to filesystem mode")
+            print("[DB] Falling back to filesystem mode")
             _db_pool = None
             return
 

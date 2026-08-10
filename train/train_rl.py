@@ -12,11 +12,9 @@ Uso:
 """
 
 import argparse
-import os
 from pathlib import Path
 from datetime import datetime
 
-import numpy as np
 
 try:
     from stable_baselines3 import PPO, A2C, DQN
@@ -91,11 +89,11 @@ def train_rl(
         print("ERROR: stable-baselines3 no está instalado.")
         return
     
-    print(f"="*60)
+    print("="*60)
     print(f"CARCOSA RL Training con {algo.upper()}")
     if load_model:
         print(f"Cargando modelo base: {load_model}")
-    print(f"="*60)
+    print("="*60)
     
     # Crear entornos vectorizados
     print(f"Creando {n_envs} entornos paralelos...")
@@ -174,7 +172,7 @@ def train_rl(
     ]
     
     # Entrenar
-    print(f"\nIniciando entrenamiento...")
+    print("\nIniciando entrenamiento...")
     model.learn(
         total_timesteps=total_timesteps,
         callback=CallbackList(callbacks),

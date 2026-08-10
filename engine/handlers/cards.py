@@ -9,10 +9,8 @@ from engine.objects import OBJECT_CATALOG, get_max_keys_capacity
 from engine.rng import RNG
 from engine.state import GameState, StatusInstance
 from engine.systems.monsters import spawn_monster_from_card, handle_omen_reveal
-from engine.systems.sanity import apply_sanity_loss
-from engine.types import PlayerId, RoomId
+from engine.types import PlayerId
 from engine.handlers.events import resolve_event
-from engine.effects.event_utils import add_status
 from engine.board import floor_of
 
 

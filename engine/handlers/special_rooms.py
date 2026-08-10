@@ -8,7 +8,6 @@ from engine.inventory import add_object
 from engine.objects import get_max_keys_capacity, is_soulbound
 from engine.rng import RNG
 from engine.state import GameState
-from engine.systems.decks import reveal_one
 from engine.systems.rooms import enter_room_and_reveal
 from engine.systems.sanity import apply_sanity_loss, heal_player
 from engine.types import PlayerId, RoomId

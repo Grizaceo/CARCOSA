@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import Dict, List, Any, Optional
 import json
-import random
 from pathlib import Path
 from datetime import datetime
 import argparse
@@ -10,14 +9,13 @@ from engine.actions import Action, ActionType
 from engine.config import Config
 from engine.rng import RNG
 from engine.state import GameState, PlayerState, RoomState, DeckState
-from engine.types import PlayerId, RoomId, CardId
-from engine.board import corridor_id, room_id, is_corridor
+from engine.types import PlayerId, RoomId
+from engine.board import corridor_id, room_id
 from engine.transition import step
 from engine.legality import get_legal_actions
 from sim.policies import get_king_policy, get_player_policy
 from sim.memory import (
     CardMemory,
-    TeamMemory,
     card_priority,
     create_bot_memories,
     create_team_memory,
@@ -266,13 +264,6 @@ def run_episode(
     state = initial_state if initial_state is not None else make_smoke_state(seed=seed, cfg=cfg)
 
     # Policy Selection
-    from sim.policies import (
-        GoalDirectedPlayerPolicy, 
-        CowardPolicy, 
-        BerserkerPolicy, 
-        SpeedrunnerPolicy, 
-        RandomPolicy
-    )
     from sim.mcts_policy import MCTSPlayerPolicy
     
     if policy_name == "MCTS":

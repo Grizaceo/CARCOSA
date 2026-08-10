@@ -9,10 +9,8 @@ Uso:
 """
 
 import argparse
-import json
 from pathlib import Path
-from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Dict
 
 import torch
 import numpy as np
@@ -36,7 +34,7 @@ from sim.policies import (
     get_king_policy,
 )
 
-from train.model import CarcosaPolicyNet, load_model
+from train.model import CarcosaPolicyNet
 
 
 class NeuralNetworkPlayerPolicy:

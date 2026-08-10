@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from engine.state import GameState
-    from engine.types import PlayerId, RoomId
 
 
 # Prioridades de cartas (menor = más importante)

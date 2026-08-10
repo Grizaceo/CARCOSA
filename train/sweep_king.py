@@ -32,7 +32,10 @@ USO:
     comb1:    {"KING_PRESENCE_START_ROUND": 6, "KEYS_TOTAL": 7}
     comb2:    {"KING_PRESENCE_START_ROUND": 6, "KEYS_TOTAL": 7, "MAX_ROUNDS": 90}
 """
-import sys, os, json, time, argparse
+import sys
+import json
+import time
+import argparse
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent

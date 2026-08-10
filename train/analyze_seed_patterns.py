@@ -28,7 +28,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -257,7 +256,7 @@ def report(rows: list[dict], y: np.ndarray, out_path: Path) -> None:
         aucs = cross_val_score(clf, X, y, cv=5, scoring="roc_auc")
         clf.fit(X, y)
         lines.append(f"  AUC CV (5-fold): {aucs.mean():.3f} ± {aucs.std():.3f}")
-        lines.append(f"  AUC = 0.5 => el setup NO discrimina; AUC > 0.65 => estructura real")
+        lines.append("  AUC = 0.5 => el setup NO discrimina; AUC > 0.65 => estructura real")
         lines.append("  Árbol:")
         tree_txt = export_text(clf, feature_names=feat_names, max_depth=3)
         for tl in tree_txt.splitlines():

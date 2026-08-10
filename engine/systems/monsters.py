@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from engine.board import floor_of
 from engine.rng import RNG
 from engine.setup import normalize_room_type
 from engine.state import GameState, MonsterState

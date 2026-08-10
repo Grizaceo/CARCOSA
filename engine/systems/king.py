@@ -18,7 +18,7 @@ from engine.systems.stairs import roll_stairs
 from engine.systems.status import apply_end_of_round_status_effects
 from engine.systems.turn import start_new_round
 from engine.systems.victory import check_defeat
-from engine.types import PlayerId, RoomId
+from engine.types import PlayerId
 
 PENDING_SACRIFICE_FLAG = "PENDING_SACRIFICE_CHECK"
 

@@ -17,7 +17,9 @@ INTERPRETACION:
   - win-rate ~21% => el techo está cerca del committee actual (saturación)
   - win-rate <15% => el juego es casi inganable; re-pensar diseño
 """
-import sys, os, time, argparse
+import sys
+import time
+import argparse
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -100,7 +102,7 @@ def main():
 
     wins = sum(1 for r in results if r["win"])
     wr = wins / len(seeds)
-    print(f"\n=== ORACLE MCTS RESULT ===")
+    print("\n=== ORACLE MCTS RESULT ===")
     print(f"win-rate: {wr*100:.1f}% ({wins}/{len(seeds)})")
     print(f"tiempo: {dt:.0f}s ({dt/60:.1f} min)")
     print(f"outcomes: { {r['outcome'].split(' ')[0] for r in results} }")

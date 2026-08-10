@@ -25,7 +25,13 @@ Uso:
       --generations 4 --mutants 6 --workers 6 \
       --mutate-steps 100000 --sigma 0.02 --eval-episodes 30 --fallback-gen 2
 """
-import sys, os, time, json, shutil, argparse, logging
+import sys
+import os
+import time
+import json
+import shutil
+import argparse
+import logging
 from pathlib import Path
 from datetime import datetime
 

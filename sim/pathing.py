@@ -2,7 +2,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Dict, List, Optional, Set
 
-from engine.board import neighbors, corridor_id, floor_of
+from engine.board import neighbors, corridor_id
 from engine.state import GameState
 from engine.types import RoomId
 

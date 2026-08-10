@@ -18,7 +18,7 @@ Uso:
     metrics = diagnose_model("models/best.zip", seeds=range(50))
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from collections import defaultdict
 import numpy as np
 import sys
@@ -212,7 +212,6 @@ def _rounds_to_first_key(keys_trajectory: List[int]) -> Optional[int]:
 def _team_umbral_distance_quick(state) -> int:
     """Distancia mínima del equipo al Umbral (proxy de cercanía a la meta)."""
     try:
-        from engine.board import neighbors
         # Distancia Manhattan aproximada al umbral más cercano
         min_dist = float('inf')
         for player in state.players.values():
@@ -543,7 +542,6 @@ def _generate_diagnosis(agg: Dict, episodes: List[Dict]) -> str:
 def diagnose_goal(seeds: range = range(50)) -> Dict[str, Any]:
     """Diagnostica el policy GOAL (heurístico) para tener baseline."""
     from sim.runner import run_episode
-    from train.carcosa_env import CarcosaEnv
 
     per_episode = []
     for seed in seeds:
