@@ -93,9 +93,21 @@
 
 ---
 
-## Próximos pasos sugeridos (requieren tu aprobación)
+## PRÓXIMOS PASOS — EJECUTADOS (2026-08-09)
 
-- **P0 (seguro):** `sed`/patch para quitar BOM + `ruff check --fix` (88 errores) + arreglar bare-except/F811. 1 commit, verificable.
-- **P1 (limpieza):** borrar `engine/compat/legacy.py` + los 12 imports en transition.py; mover experimentos muertos de `train/` a `train/_archive/`.
-- **P2 (opcional):** `ruff format` a los 76 archivos; split de `GoalDirectedPlayerPolicy.choose` (201 CC) en sub-métodos.
-- **NO recomendado ahora:** tocar `transition.step()` deepcopy (riesgo de romper determinismo del engine antes de mostrarle a tu amigo).
+| Fase | Commit | Qué se hizo | Verificación |
+|---|---|---|---|
+| **Respaldo** | branch `backup/pre-audit-fixes-2026-08-09` + tar `_backups/CARCOSA_PRE_AUDIT_2026-08-09.tar.gz` (3.8GB) | snapshot pre-cualquier fix | ambos presentes |
+| **P0** | `16a47677` | BOM removido, F811 fusionado, bare-except→except Exception, 90 auto-fix ruff | `import engine` OK, smoke test pasó |
+| **P1** | `07d29377` | 5 experimentos RL muertos → `train/_archive/` (adaptive_finetune, collect_winners_only, train_until_30, train_replicated, oracle_mcts) | engine importa OK; `legacy.py` NO borrado (Pyright: 20 funciones `legacy_*` VIVAS en `transition.step()`) |
+| **Respaldo P2** | branch `backup/pre-p2-cleanup-2026-08-09` | snapshot pre-P2 | presente |
+| **P2** | `ef15935c` | `ruff format` 76 archivos; `noqa` F401 en re-exports (`engine/__init__.py`) + bloque SB3 (`train_rl.py`); mover imports fastapi en `game_server.py` (E402); eliminar 14 F841 dead code | **ruff check = 0 errores**; smoke test COMMITTEE seed 42 = round 41 (sin regresión) |
+
+### Estado final post-P2
+- ✅ **0 errores ruff** en `engine/ sim/ train/`.
+- ✅ **76 archivos formateados** → diffs de git limpios para mostrar.
+- ✅ **Smoke test sin regresión** (mismo resultado que pre-fixes).
+- 🟡 **Pendiente MEDIO (NO tocado, decisión explícita):** monstruos de complejidad (`GoalDirectedPlayerPolicy.choose` CC=201, `get_legal_actions` CC=131, `sim/policies.py` MI 0.00). Requiere refactor de bots — riesgo de romper el 23% antes de la reunión.
+- 🟢 **Pendiente BAJO (decisión de archivo, no crítico):** campos/constantes muertas menores (`state.py` 4, `types.py` ~20, `config.py` 2) y `train/evolve*.py` duplicados (3 variantes PBT).
+
+**Veredicto para la reunión:** el repo está limpio de deuda de orden. Lo que queda es refactor de bots (riesgo) y ruido de API (cosmético). El 23% sigue siendo de diseño, no de código sucio.
