@@ -24,20 +24,22 @@ from enum import Enum
 
 class CanonicalStateType(Enum):
     """Tipo de origen del estado."""
-    CARD = "CARD"      # Tiene carta propia en mazo de eventos
+
+    CARD = "CARD"  # Tiene carta propia en mazo de eventos
     EFFECT = "EFFECT"  # Aplicado por efecto de otra mecánica
 
 
 @dataclass
 class CanonicalStateDefinition:
     """Definición canónica de un estado."""
+
     state_id: str
     name: str
     origin_type: CanonicalStateType
     origin_description: str
     default_duration: Optional[int]  # None = permanente hasta remoción, -1 = contextual
     effect_description: str
-    permanent_effect: bool = False   # True si el efecto persiste tras expirar
+    permanent_effect: bool = False  # True si el efecto persiste tras expirar
 
 
 # ==============================================================================
@@ -48,7 +50,6 @@ CANONICAL_STATES = {
     # =========================================================================
     # ESTADOS CON CARTA PROPIA (en mazo de eventos) - Duración: 2 rondas
     # =========================================================================
-    
     "MALDITO": CanonicalStateDefinition(
         state_id="MALDITO",
         name="Maldito",
@@ -57,9 +58,8 @@ CANONICAL_STATES = {
         default_duration=2,  # 2 rondas
         effect_description=(
             "Otros jugadores en el mismo piso pierden 1 de cordura al final de ronda."
-        )
+        ),
     ),
-    
     "SANIDAD": CanonicalStateDefinition(
         state_id="SANIDAD",
         name="Sanidad",
@@ -69,9 +69,8 @@ CANONICAL_STATES = {
         effect_description=(
             "Recupera 1 de cordura al final de CADA turno (propio y ajenos). "
             "Puede descartarse GRATIS para eliminar TODOS los estados (positivos y negativos)."
-        )
+        ),
     ),
-    
     "ENVENENADO": CanonicalStateDefinition(
         state_id="ENVENENADO",
         name="Envenenado",
@@ -82,9 +81,8 @@ CANONICAL_STATES = {
             "Pierde 1 de cordura MÁXIMA al final de cada ronda mientras esté activo. "
             "⚠️ La reducción de máximo es PERMANENTE incluso tras expirar el estado."
         ),
-        permanent_effect=True  # Marca que el efecto es permanente
+        permanent_effect=True,  # Marca que el efecto es permanente
     ),
-    
     "PARANOIA": CanonicalStateDefinition(
         state_id="PARANOIA",
         name="Paranoia",
@@ -94,13 +92,11 @@ CANONICAL_STATES = {
         effect_description=(
             "No puede estar en misma habitación que otra Pobre Alma. "
             "Bloquea movimiento hacia habitaciones Y PASILLO ocupados por otros jugadores."
-        )
+        ),
     ),
-    
     # =========================================================================
     # ESTADOS POR EFECTOS (no tienen carta propia)
     # =========================================================================
-    
     "VANIDAD": CanonicalStateDefinition(
         state_id="VANIDAD",
         name="Vanidad",
@@ -110,18 +106,16 @@ CANONICAL_STATES = {
         effect_description=(
             "Pierde 1 de cordura adicional por CADA instancia de pérdida de cordura. "
             "No puede activar el Salón de Belleza mientras tenga este estado."
-        )
+        ),
     ),
-    
     "ILUMINADO": CanonicalStateDefinition(
         state_id="ILUMINADO",
         name="Iluminado",
         origin_type=CanonicalStateType.EFFECT,
         origin_description="Capilla u otro efecto",
         default_duration=2,  # 2 turnos desde activación
-        effect_description="Puede tomar 1 acción adicional (3 total en lugar de 2)."
+        effect_description="Puede tomar 1 acción adicional (3 total en lugar de 2).",
     ),
-    
     "STUN": CanonicalStateDefinition(
         state_id="STUN",
         name="Aturdido",
@@ -131,9 +125,8 @@ CANONICAL_STATES = {
         effect_description=(
             "Monstruo no puede actuar. "
             "Rey de Amarillo es INMUNE. Reina Helada PUEDE ser stuneada."
-        )
+        ),
     ),
-    
     "TRAPPED": CanonicalStateDefinition(
         state_id="TRAPPED",
         name="Atrapado",
@@ -144,9 +137,8 @@ CANONICAL_STATES = {
             "Jugador atrapado, no puede actuar. Cada turno intenta escape: d6+cordura >= 3. "
             "Si FALLA, NO puede actuar ese turno. Al liberarse, monstruo fuente queda STUN 1 turno. "
             "Activa mecánica de contoneo."
-        )
+        ),
     ),
-    
     "MOVIMIENTO_BLOQUEADO": CanonicalStateDefinition(
         state_id="MOVIMIENTO_BLOQUEADO",
         name="Movimiento Bloqueado",
@@ -157,16 +149,15 @@ CANONICAL_STATES = {
             "No puede usar acciones de movimiento. "
             "Puede usar 2 acciones de otro tipo (buscar, meditar, activar habitación, etc.). "
             "Solo afecta a jugadores presentes cuando la Reina entra en juego."
-        )
+        ),
     ),
-    
     "ACCION_REDUCIDA": CanonicalStateDefinition(
         state_id="ACCION_REDUCIDA",
         name="Acción Reducida",
         origin_type=CanonicalStateType.EFFECT,
         origin_description="Reina Helada (turnos posteriores)",
         default_duration=-1,  # Contextual: mientras Reina esté en el piso
-        effect_description="Jugadores en piso de Reina Helada solo tienen 1 acción disponible."
+        effect_description="Jugadores en piso de Reina Helada solo tienen 1 acción disponible.",
     ),
 }
 
@@ -174,6 +165,7 @@ CANONICAL_STATES = {
 # ==============================================================================
 # FUNCIONES HELPER
 # ==============================================================================
+
 
 def get_state_definition(state_id: str) -> Optional[CanonicalStateDefinition]:
     """Obtiene la definición canónica de un estado."""
@@ -207,7 +199,14 @@ def has_permanent_effect(state_id: str) -> bool:
 
 # IDs de estados para uso rápido
 CARD_STATES = {"MALDITO", "SANIDAD", "ENVENENADO", "PARANOIA"}
-EFFECT_STATES = {"VANIDAD", "ILUMINADO", "STUN", "TRAPPED", "MOVIMIENTO_BLOQUEADO", "ACCION_REDUCIDA"}
+EFFECT_STATES = {
+    "VANIDAD",
+    "ILUMINADO",
+    "STUN",
+    "TRAPPED",
+    "MOVIMIENTO_BLOQUEADO",
+    "ACCION_REDUCIDA",
+}
 ALL_STATES = CARD_STATES | EFFECT_STATES
 
 # Aliases para compatibilidad con código existente
@@ -255,6 +254,7 @@ def get_all_ids_for_state(state_id: str) -> set:
 # FUNCIONES DE APLICACIÓN DE ESTADOS
 # ==============================================================================
 
+
 def has_status(player, state_id: str) -> bool:
     """
     Verifica si un jugador tiene un estado específico.
@@ -276,10 +276,12 @@ def get_status(player, state_id: str):
     return None
 
 
-def apply_status(player, state_id: str, duration: Optional[int] = None, metadata: dict = None):
+def apply_status(
+    player, state_id: str, duration: Optional[int] = None, metadata: dict = None
+):
     """
     Aplica un estado a un jugador.
-    
+
     Args:
         player: PlayerState
         state_id: ID del estado (canónico o alias)
@@ -287,22 +289,20 @@ def apply_status(player, state_id: str, duration: Optional[int] = None, metadata
         metadata: Datos adicionales (ej. monster_id para TRAPPED)
     """
     from engine.state import StatusInstance
-    
+
     normalized = normalize_state_id(state_id)
-    
+
     # Obtener duración por defecto si no se especifica
     if duration is None:
         duration = get_default_duration(normalized)
         if duration is None:
             duration = -1  # Permanente
-    
+
     # Crear instancia con metadata si se proporciona
     status_instance = StatusInstance(
-        status_id=normalized,
-        remaining_rounds=duration,
-        metadata=metadata or {}
+        status_id=normalized, remaining_rounds=duration, metadata=metadata or {}
     )
-    
+
     player.statuses.append(status_instance)
 
 
@@ -315,7 +315,8 @@ def remove_status(player, state_id: str) -> bool:
     normalized = normalize_state_id(state_id)
     original_len = len(player.statuses)
     player.statuses = [
-        st for st in player.statuses 
+        st
+        for st in player.statuses
         if st.status_id != normalized and st.status_id != state_id
     ]
     return len(player.statuses) < original_len
@@ -346,12 +347,12 @@ def decrement_status_durations(player) -> List[str]:
     Decrementa la duración de todos los estados del jugador.
     Remueve estados que llegan a 0.
     Retorna lista de estados removidos.
-    
+
     Nota: Estados con remaining_rounds <= 0 son permanentes y no se decrementan.
     """
     removed = []
     remaining = []
-    
+
     for st in player.statuses:
         if st.remaining_rounds > 0:
             st.remaining_rounds -= 1
@@ -362,7 +363,7 @@ def decrement_status_durations(player) -> List[str]:
         else:
             # Estados permanentes (remaining_rounds <= 0) no se decrementan
             remaining.append(st)
-    
+
     player.statuses = remaining
     return removed
 
@@ -370,6 +371,7 @@ def decrement_status_durations(player) -> List[str]:
 # ==============================================================================
 # FUNCIONES DE RESTRICCIÓN DE ACCIONES
 # ==============================================================================
+
 
 def blocks_movement(player) -> bool:
     """Retorna True si el jugador tiene un estado que bloquea movimiento."""
@@ -384,24 +386,24 @@ def blocks_all_actions(player) -> bool:
 def get_available_actions(player, base_actions: int = 2) -> int:
     """
     Calcula las acciones disponibles considerando estados.
-    
+
     Args:
         player: PlayerState
         base_actions: Acciones base (default 2)
-    
+
     Returns:
         Número de acciones disponibles
     """
     actions = base_actions
-    
+
     # ILUMINADO: +1 acción
     if has_status(player, "ILUMINADO"):
         actions += 1
-    
+
     # ACCION_REDUCIDA: fuerza a 1 acción
     if has_status(player, "ACCION_REDUCIDA"):
         actions = 1
-    
+
     # STUN: 0 acciones
     if has_status(player, "STUN"):
         actions = 0
@@ -409,23 +411,23 @@ def get_available_actions(player, base_actions: int = 2) -> int:
     # TRAPPED: 0 acciones (a menos que escape)
     if has_status(player, "TRAPPED"):
         actions = 0
-    
+
     return actions
 
 
 def can_use_special_room(player, room_id: str) -> bool:
     """
     Verifica si un jugador puede usar una habitación especial.
-    
+
     Args:
         player: PlayerState
         room_id: ID de la habitación
-    
+
     Returns:
         True si puede usar la habitación
     """
     # VANIDAD bloquea uso del Salón de Belleza
     if room_id == "SALON_BELLEZA" and has_status(player, "VANIDAD"):
         return False
-    
+
     return True

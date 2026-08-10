@@ -14,7 +14,9 @@ from engine.handlers.events import resolve_event
 from engine.board import floor_of
 
 
-def resolve_card_minimal(state: GameState, pid: PlayerId, card, cfg: Config, rng: Optional[RNG] = None):
+def resolve_card_minimal(
+    state: GameState, pid: PlayerId, card, cfg: Config, rng: Optional[RNG] = None
+):
     """
     Resolver efectos minimos de cartas.
     - KEY -> jugador gana una llave (si no excede limite)

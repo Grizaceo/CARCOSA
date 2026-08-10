@@ -20,20 +20,24 @@ class ActionType(str, Enum):
     # Action to accept consequences of -5 (continue without sacrificing)
     ACCEPT_SACRIFICE = "ACCEPT_SACRIFICE"
     ESCAPE_TRAPPED = "ESCAPE_TRAPPED"
-    
+
     # B2: Motemey
     USE_MOTEMEY_SELL = "USE_MOTEMEY_SELL"
     USE_MOTEMEY_BUY = "USE_MOTEMEY_BUY"  # DEPRECATED: usar BUY_START + BUY_CHOOSE
     # CORRECCIÓN D: Sistema de elección de 2 pasos
-    USE_MOTEMEY_BUY_START = "USE_MOTEMEY_BUY_START"     # Paso 1: cobra cordura, muestra 2 cartas
-    USE_MOTEMEY_BUY_CHOOSE = "USE_MOTEMEY_BUY_CHOOSE"   # Paso 2: elige carta (index 0 o 1)
-    
+    USE_MOTEMEY_BUY_START = (
+        "USE_MOTEMEY_BUY_START"  # Paso 1: cobra cordura, muestra 2 cartas
+    )
+    USE_MOTEMEY_BUY_CHOOSE = (
+        "USE_MOTEMEY_BUY_CHOOSE"  # Paso 2: elige carta (index 0 o 1)
+    )
+
     # B4: Yellow Doors
     USE_YELLOW_DOORS = "USE_YELLOW_DOORS"
-    
+
     # B5: Taberna
     USE_TABERNA_ROOMS = "USE_TABERNA_ROOMS"
-    
+
     # B6: Armory
     USE_ARMORY_DROP = "USE_ARMORY_DROP"
     USE_ARMORY_TAKE = "USE_ARMORY_TAKE"
@@ -46,11 +50,12 @@ class ActionType(str, Enum):
 
     # B3: Cámara Letal
     USE_CAMARA_LETAL_RITUAL = "USE_CAMARA_LETAL_RITUAL"
-    
 
     # FASE 4: Libro Chambers + Cuentos
     USE_ATTACH_TALE = "USE_ATTACH_TALE"
-    USE_READ_YELLOW_SIGN = "USE_READ_YELLOW_SIGN"  # Placeholder: reservado para mecÃ¡nica futura
+    USE_READ_YELLOW_SIGN = (
+        "USE_READ_YELLOW_SIGN"  # Placeholder: reservado para mecÃ¡nica futura
+    )
 
     # FASE 1: Acciones de roles
     USE_HEALER_HEAL = "USE_HEALER_HEAL"  # Healer: -1 propia → +2 otros + estado
@@ -61,7 +66,6 @@ class ActionType(str, Enum):
     # Hallway Peek (Room -> Hallway)
     PEEK_ROOM_DECK = "PEEK_ROOM_DECK"
     SKIP_PEEK = "SKIP_PEEK"
-
 
 
 @dataclass(frozen=True)

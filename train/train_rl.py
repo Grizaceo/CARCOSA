@@ -17,37 +17,48 @@ from datetime import datetime
 
 
 try:
-    from stable_baselines3 import PPO, A2C, DQN
-    from stable_baselines3.common.env_util import make_vec_env
+    from stable_baselines3 import PPO, A2C, DQN  # noqa: F401
+    from stable_baselines3.common.env_util import make_vec_env  # noqa: F401
     from stable_baselines3.common.callbacks import (
-        EvalCallback, 
+        EvalCallback,
         CheckpointCallback,
-        CallbackList
+        CallbackList,
     )
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
-    from stable_baselines3.common.monitor import Monitor
+    from stable_baselines3.common.monitor import Monitor  # noqa: F401
+
     HAS_SB3 = True
 except ImportError:
     HAS_SB3 = False
-    print("WARNING: stable-baselines3 no instalado. Instalar con: pip install stable-baselines3")
+    print(
+        "WARNING: stable-baselines3 no instalado. Instalar con: pip install stable-baselines3"
+    )
 
 try:
     from sb3_contrib import MaskablePPO
     from sb3_contrib.common.callbacks import EvalCallback as MaskableEvalCallback
+
     HAS_SB3_CONTRIB = True
 except ImportError:
     HAS_SB3_CONTRIB = False
 
 # Importar entorno
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from train.carcosa_env import CarcosaEnv
 
 
-def make_env(seed: int, rank: int, reward_params: dict = None,
-             king_enabled: bool = True, king_presence_start_round: int = None,
-             use_action_mask: bool = False):
+def make_env(
+    seed: int,
+    rank: int,
+    reward_params: dict = None,
+    king_enabled: bool = True,
+    king_presence_start_round: int = None,
+    use_action_mask: bool = False,
+):
     """Factory function para crear entornos."""
+
     def _init():
         kwargs = dict(reward_params or {})
         kwargs.setdefault("king_enabled", king_enabled)
@@ -59,8 +70,10 @@ def make_env(seed: int, rank: int, reward_params: dict = None,
             # envolvía con ActionMasker => PPO normal exploraba 81% ilegales
             # (penalty -0.02 ahogaba la señal). Con máscara, 4% ilegales.
             from sb3_contrib.common.wrappers import ActionMasker
+
             env = ActionMasker(env, lambda e: e.action_masks())
         return env
+
     return _init
 
 
@@ -88,35 +101,80 @@ def train_rl(
     if not HAS_SB3:
         print("ERROR: stable-baselines3 no está instalado.")
         return
-    
-    print("="*60)
+
+    print("=" * 60)
     print(f"CARCOSA RL Training con {algo.upper()}")
     if load_model:
         print(f"Cargando modelo base: {load_model}")
-    print("="*60)
-    
+    print("=" * 60)
+
     # Crear entornos vectorizados
     print(f"Creando {n_envs} entornos paralelos...")
-    
+
     if use_subproc and n_envs > 1:
-        env = SubprocVecEnv([make_env(seed, i, reward_params, king_enabled, king_presence_start_round, use_action_mask) for i in range(n_envs)])
+        env = SubprocVecEnv(
+            [
+                make_env(
+                    seed,
+                    i,
+                    reward_params,
+                    king_enabled,
+                    king_presence_start_round,
+                    use_action_mask,
+                )
+                for i in range(n_envs)
+            ]
+        )
     else:
-        env = DummyVecEnv([make_env(seed, i, reward_params, king_enabled, king_presence_start_round, use_action_mask) for i in range(n_envs)])
-    
+        env = DummyVecEnv(
+            [
+                make_env(
+                    seed,
+                    i,
+                    reward_params,
+                    king_enabled,
+                    king_presence_start_round,
+                    use_action_mask,
+                )
+                for i in range(n_envs)
+            ]
+        )
+
     # Entorno de evaluación
-    eval_env = DummyVecEnv([make_env(seed + 1000, 0, reward_params, king_enabled, king_presence_start_round, use_action_mask)])
-    
+    eval_env = DummyVecEnv(
+        [
+            make_env(
+                seed + 1000,
+                0,
+                reward_params,
+                king_enabled,
+                king_presence_start_round,
+                use_action_mask,
+            )
+        ]
+    )
+
     # Configurar modelo
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_name = f"{algo}_{timestamp}"
     tensorboard_log = f"{log_dir}/{run_name}"
-    
+
     # Crear o cargar modelo
     if load_model:
         if algo.lower() == "maskable_ppo":
-            model = MaskablePPO.load(load_model, env=env, tensorboard_log=tensorboard_log, learning_rate=learning_rate)
+            model = MaskablePPO.load(
+                load_model,
+                env=env,
+                tensorboard_log=tensorboard_log,
+                learning_rate=learning_rate,
+            )
         else:
-            model = PPO.load(load_model, env=env, tensorboard_log=tensorboard_log, learning_rate=learning_rate)
+            model = PPO.load(
+                load_model,
+                env=env,
+                tensorboard_log=tensorboard_log,
+                learning_rate=learning_rate,
+            )
         print(f"Modelo cargado desde {load_model}")
     else:
         common_kwargs = {
@@ -127,7 +185,7 @@ def train_rl(
             "tensorboard_log": tensorboard_log,
             "seed": seed,
         }
-        
+
         if algo.lower() == "ppo":
             model = PPO(
                 **common_kwargs,
@@ -148,18 +206,22 @@ def train_rl(
             )
         else:
             raise ValueError(f"Algoritmo no soportado para carga/entrenamiento: {algo}")
-    
+
     # Callbacks
     Path(save_dir).mkdir(exist_ok=True, parents=True)
-    
+
     # Para MaskablePPO usar el EvalCallback de sb3_contrib (maneja action_masks)
-    EvalCls = MaskableEvalCallback if (algo.lower() == "maskable_ppo" and HAS_SB3_CONTRIB) else EvalCallback
-    
+    EvalCls = (
+        MaskableEvalCallback
+        if (algo.lower() == "maskable_ppo" and HAS_SB3_CONTRIB)
+        else EvalCallback
+    )
+
     callbacks = [
         CheckpointCallback(
             save_freq=50_000 // n_envs,
             save_path=f"{save_dir}/checkpoints_{run_name}",
-            name_prefix="rl_model"
+            name_prefix="rl_model",
         ),
         EvalCls(
             eval_env,
@@ -170,7 +232,7 @@ def train_rl(
             deterministic=True,
         ),
     ]
-    
+
     # Entrenar
     print("\nIniciando entrenamiento...")
     model.learn(
@@ -178,12 +240,12 @@ def train_rl(
         callback=CallbackList(callbacks),
         progress_bar=True,
     )
-    
+
     # Guardar modelo final
     final_path = f"{save_dir}/{algo}_carcosa_final_{timestamp}"
     model.save(final_path)
     print(f"\nModelo final guardado en: {final_path}.zip")
-    
+
     env.close()
     eval_env.close()
     return model
@@ -194,87 +256,125 @@ def evaluate_model(model_path: str, episodes: int = 10, render: bool = False):
     Evalúa un modelo entrenado.
     """
     print(f"Cargando modelo: {model_path}")
-    
+
     if "maskable" in model_path.lower():
         model = MaskablePPO.load(model_path)
     else:
         model = PPO.load(model_path)
-    
+
     env = CarcosaEnv(render_mode="human" if render else None)
-    
+
     wins = 0
     total_rewards = []
-    
+
     for ep in range(episodes):
         obs, info = env.reset(seed=ep * 100)
         done = False
         total_reward = 0
         steps = 0
-        
+
         while not done:
             if "maskable" in model_path.lower():
                 action_masks = env.action_masks()
-                action, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
+                action, _ = model.predict(
+                    obs, action_masks=action_masks, deterministic=True
+                )
             else:
                 action, _ = model.predict(obs, deterministic=True)
             obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             total_reward += reward
             steps += 1
-        
+
         total_rewards.append(total_reward)
         outcome = info.get("outcome", "TIMEOUT")
         if outcome == "WIN":
             wins += 1
-        print(f"Episode {ep+1}: {outcome}, Reward={total_reward:.1f}, Steps={steps}")
-    
+        print(f"Episode {ep + 1}: {outcome}, Reward={total_reward:.1f}, Steps={steps}")
+
     env.close()
-    print(f"\nResultados: Wins: {wins}/{episodes} ({100*wins/episodes:.1f}%)")
+    print(f"\nResultados: Wins: {wins}/{episodes} ({100 * wins / episodes:.1f}%)")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Train RL agents for CARCOSA")
     subparsers = parser.add_subparsers(dest="command")
-    
+
     train_parser = subparsers.add_parser("train")
     train_parser.add_argument("--algo", type=str, default="maskable_ppo")
     train_parser.add_argument("--timesteps", type=int, default=500_000)
     train_parser.add_argument("--n-envs", type=int, default=4)
-    train_parser.add_argument("--seed", type=int, default=42,
-                              help="[092] Semilla de entrenamiento: variar genera políticas distintas => novelas nuevas")
+    train_parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="[092] Semilla de entrenamiento: variar genera políticas distintas => novelas nuevas",
+    )
     train_parser.add_argument("--lr", type=float, default=3e-4)
     train_parser.add_argument("--load-model", type=str, default=None)
     # Curriculum de dificultad [092]
-    train_parser.add_argument("--king-enabled", type=lambda x: x.lower() in ("true","1","yes"), default=True,
-                              help="King activo en el env (False = fase 1 del curriculum)")
-    train_parser.add_argument("--king-presence-round", type=int, default=None,
-                              help="Overrides KING_PRESENCE_START_ROUND (None = default)")
-    train_parser.add_argument("--action-mask", type=lambda x: x.lower() in ("true","1","yes"), default=False,
-                              help="Envolver env con ActionMasker (CRITICO: sin el, PPO explora 81% ilegales)")
-    
+    train_parser.add_argument(
+        "--king-enabled",
+        type=lambda x: x.lower() in ("true", "1", "yes"),
+        default=True,
+        help="King activo en el env (False = fase 1 del curriculum)",
+    )
+    train_parser.add_argument(
+        "--king-presence-round",
+        type=int,
+        default=None,
+        help="Overrides KING_PRESENCE_START_ROUND (None = default)",
+    )
+    train_parser.add_argument(
+        "--action-mask",
+        type=lambda x: x.lower() in ("true", "1", "yes"),
+        default=False,
+        help="Envolver env con ActionMasker (CRITICO: sin el, PPO explora 81% ilegales)",
+    )
+
     # Reward params
     train_parser.add_argument("--reward-win", type=float, default=100.0)
     train_parser.add_argument("--reward-lose", type=float, default=-10.0)
     train_parser.add_argument("--reward-key", type=float, default=10.0)  # Aumentado
     train_parser.add_argument("--penalty-empty-search", type=float, default=-2.0)
-    train_parser.add_argument("--reward-key-hold", type=float, default=0.0,
-                              help="[092] Reward por paso por MANTENER keys (posesión)")
-    train_parser.add_argument("--penalty-existence", type=float, default=0.0,
-                              help="[092] Existence punishment: castigo por ronda transcurrida (Pezza)")
+    train_parser.add_argument(
+        "--reward-key-hold",
+        type=float,
+        default=0.0,
+        help="[092] Reward por paso por MANTENER keys (posesión)",
+    )
+    train_parser.add_argument(
+        "--penalty-existence",
+        type=float,
+        default=0.0,
+        help="[092] Existence punishment: castigo por ronda transcurrida (Pezza)",
+    )
     # Spawn randomization (domain randomization, Pezza "AI Gladiators")
-    train_parser.add_argument("--spawn-sanity-jitter", type=int, default=0,
-                              help="Perturbación aleatoria de sanity inicial (0=off, 2=recomendado)")
-    train_parser.add_argument("--spawn-randomize-positions", type=lambda x: x.lower() in ("true","1","yes"), default=False,
-                              help="Shuffle posiciones iniciales de jugadores")
-    train_parser.add_argument("--spawn-key-jitter", type=float, default=0.0,
-                              help="Probabilidad de redistribuir keys iniciales en spawn")
-    
+    train_parser.add_argument(
+        "--spawn-sanity-jitter",
+        type=int,
+        default=0,
+        help="Perturbación aleatoria de sanity inicial (0=off, 2=recomendado)",
+    )
+    train_parser.add_argument(
+        "--spawn-randomize-positions",
+        type=lambda x: x.lower() in ("true", "1", "yes"),
+        default=False,
+        help="Shuffle posiciones iniciales de jugadores",
+    )
+    train_parser.add_argument(
+        "--spawn-key-jitter",
+        type=float,
+        default=0.0,
+        help="Probabilidad de redistribuir keys iniciales en spawn",
+    )
+
     eval_parser = subparsers.add_parser("eval")
     eval_parser.add_argument("--model", type=str, required=True)
     eval_parser.add_argument("--episodes", type=int, default=20)
-    
+
     args = parser.parse_args()
-    
+
     if args.command == "train":
         reward_params = {
             "reward_win": args.reward_win,

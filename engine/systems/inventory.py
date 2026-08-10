@@ -7,6 +7,7 @@ from engine.objects import OBJECT_CATALOG, get_max_keys_capacity, is_soulbound
 from engine.state import GameState, PlayerState
 from engine.types import PlayerId
 
+
 def get_inventory_limits(player: PlayerState) -> Tuple[int, int]:
     """
     Return inventory limits for a player according to their role.
@@ -15,7 +16,9 @@ def get_inventory_limits(player: PlayerState) -> Tuple[int, int]:
         (key_slots, object_slots)
     """
     role_id = getattr(player, "role_id", "DEFAULT")
-    key_slots, object_slots = ROLE_INVENTORY_LIMITS.get(role_id, ROLE_INVENTORY_LIMITS["DEFAULT"])
+    key_slots, object_slots = ROLE_INVENTORY_LIMITS.get(
+        role_id, ROLE_INVENTORY_LIMITS["DEFAULT"]
+    )
     # Key capacity may be boosted by objects (e.g., TREASURE_RING).
     key_slots = get_max_keys_capacity(player)
     # Sacrifice penalty reduces object slots.
@@ -52,8 +55,12 @@ def can_add_key(player: PlayerState) -> bool:
     return get_key_count(player) < key_slots
 
 
-def add_object(state: GameState, player_id: PlayerId, object_id: str,
-               discard_choice: Optional[str] = None) -> bool:
+def add_object(
+    state: GameState,
+    player_id: PlayerId,
+    object_id: str,
+    discard_choice: Optional[str] = None,
+) -> bool:
     """
     Add an object to player inventory.
 
@@ -105,8 +112,9 @@ def add_object(state: GameState, player_id: PlayerId, object_id: str,
     return False
 
 
-def remove_object(state: GameState, player_id: PlayerId, object_id: str,
-                  to_discard: bool = True) -> bool:
+def remove_object(
+    state: GameState, player_id: PlayerId, object_id: str, to_discard: bool = True
+) -> bool:
     """Remove an object from inventory (optionally to discard pile)."""
     player = state.players[player_id]
     objects = getattr(player, "objects", [])
@@ -142,7 +150,9 @@ def is_tale_of_yellow(object_id: str) -> bool:
     return object_id in ("TALE_REPAIRER", "TALE_MASK", "TALE_DRAGON", "TALE_SIGN")
 
 
-def attach_tale_to_chambers(state: GameState, player_id: PlayerId, tale_id: str) -> bool:
+def attach_tale_to_chambers(
+    state: GameState, player_id: PlayerId, tale_id: str
+) -> bool:
     """
     Attach a Yellow Tale to the Chambers Book.
 

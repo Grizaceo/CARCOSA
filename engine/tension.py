@@ -23,7 +23,7 @@ def sigmoid(z: float) -> float:
 
 def sanity_pressure(state: GameState, cfg: Config) -> float:
     # p_i = clip((S_SAFE - s_i) / (S_SAFE - S_LOSS), 0, 1)
-    denom = (cfg.S_SAFE - cfg.S_LOSS)
+    denom = cfg.S_SAFE - cfg.S_LOSS
     if denom <= 0:
         raise ValueError("Config invalid: S_SAFE must be > S_LOSS")
 
@@ -96,8 +96,9 @@ def king_risk_pressure(state: GameState, cfg: Config) -> float:
     """
     if not state.players:
         return 0.0
-    on_king_floor = sum(1 for p in state.players.values() 
-                        if floor_of(p.room) == state.king_floor)
+    on_king_floor = sum(
+        1 for p in state.players.values() if floor_of(p.room) == state.king_floor
+    )
     exposure = on_king_floor / len(state.players)
     min_sanity = min(p.sanity for p in state.players.values())
     # Multiplicador de severidad: crece cuando min_sanity < -2
@@ -118,7 +119,9 @@ def compute_features(state: GameState, cfg: Config) -> Dict[str, float]:
     }
 
 
-def tension_T(state: GameState, cfg: Config, features: Optional[Dict[str, float]] = None) -> float:
+def tension_T(
+    state: GameState, cfg: Config, features: Optional[Dict[str, float]] = None
+) -> float:
     f = features if features is not None else compute_features(state, cfg)
     z = (
         cfg.BIAS
@@ -146,7 +149,9 @@ def band_loss(T: float, cfg: Config) -> float:
     return 0.0
 
 
-def king_utility(state: GameState, cfg: Config, features: Optional[Dict[str, float]] = None) -> float:
+def king_utility(
+    state: GameState, cfg: Config, features: Optional[Dict[str, float]] = None
+) -> float:
     """
     Utilidad (a maximizar) para el Rey:
     - Mantener T en la banda.

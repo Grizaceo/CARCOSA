@@ -17,6 +17,7 @@ INTERPRETACION:
   - win-rate ~21% => el techo está cerca del committee actual (saturación)
   - win-rate <15% => el juego es casi inganable; re-pensar diseño
 """
+
 import sys
 import time
 import argparse
@@ -41,7 +42,9 @@ def _oracle_episode(seed, rollouts, depth, cfg):
     def roll(st, rng):
         active = st.turn_order[st.turn_pos] if st.phase == "PLAYER" else "KING"
         if active == "KING":
-            return kp.choose(st, rng) or Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+            return kp.choose(st, rng) or Action(
+                actor="KING", type=ActionType.KING_ENDROUND, data={}
+            )
         act = rp.choose(st, rng)
         return act or Action(actor=str(active), type=ActionType.END_TURN, data={})
 
@@ -57,12 +60,17 @@ def _oracle_episode(seed, rollouts, depth, cfg):
             pending = pending[0] if pending else None
         if pending:
             legal = get_legal_actions(st, str(pending))
-            action = legal[0] if legal else Action(actor=str(pending), type=ActionType.END_TURN, data={})
+            action = (
+                legal[0]
+                if legal
+                else Action(actor=str(pending), type=ActionType.END_TURN, data={})
+            )
         elif st.phase == "PLAYER":
             actor = str(st.turn_order[st.turn_pos])
             legal = get_legal_actions(st, actor)
-            best = mcts_search(st, cfg, rng, actor, roll, roll,
-                               num_rollouts=rollouts, max_depth=depth)
+            best = mcts_search(
+                st, cfg, rng, actor, roll, roll, num_rollouts=rollouts, max_depth=depth
+            )
             # Guard de legalidad: si MCTS devolvió algo no legal, usar el
             # primero legal (nunca END_TURN ciego — el engine lo rechaza).
             if best is not None and best in legal:
@@ -95,7 +103,10 @@ def main():
     seeds = list(range(args.seeds))
 
     t0 = time.time()
-    print(f"ORACLE MCTS: {args.seeds} seeds, {args.rollouts} rollouts, depth {args.depth}, {args.workers} workers", flush=True)
+    print(
+        f"ORACLE MCTS: {args.seeds} seeds, {args.rollouts} rollouts, depth {args.depth}, {args.workers} workers",
+        flush=True,
+    )
     with ctx.Pool(args.workers) as pool:
         results = pool.map(fn, seeds)
     dt = time.time() - t0
@@ -103,18 +114,35 @@ def main():
     wins = sum(1 for r in results if r["win"])
     wr = wins / len(seeds)
     print("\n=== ORACLE MCTS RESULT ===")
-    print(f"win-rate: {wr*100:.1f}% ({wins}/{len(seeds)})")
-    print(f"tiempo: {dt:.0f}s ({dt/60:.1f} min)")
+    print(f"win-rate: {wr * 100:.1f}% ({wins}/{len(seeds)})")
+    print(f"tiempo: {dt:.0f}s ({dt / 60:.1f} min)")
     print(f"outcomes: { {r['outcome'].split(' ')[0] for r in results} }")
     # detalle por seed
     print("\npor seed:")
     for s, r in zip(seeds, results):
-        print(f"  seed {s:3d}: {'WIN' if r['win'] else r['outcome'].split(' ')[0]:<20} round {r['round']}")
+        print(
+            f"  seed {s:3d}: {'WIN' if r['win'] else r['outcome'].split(' ')[0]:<20} round {r['round']}"
+        )
 
-    out = REPO / "reports" / f"oracle_mcts_{args.seeds}seeds_{args.rollouts}ro_{args.depth}d.json"
+    out = (
+        REPO
+        / "reports"
+        / f"oracle_mcts_{args.seeds}seeds_{args.rollouts}ro_{args.depth}d.json"
+    )
     import json
-    json.dump({"seeds": seeds, "rollouts": args.rollouts, "depth": args.depth,
-               "results": results, "win_rate": wr, "n_wins": wins}, open(out, "w"), indent=2)
+
+    json.dump(
+        {
+            "seeds": seeds,
+            "rollouts": args.rollouts,
+            "depth": args.depth,
+            "results": results,
+            "win_rate": wr,
+            "n_wins": wins,
+        },
+        open(out, "w"),
+        indent=2,
+    )
     print(f"\n-> {out}")
 
 

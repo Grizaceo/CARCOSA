@@ -46,7 +46,6 @@ def can_discard(object_id: str) -> bool:
     return not is_soulbound(object_id)
 
 
-
 def use_object(s: GameState, pid: PlayerId, object_id: str, cfg, rng) -> bool:
     """
     Usa un objeto del inventario.
@@ -87,6 +86,7 @@ def use_object(s: GameState, pid: PlayerId, object_id: str, cfg, rng) -> bool:
 def _use_compass(s: GameState, pid: PlayerId, cfg) -> None:
     """Brújula: Mueve al pasillo del piso actual. Acción gratuita."""
     from engine.board import floor_of, corridor_id
+
     p = s.players[pid]
     floor = floor_of(p.room)
     p.room = corridor_id(floor)
@@ -110,29 +110,32 @@ def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
     for monster in s.monsters:
         if monster.room == p.room:
             mid = monster.monster_id
-            
-            # BABY_SPIDER: Stun = Die? 
+
+            # BABY_SPIDER: Stun = Die?
             if "BABY_SPIDER" in mid:
-                  s.monsters.remove(monster)
-                  break
+                s.monsters.remove(monster)
+                break
 
             # ICE_SERVANT: "si se stunea se retira del tablero"
             if "ICE_SERVANT" in mid or "REINA_HELADA" in mid:
                 if "ICE_SERVANT" in mid:
                     s.monsters.remove(monster)
                     break
-            
+
             # Rey de Amarillo es inmune al STUN
             if "YELLOW_KING" not in mid and "KING" not in mid:
-                monster.stunned_remaining_rounds = max(monster.stunned_remaining_rounds, 2)
-                
+                monster.stunned_remaining_rounds = max(
+                    monster.stunned_remaining_rounds, 2
+                )
+
                 # GOBLIN: Drop Loot
                 if "DUENDE" in mid or "GOBLIN" in mid:
                     loot_objects = s.flags.get(f"GOBLIN_LOOT_OBJECTS_{mid}")
                     loot_keys = s.flags.get(f"GOBLIN_LOOT_KEYS_{mid}", 0)
-                    
+
                     if loot_objects:
                         from engine.inventory import add_object
+
                         for obj_id in loot_objects:
                             if not add_object(s, pid, obj_id, discard_choice=None):
                                 s.discard_pile.append(obj_id)
@@ -140,27 +143,31 @@ def _use_blunt(s: GameState, pid: PlayerId, cfg) -> None:
 
                     if loot_keys > 0:
                         from engine.inventory import can_add_key
+
                         for _ in range(int(loot_keys)):
                             if can_add_key(p):
                                 p.keys += 1
                             else:
                                 s.keys_destroyed += 1
                         del s.flags[f"GOBLIN_LOOT_KEYS_{mid}"]
-                        
+
                     s.flags[f"GOBLIN_HAS_LOOT_{mid}"] = False
-                    
+
                 # BOGEYMAN: Release Victim
                 if "VIEJO" in mid or "SACK" in mid:
                     for target_pid, target_p in s.players.items():
                         new_statuses = []
                         released = False
                         for st in target_p.statuses:
-                            if st.status_id == "TRAPPED" and st.metadata.get("source_monster_id") == mid:
+                            if (
+                                st.status_id == "TRAPPED"
+                                and st.metadata.get("source_monster_id") == mid
+                            ):
                                 released = True
                             else:
                                 new_statuses.append(st)
                         target_p.statuses = new_statuses
-                        
+
                         if released:
                             s.flags[f"SACK_HAS_VICTIM_{mid}"] = False
 
@@ -211,6 +218,7 @@ def get_max_keys_capacity(p: PlayerState) -> int:
     +1 si tiene Llavero (TREASURE_RING)
     """
     from engine.roles import get_key_slots
+
     base_capacity = get_key_slots(getattr(p, "role_id", ""))
     if has_treasure_ring(p):
         base_capacity += 1

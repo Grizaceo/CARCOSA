@@ -11,6 +11,7 @@ class RNG:
     RNG determinista con log opcional de draws.
     Requisito central para simulaciones reproducibles.
     """
+
     seed: int
     _r: random.Random = None
     log: List[Tuple[str, Any]] = None

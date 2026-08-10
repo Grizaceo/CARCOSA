@@ -1,4 +1,5 @@
 """Inventory facade: keep public API while systems move to engine/systems."""
+
 from engine.systems.inventory import (  # noqa: F401
     ROLE_INVENTORY_LIMITS,
     add_object,

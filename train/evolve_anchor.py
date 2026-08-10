@@ -27,6 +27,7 @@ Uso:
       --generations 4 --mutants 4 --mutate-steps 100000 --sigma 0.02 \
       --eval-episodes 30 --fallback-gen 2
 """
+
 import sys
 import os
 import argparse
@@ -66,7 +67,9 @@ def mutate_model(src_zip, sigma):
             if p.requires_grad:
                 noise = torch.randn_like(p) * sigma
                 p.add_(noise)
-    stem = Path(src_zip).stem  # sin .zip (defensa: evita doble .zip en generaciones recursivas)
+    stem = Path(
+        src_zip
+    ).stem  # sin .zip (defensa: evita doble .zip en generaciones recursivas)
     uid = uuid.uuid4().hex[:8]
     out = str(Path(src_zip).parent / f"{stem}_mut_{uid}.zip")
     model.save(out)
@@ -96,20 +99,34 @@ def eval_model_path(path, episodes):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base-model", required=True,
-                    help="Modelo madre inicial (mejor de la gen anterior o red base).")
-    ap.add_argument("--original-base", required=True,
-                    help="Red base ORIGINAL que ganó >=1/30. Usada por el fallback.")
+    ap.add_argument(
+        "--base-model",
+        required=True,
+        help="Modelo madre inicial (mejor de la gen anterior o red base).",
+    )
+    ap.add_argument(
+        "--original-base",
+        required=True,
+        help="Red base ORIGINAL que ganó >=1/30. Usada por el fallback.",
+    )
     ap.add_argument("--generations", type=int, default=4)
     ap.add_argument("--mutants", type=int, default=4)
     ap.add_argument("--mutate-steps", type=int, default=100000)
     ap.add_argument("--sigma", type=float, default=0.02)
     ap.add_argument("--eval-episodes", type=int, default=30)
-    ap.add_argument("--objective-wr", type=float, default=0.10,
-                    help="Win-rate para considerar objetivo alcanzado y detenerse.")
-    ap.add_argument("--fallback-gen", type=int, default=2,
-                    help="Si tras esta generación no hay victorias en toda la historia, "
-                         "volver a --original-base.")
+    ap.add_argument(
+        "--objective-wr",
+        type=float,
+        default=0.10,
+        help="Win-rate para considerar objetivo alcanzado y detenerse.",
+    )
+    ap.add_argument(
+        "--fallback-gen",
+        type=int,
+        default=2,
+        help="Si tras esta generación no hay victorias en toda la historia, "
+        "volver a --original-base.",
+    )
     args = ap.parse_args()
 
     mother = args.base_model
@@ -126,13 +143,13 @@ def main():
         # Si la madre ya es un _trained, la reusamos; si no, la evaluamos directo.
         mother_wr = eval_model_path(mother, args.eval_episodes)
         pool = [(mother_wr, mother, "MADRE")]
-        print(f"    madre -> win-rate {mother_wr*100:.1f}%")
+        print(f"    madre -> win-rate {mother_wr * 100:.1f}%")
 
         # 2) Mutantes
         mutants = []
         for m in range(args.mutants):
             mpath = mutate_model(mother, args.sigma)
-            print(f"  mutante {m+1}/{args.mutants}: {Path(mpath).name}")
+            print(f"  mutante {m + 1}/{args.mutants}: {Path(mpath).name}")
             mutants.append(mpath)
 
         for mpath in mutants:
@@ -140,7 +157,7 @@ def main():
             model = PPO.load(tpath, env=CarcosaEnv())
             wr = evaluate(model, args.eval_episodes)
             pool.append((wr, tpath, "MUTANTE"))
-            print(f"    mutante {Path(mpath).name} -> win-rate {wr*100:.1f}%")
+            print(f"    mutante {Path(mpath).name} -> win-rate {wr * 100:.1f}%")
             try:
                 os.remove(mpath)
             except OSError:
@@ -149,20 +166,26 @@ def main():
         # 3) Selección con madre ancla: sólo se promueve quien SUPERA a la madre
         pool.sort(key=lambda x: -x[0])
         best_wr, best_path, best_kind = pool[0]
-        mother_wr_actual = pool[0][0] if pool[0][2] == "MADRE" else mother_wr
+        mother_wr = pool[0][0] if pool[0][2] == "MADRE" else mother_wr
 
-        history.append({
-            "gen": gen,
-            "best_win_rate": best_wr,
-            "best_model": best_path,
-            "best_kind": best_kind,
-            "mother_win_rate": mother_wr,
-            "surpassed_mother": best_wr > mother_wr,
-        })
-        print(f"  >> MEJOR GEN {gen}: win-rate {best_wr*100:.1f}%  "
-              f"({best_kind}: {Path(best_path).name})")
-        print(f"  >> madre ancla: {mother_wr*100:.1f}%  "
-              f"-> {'SUPERADA' if best_wr > mother_wr else 'CONSERVADA (elitismo)'}")
+        history.append(
+            {
+                "gen": gen,
+                "best_win_rate": best_wr,
+                "best_model": best_path,
+                "best_kind": best_kind,
+                "mother_win_rate": mother_wr,
+                "surpassed_mother": best_wr > mother_wr,
+            }
+        )
+        print(
+            f"  >> MEJOR GEN {gen}: win-rate {best_wr * 100:.1f}%  "
+            f"({best_kind}: {Path(best_path).name})"
+        )
+        print(
+            f"  >> madre ancla: {mother_wr * 100:.1f}%  "
+            f"-> {'SUPERADA' if best_wr > mother_wr else 'CONSERVADA (elitismo)'}"
+        )
 
         # 4) Actualizar melhor global
         if best_wr > best_overall_wr:
@@ -171,7 +194,9 @@ def main():
 
         # 5) Objetivo alcanzado -> detener
         if best_wr >= args.objective_wr:
-            print(f"  >> OBJETIVO {args.objective_wr*100:.0f}% ALCANZADO en gen {gen}")
+            print(
+                f"  >> OBJETIVO {args.objective_wr * 100:.0f}% ALCANZADO en gen {gen}"
+            )
             break
 
         # 6) FALLBACK: si tras --fallback-gen no hay ninguna victoria en toda la
@@ -179,8 +204,10 @@ def main():
         if gen >= args.fallback_gen:
             any_win = any(h["best_win_rate"] > 0.0 for h in history)
             if not any_win:
-                print(f"\n  >> FALLBACK: tras gen {gen} sigue 0% victorias en toda la "
-                      f"historia. Volviendo a red base original: {Path(original_base).name}")
+                print(
+                    f"\n  >> FALLBACK: tras gen {gen} sigue 0% victorias en toda la "
+                    f"historia. Volviendo a red base original: {Path(original_base).name}"
+                )
                 mother = original_base
                 # no break: dejamos correr las generaciones restantes desde la base original
                 continue
@@ -191,16 +218,21 @@ def main():
     # Historial
     print("\n=== HISTORIAL DE EVOLUCIÓN (madre ancla) ===")
     for h in history:
-        print(f"  Gen {h['gen']}: mejor {h['best_win_rate']*100:.1f}% "
-              f"({h['best_kind']}) | madre {h['mother_win_rate']*100:.1f}% "
-              f"| {'superó' if h['surpassed_mother'] else 'no superó'}")
+        print(
+            f"  Gen {h['gen']}: mejor {h['best_win_rate'] * 100:.1f}% "
+            f"({h['best_kind']}) | madre {h['mother_win_rate'] * 100:.1f}% "
+            f"| {'superó' if h['surpassed_mother'] else 'no superó'}"
+        )
 
     # Guardar mejor modelo como 'best_evolved_anchor'
     import shutil
+
     final = "models/best_evolved_anchor.zip"
     shutil.copy(best_overall_path, final)
     print(f"\nMejor modelo evolucionado (ancla) guardado en: {final}")
-    print(f"  win-rate global: {best_overall_wr*100:.1f}%  ({Path(best_overall_path).name})")
+    print(
+        f"  win-rate global: {best_overall_wr * 100:.1f}%  ({Path(best_overall_path).name})"
+    )
 
 
 if __name__ == "__main__":

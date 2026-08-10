@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
+
 @dataclass
 class RoleDefinition:
     """Definición de un rol de personaje."""
+
     role_id: str
     name: str
     sanity_max: int
@@ -29,9 +31,8 @@ ROLE_CATALOG = {
         key_slots=1,
         object_slots=2,
         ability_id="HEAL_OTHERS",
-        ability_description="Sacrificar 1 cordura → +2 cordura a OTROS + ILUMINADO o SANIDAD (1 acción)"
+        ability_description="Sacrificar 1 cordura → +2 cordura a OTROS + ILUMINADO o SANIDAD (1 acción)",
     ),
-    
     "TANK": RoleDefinition(
         role_id="TANK",
         name="Tanque",
@@ -39,9 +40,8 @@ ROLE_CATALOG = {
         key_slots=1,
         object_slots=3,
         ability_id="PROTECT_ALLY",
-        ability_description="Puede recibir daño en lugar de aliados en mismo nodo. +1 escudo al inicio de ronda."
+        ability_description="Puede recibir daño en lugar de aliados en mismo nodo. +1 escudo al inicio de ronda.",
     ),
-    
     "HIGH_ROLLER": RoleDefinition(
         role_id="HIGH_ROLLER",
         name="Apostador",
@@ -49,9 +49,8 @@ ROLE_CATALOG = {
         key_slots=2,
         object_slots=2,
         ability_id="DOUBLE_ROLL",
-        ability_description="Puede lanzar doble d6 y sumar (1x turno, gratis, post-primer d6)"
+        ability_description="Puede lanzar doble d6 y sumar (1x turno, gratis, post-primer d6)",
     ),
-    
     "SCOUT": RoleDefinition(
         role_id="SCOUT",
         name="Explorador",
@@ -59,9 +58,8 @@ ROLE_CATALOG = {
         key_slots=1,
         object_slots=1,
         ability_id="FREE_MOVE",
-        ability_description="+1 movimiento adicional gratis. Escalera: si d6+cordura < 3 → STUN"
+        ability_description="+1 movimiento adicional gratis. Escalera: si d6+cordura < 3 → STUN",
     ),
-    
     "BRAWLER": RoleDefinition(
         role_id="BRAWLER",
         name="Luchador",
@@ -70,9 +68,8 @@ ROLE_CATALOG = {
         object_slots=2,
         starting_items=["BLUNT"],
         ability_id="BLUNT_REACTION",
-        ability_description="Contundente sin acción. Puede reaccionar contra monstruos que lo atacan"
+        ability_description="Contundente sin acción. Puede reaccionar contra monstruos que lo atacan",
     ),
-    
     "PSYCHIC": RoleDefinition(
         role_id="PSYCHIC",
         name="Psíquico",
@@ -80,7 +77,7 @@ ROLE_CATALOG = {
         key_slots=1,
         object_slots=2,
         ability_id="PEEK_REORDER",
-        ability_description="Al entrar a habitación: ver 2 cartas top, reordenar. Fondo: monstruo=-2, otro=-1"
+        ability_description="Al entrar a habitación: ver 2 cartas top, reordenar. Fondo: monstruo=-2, otro=-1",
     ),
 }
 

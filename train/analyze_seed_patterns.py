@@ -23,6 +23,7 @@ Uso:
 
 Dependencias: solo stdlib + numpy + (sklearn opcional para el árbol).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -68,13 +69,16 @@ def load_confiable_wins(repo_root: Path) -> set[int]:
 def setup_features(state) -> dict:
     """Extrae features del setup que se conocen ANTES de jugar."""
     feats: dict = {}
-    cfg = Config()
 
     # --- Habitaciones especiales ---
     sel = state.flags.get("SPECIAL_ROOMS_SELECTED", [])
     loc = state.flags.get("SPECIAL_ROOM_LOCATIONS", {})
-    feats["special_free_count"] = sum(1 for t in sel if t in {"TABERNA", "MOTEMEY", "ARMERIA"})
-    feats["special_paid_count"] = sum(1 for t in sel if t not in {"TABERNA", "MOTEMEY", "ARMERIA"})
+    feats["special_free_count"] = sum(
+        1 for t in sel if t in {"TABERNA", "MOTEMEY", "ARMERIA"}
+    )
+    feats["special_paid_count"] = sum(
+        1 for t in sel if t not in {"TABERNA", "MOTEMEY", "ARMERIA"}
+    )
     feats["special_monasterio"] = 1 if "MONASTERIO_LOCURA" in sel else 0
     feats["special_motemey"] = 1 if "MOTEMEY" in sel else 0
     feats["special_taberna"] = 1 if "TABERNA" in sel else 0
@@ -92,7 +96,11 @@ def setup_features(state) -> dict:
     feats["special_on_R4_count"] = sum(1 for p in pos_list if p == 4)
 
     # --- Keys en decks de habitaciones ---
-    key_positions: dict[int, list[int]] = {1: [], 2: [], 3: []}  # floor -> indices en deck
+    key_positions: dict[int, list[int]] = {
+        1: [],
+        2: [],
+        3: [],
+    }  # floor -> indices en deck
     key_rooms: dict[int, list[int]] = {1: [], 2: [], 3: []}  # floor -> R index
     for rid, room in state.rooms.items():
         if "_P" in str(rid):
@@ -141,7 +149,9 @@ def setup_features(state) -> dict:
     # "profundidad media de key" normalizada (0-1): qué tan enterradas están
     feats["key_burial"] = float(np.mean([i / 8.0 for i in all_idx])) if all_idx else 0.0
     # ¿algún piso sin ninguna key en el deck? (debería ser raro: 6 keys en 12 rooms)
-    feats["any_floor_without_key"] = 1 if any(len(v) == 0 for v in key_positions.values()) else 0
+    feats["any_floor_without_key"] = (
+        1 if any(len(v) == 0 for v in key_positions.values()) else 0
+    )
     # ¿hay key en la posición 0 de algún piso? (win express si el bot SEARCHa)
     feats["any_key_at_idx0"] = 1 if any(0 in v for v in key_positions.values()) else 0
 
@@ -168,7 +178,9 @@ def _mann_whitney_u(a: np.ndarray, b: np.ndarray) -> float:
     n1, n2 = len(a), len(b)
     # U = suma de rangos de a
     ranks = np.concatenate([a, b])
-    order = np.argsort(np.argsort(ranks))  # ranks 0-based con ties promediados no exacto
+    order = np.argsort(
+        np.argsort(ranks)
+    )  # ranks 0-based con ties promediados no exacto
     ra = np.sum(order[:n1]) + n1
     u = ra - n1 * (n1 + 1) / 2
     mu = n1 * n2 / 2
@@ -190,7 +202,10 @@ def _erf(x: float) -> float:
     sign = 1 if x >= 0 else -1
     x = abs(x)
     t = 1.0 / (1.0 + 0.3275911 * x)
-    y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * np.exp(-x * x)
+    y = 1 - (
+        ((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t
+        + 0.254829592
+    ) * t * np.exp(-x * x)
     return sign * y
 
 
@@ -215,11 +230,17 @@ def report(rows: list[dict], y: np.ndarray, out_path: Path) -> None:
     lines = []
     lines.append("=" * 78)
     lines.append("ANÁLISIS DE PATRONES DE SETUP — seeds nunca-ganadas")
-    lines.append(f"Seeds: {len(rows)} | WIN (confiable+gap): {n_win} | LOSE (nunca ganada): {n_lose}")
+    lines.append(
+        f"Seeds: {len(rows)} | WIN (confiable+gap): {n_win} | LOSE (nunca ganada): {n_lose}"
+    )
     lines.append("=" * 78)
 
     # Features continuas: media WIN vs LOSE + p-value MWU
-    numeric_keys = [k for k in rows[0] if isinstance(rows[0][k], (int, float)) and k not in ("seed", "win")]
+    numeric_keys = [
+        k
+        for k in rows[0]
+        if isinstance(rows[0][k], (int, float)) and k not in ("seed", "win")
+    ]
     lines.append("")
     lines.append("FEATURES CONTINUAS — media WIN vs LOSE (Mann-Whitney U)")
     lines.append(f"{'feature':<28}{'WIN':>10}{'LOSE':>10}{'p-value':>10}  sig")
@@ -250,13 +271,20 @@ def report(rows: list[dict], y: np.ndarray, out_path: Path) -> None:
         from sklearn.model_selection import cross_val_score
         from sklearn.ensemble import RandomForestClassifier
 
-        X = np.array([[r[k] if r[k] is not None else -1 for k in sorted(numeric_keys)] for r in rows])
+        X = np.array(
+            [
+                [r[k] if r[k] is not None else -1 for k in sorted(numeric_keys)]
+                for r in rows
+            ]
+        )
         feat_names = sorted(numeric_keys)
         clf = DecisionTreeClassifier(max_depth=3, min_samples_leaf=10, random_state=0)
         aucs = cross_val_score(clf, X, y, cv=5, scoring="roc_auc")
         clf.fit(X, y)
         lines.append(f"  AUC CV (5-fold): {aucs.mean():.3f} ± {aucs.std():.3f}")
-        lines.append("  AUC = 0.5 => el setup NO discrimina; AUC > 0.65 => estructura real")
+        lines.append(
+            "  AUC = 0.5 => el setup NO discrimina; AUC > 0.65 => estructura real"
+        )
         lines.append("  Árbol:")
         tree_txt = export_text(clf, feature_names=feat_names, max_depth=3)
         for tl in tree_txt.splitlines():
@@ -275,7 +303,9 @@ def report(rows: list[dict], y: np.ndarray, out_path: Path) -> None:
     lines.append("")
     lines.append("OUTCOMES GOAL por categoría (benchmark v6 confiable)")
     try:
-        d = json.loads((Path(__file__).parent.parent / REPORTS_CONFIABLES[2]).read_text())
+        d = json.loads(
+            (Path(__file__).parent.parent / REPORTS_CONFIABLES[2]).read_text()
+        )
         outcomes = {}
         for sid, r in d["detail"]["GOAL"].items():
             o = r["outcome"]
@@ -289,6 +319,7 @@ def report(rows: list[dict], y: np.ndarray, out_path: Path) -> None:
                 outcomes[int(sid)] = "OTHER"
         # Cruce con categoría
         from collections import Counter
+
         cat_of = {r["seed"]: ("WIN" if r["win"] else "LOSE") for r in rows}
         cross = Counter()
         for sid, oc in outcomes.items():
@@ -296,7 +327,9 @@ def report(rows: list[dict], y: np.ndarray, out_path: Path) -> None:
                 cross[(cat_of[sid], oc)] += 1
         lines.append(f"{'categoría':<12}{'SANITY':>10}{'KEYS':>10}{'WIN':>10}")
         for cat in ("WIN", "LOSE"):
-            lines.append(f"{cat:<12}{cross[(cat,'SANITY')]:>10}{cross[(cat,'KEYS')]:>10}{cross[(cat,'WIN')]:>10}")
+            lines.append(
+                f"{cat:<12}{cross[(cat, 'SANITY')]:>10}{cross[(cat, 'KEYS')]:>10}{cross[(cat, 'WIN')]:>10}"
+            )
     except Exception as e:
         lines.append(f"  (no se pudo leer outcomes: {e})")
 
@@ -328,11 +361,19 @@ def main():
 
     repo = Path(__file__).parent.parent
     win_set = load_confiable_wins(repo) | GAP_DOCUMENTADO
-    print(f"Union confiable: {len(win_set)} seeds | nunca ganadas: {300 - len(win_set)}")
+    print(
+        f"Union confiable: {len(win_set)} seeds | nunca ganadas: {300 - len(win_set)}"
+    )
 
     rows, y = build_dataset(range(args.seeds), win_set)
 
-    out_path = Path(args.out) if args.out else repo / "reports" / f"seed_patterns_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    out_path = (
+        Path(args.out)
+        if args.out
+        else repo
+        / "reports"
+        / f"seed_patterns_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    )
     report(rows, y, out_path)
 
 

@@ -67,11 +67,20 @@ def legacy_reveal_one(state: GameState, room_id: RoomId):
     return _reveal_one(state, room_id)
 
 
-def legacy_resolve_card_minimal(state: GameState, pid: PlayerId, card, cfg: Config, rng: Optional[RNG] = None):
+def legacy_resolve_card_minimal(
+    state: GameState, pid: PlayerId, card, cfg: Config, rng: Optional[RNG] = None
+):
     return _resolve_card_minimal(state, pid, card, cfg, rng)
 
 
-def legacy_resolve_event(state: GameState, pid: PlayerId, event_id: str, cfg: Config, rng: RNG, card_prefix: str = "EVENT"):
+def legacy_resolve_event(
+    state: GameState,
+    pid: PlayerId,
+    event_id: str,
+    cfg: Config,
+    rng: RNG,
+    card_prefix: str = "EVENT",
+):
     return _resolve_event(state, pid, event_id, cfg, rng, card_prefix=card_prefix)
 
 
@@ -115,11 +124,15 @@ def legacy_attract_players_to_floor(state: GameState, floor: int) -> None:
     _attract_players_to_floor(state, floor)
 
 
-def legacy_expel_players_from_floor_except_fk(state: GameState, floor: int, fk_floor: int | None) -> None:
+def legacy_expel_players_from_floor_except_fk(
+    state: GameState, floor: int, fk_floor: int | None
+) -> None:
     _expel_players_from_floor_except_fk(state, floor, fk_floor)
 
 
-def legacy_attract_players_to_floor_except_fk(state: GameState, floor: int, fk_floor: int | None) -> None:
+def legacy_attract_players_to_floor_except_fk(
+    state: GameState, floor: int, fk_floor: int | None
+) -> None:
     _attract_players_to_floor_except_fk(state, floor, fk_floor)
 
 

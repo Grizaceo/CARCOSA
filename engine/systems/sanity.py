@@ -44,6 +44,7 @@ def apply_sanity_loss(
             queue_pending_sacrifice,
             set_pending_sacrifice_damage,
         )
+
         if is_pending_sacrifice(state, player.player_id):
             return
         projected = prev_sanity - amount
@@ -51,7 +52,9 @@ def apply_sanity_loss(
             from engine.rules.sacrifice import available_sacrifice_options
 
             opts = available_sacrifice_options(player)
-            can_sacrifice = bool(opts.get("can_reduce_object_slots")) or bool(opts.get("can_reduce_sanity"))
+            can_sacrifice = bool(opts.get("can_reduce_object_slots")) or bool(
+                opts.get("can_reduce_sanity")
+            )
             if can_sacrifice:
                 set_pending_sacrifice_damage(state, player.player_id, amount, source)
                 queue_pending_sacrifice(state, player.player_id)
@@ -62,8 +65,11 @@ def apply_sanity_loss(
             actual_source = source or "UNKNOWN"
             state.last_sanity_loss_event = f"{actual_source} -> {player.player_id}"
             if hasattr(state, "last_sanity_loss_events"):
-                state.last_sanity_loss_events.append(f"{actual_source} -> {player.player_id}")
+                state.last_sanity_loss_events.append(
+                    f"{actual_source} -> {player.player_id}"
+                )
             from engine.systems.sacrifice import apply_minus5_consequences
+
             eff_cfg = cfg or getattr(state, "config", None)
             apply_minus5_consequences(state, player.player_id, eff_cfg)
             return
@@ -75,7 +81,10 @@ def apply_sanity_loss(
         actual_source = source or "UNKNOWN"
         state.last_sanity_loss_event = f"{actual_source} -> {player.player_id}"
         if hasattr(state, "last_sanity_loss_events"):
-            state.last_sanity_loss_events.append(f"{actual_source} -> {player.player_id}")
+            state.last_sanity_loss_events.append(
+                f"{actual_source} -> {player.player_id}"
+            )
         if allow_sacrifice and not player.at_minus5:
             from engine.systems.sacrifice import queue_pending_sacrifice
+
             queue_pending_sacrifice(state, player.player_id)

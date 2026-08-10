@@ -21,7 +21,7 @@ def apply_end_of_round_status_effects(state: GameState) -> None:
 def apply_end_of_turn_status_effects(state: GameState) -> None:
     """
     Apply end-of-turn status effects.
-    
+
     Implemented:
     - SANIDAD: heal 1 sanity (at end of EACH turn)
     """

@@ -32,12 +32,17 @@ def remove_status(p: PlayerState, status_id: str) -> bool:
     return len(p.statuses) < original_len
 
 
-
-def add_status(p: PlayerState, status_id: str, duration: int = 2, metadata: Dict[str, Any] = None) -> None:
+def add_status(
+    p: PlayerState, status_id: str, duration: int = 2, metadata: Dict[str, Any] = None
+) -> None:
     """Agrega un estado con duración y metadata opcional."""
     if metadata is None:
         metadata = {}
-    p.statuses.append(StatusInstance(status_id=status_id, remaining_rounds=duration, metadata=metadata))
+    p.statuses.append(
+        StatusInstance(
+            status_id=status_id, remaining_rounds=duration, metadata=metadata
+        )
+    )
 
 
 def get_player_by_turn_offset(s: GameState, pid: PlayerId, offset: int) -> PlayerId:
@@ -52,6 +57,7 @@ def get_player_by_turn_offset(s: GameState, pid: PlayerId, offset: int) -> Playe
 def get_players_in_floor(s: GameState, floor: int) -> List[PlayerId]:
     """Retorna lista de jugadores en un piso."""
     from engine.board import floor_of
+
     return [pid for pid, p in s.players.items() if floor_of(p.room) == floor]
 
 

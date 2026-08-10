@@ -16,9 +16,11 @@ ROLES CANÓNICOS (2026-01-22):
 
 Todos los roles tienen cordura mínima = -5
 """
+
 from typing import Dict, List, Optional, Sequence
 from engine.catalogs.roles import ROLE_CATALOG, RoleDefinition
 from engine.rng import RNG
+
 
 def get_role(role_id: str) -> Optional[RoleDefinition]:
     """Obtiene la definición de un rol."""
@@ -58,6 +60,7 @@ def has_ability(role_id: str, ability_id: str) -> bool:
 # ==============================================================================
 # FUNCIONES DE HABILIDAD DE ROL
 # ==============================================================================
+
 
 def can_use_healer_ability(player, target_players: list) -> bool:
     """

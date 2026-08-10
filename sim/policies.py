@@ -16,11 +16,17 @@ from engine.transition import step
 from engine.types import RoomId, PlayerId
 
 from engine.board import floor_of, neighbors, is_corridor, corridor_id
-from sim.memory import PRIORITY_EVENT, PRIORITY_KEY, PRIORITY_MONSTER, PRIORITY_OMEN, PRIORITY_TREASURE, card_priority
+from sim.memory import (
+    PRIORITY_EVENT,
+    PRIORITY_KEY,
+    PRIORITY_MONSTER,
+    PRIORITY_OMEN,
+    PRIORITY_TREASURE,
+    card_priority,
+)
 from sim.pathing import bfs_next_step
 from engine.inventory import get_inventory_limits, get_object_count, get_key_count
 from engine.objects import is_soulbound
-
 
 
 def _get_active_actor(state: GameState) -> str:
@@ -79,11 +85,13 @@ def _pick_first(actions: List[Action], t: ActionType) -> Optional[Action]:
             return a
     return None
 
+
 def _pick_use_object(actions: List[Action], object_id: str) -> Optional[Action]:
     for a in actions:
         if a.type == ActionType.USE_OBJECT and a.data.get("object_id") == object_id:
             return a
     return None
+
 
 def _pick_move_to_corridor(actions: List[Action], floor: int) -> Optional[Action]:
     target = corridor_id(floor)
@@ -92,7 +100,10 @@ def _pick_move_to_corridor(actions: List[Action], floor: int) -> Optional[Action
             return a
     return None
 
-def _temp_stairs_dest(state: GameState, room: RoomId, target_floor: int) -> Optional[RoomId]:
+
+def _temp_stairs_dest(
+    state: GameState, room: RoomId, target_floor: int
+) -> Optional[RoomId]:
     f = floor_of(room)
     if target_floor == f:
         return None
@@ -101,12 +112,14 @@ def _temp_stairs_dest(state: GameState, room: RoomId, target_floor: int) -> Opti
     dest = RoomId(f"F{f + step}_{suffix}")
     return dest if dest in state.rooms else None
 
+
 def _temp_stairs_active_for_pid(state: GameState, room: RoomId, pid: PlayerId) -> bool:
     key = f"TEMP_STAIRS_{room}"
     flag = state.flags.get(key)
     if isinstance(flag, dict):
         return flag.get("round") == state.round and flag.get("pid") == str(pid)
     return False
+
 
 def _room_remaining(state: GameState, rid: RoomId) -> int:
     rs = state.rooms.get(rid)
@@ -130,7 +143,9 @@ def _best_room_global(state: GameState) -> Optional[RoomId]:
     return best[2] if best else None
 
 
-def _best_room_global_filtered(state: GameState, avoid_floor: Optional[int] = None) -> Optional[RoomId]:
+def _best_room_global_filtered(
+    state: GameState, avoid_floor: Optional[int] = None
+) -> Optional[RoomId]:
     best: Optional[Tuple[int, str, RoomId]] = None  # (remaining, tie_break, rid)
     for rid, room in state.rooms.items():
         s = str(rid)
@@ -160,6 +175,7 @@ STALL_KEY_STEPS = 24
 
 _POLICY_TRACKING = {}
 
+
 def _policy_flags(state: GameState) -> dict:
     return _POLICY_TRACKING.setdefault(id(state), {})
 
@@ -185,13 +201,17 @@ def _policy_armory_streak(state: GameState, pid: PlayerId) -> int:
 def _policy_record_action(state: GameState, pid: PlayerId, action: Action) -> None:
     flags = _policy_flags(state)
     if action.type in (ActionType.USE_ARMORY_DROP, ActionType.USE_ARMORY_TAKE):
-        flags[f"POLICY_ARMORY_STREAK_{pid}"] = int(flags.get(f"POLICY_ARMORY_STREAK_{pid}", 0)) + 1
+        flags[f"POLICY_ARMORY_STREAK_{pid}"] = (
+            int(flags.get(f"POLICY_ARMORY_STREAK_{pid}", 0)) + 1
+        )
     else:
         flags[f"POLICY_ARMORY_STREAK_{pid}"] = 0
     flags[f"POLICY_LAST_ACTION_{pid}"] = action.type.value
 
 
-def _choose_sacrifice_action(acts: List[Action], state: GameState, pid: PlayerId, cfg: Config) -> Optional[Action]:
+def _choose_sacrifice_action(
+    acts: List[Action], state: GameState, pid: PlayerId, cfg: Config
+) -> Optional[Action]:
     """
     Decide entre SACRIFICE y ACCEPT_SACRIFICE con foco en evitar destruccion de llaves.
     - Si el jugador lleva llaves, prioriza SACRIFICE.
@@ -204,15 +224,15 @@ def _choose_sacrifice_action(acts: List[Action], state: GameState, pid: PlayerId
     if not sac_actions:
         return acc_action
 
-    team_low = sum(1 for pl in state.players.values() if pl.sanity <= -3)
     team_critical = sum(1 for pl in state.players.values() if pl.sanity <= -4)
     other_key_critical = any(
-        (pl.player_id != pid and pl.keys > 0 and pl.sanity <= -4) for pl in state.players.values()
+        (pl.player_id != pid and pl.keys > 0 and pl.sanity <= -4)
+        for pl in state.players.values()
     )
     close_to_win = _keys_total(state) >= max(0, cfg.KEYS_TO_WIN - 1)
 
     prefer_sacrifice = True
-    
+
     # Solo ACEPTAR el -5 si el costo de sacrificar es demasiado alto
     # (ej. max_sanity <= 0 y no hay items basura) y no llevamos llaves.
     if p.keys == 0 and p.sanity_max <= 0 and p.object_slots_penalty >= 2:
@@ -288,7 +308,10 @@ def _choose_hallway_peek_action(
 
         if team_memory is not None:
             known_cards = team_memory.get_card_info(str(room))
-            if any(c.card_id == card and c.position_in_deck == deck.top for c in known_cards):
+            if any(
+                c.card_id == card and c.position_in_deck == deck.top
+                for c in known_cards
+            ):
                 novelty = 0.25
             elif known_cards:
                 novelty = 0.7
@@ -323,7 +346,12 @@ def _choose_forced_action(
 
     # TRAPPED: only ESCAPE_TRAPPED (and maybe SACRIFICE) are legal
     if any(a.type == ActionType.ESCAPE_TRAPPED for a in acts):
-        allowed = {ActionType.ESCAPE_TRAPPED, ActionType.SACRIFICE, ActionType.END_TURN, ActionType.DISCARD_SANIDAD}
+        allowed = {
+            ActionType.ESCAPE_TRAPPED,
+            ActionType.SACRIFICE,
+            ActionType.END_TURN,
+            ActionType.DISCARD_SANIDAD,
+        }
         if all(a.type in allowed for a in acts):
             a = _pick_first(acts, ActionType.ESCAPE_TRAPPED)
             return a if a is not None else rng.choice(acts)
@@ -403,7 +431,12 @@ def _choose_special_action(
 
     # Armeria: dejar objeto si esta al limite
     drop_actions = [a for a in acts if a.type == ActionType.USE_ARMORY_DROP]
-    if drop_actions and not armory_blocked and not key_progress_only and not risk_averse:
+    if (
+        drop_actions
+        and not armory_blocked
+        and not key_progress_only
+        and not risk_averse
+    ):
         _, obj_slots = get_inventory_limits(p)
         if get_object_count(p) >= obj_slots:
             for a in drop_actions:
@@ -541,7 +574,9 @@ def _king_exposure(state: GameState) -> float:
     if not state.players:
         return 0.0
     total = len(state.players)
-    on_floor = sum(1 for p in state.players.values() if floor_of(p.room) == state.king_floor)
+    on_floor = sum(
+        1 for p in state.players.values() if floor_of(p.room) == state.king_floor
+    )
     return on_floor / total
 
 
@@ -549,6 +584,7 @@ def _king_risk(state: GameState, min_sanity: int) -> float:
     exposure = _king_exposure(state)
     multiplier = 1 + max(0, -2 - int(min_sanity))
     return exposure * multiplier
+
 
 @dataclass
 class GoalDirectedPlayerPolicy(PlayerPolicy):
@@ -559,6 +595,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
     - Exploración GLOBAL: BFS al room con más cartas restantes.
     - Con llaves suficientes: BFS al Umbral y luego END_TURN (no seguir explorando).
     """
+
     cfg: Config = Config()
     # Umbral base de “meditar por seguridad” (más estricto que <=1)
     meditate_critical: int = -2
@@ -586,31 +623,47 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             self._team_memory = None
             self._bot_memories = None
             return
-        self.meditate_critical = int(params.get("meditate_critical", self.meditate_critical))
-        self.move_for_better_delta = int(params.get("move_for_better_delta", self.move_for_better_delta))
-        self.search_local_min_remaining = int(params.get("search_local_min_remaining", self.search_local_min_remaining))
+        self.meditate_critical = int(
+            params.get("meditate_critical", self.meditate_critical)
+        )
+        self.move_for_better_delta = int(
+            params.get("move_for_better_delta", self.move_for_better_delta)
+        )
+        self.search_local_min_remaining = int(
+            params.get("search_local_min_remaining", self.search_local_min_remaining)
+        )
         self.vial_margin = int(params.get("vial_margin", self.vial_margin))
-        self.endgame_force_umbral = bool(params.get("endgame_force_umbral", self.endgame_force_umbral))
-        self.king_flee_sanity = int(params.get("king_flee_sanity", self.king_flee_sanity))
-        self.king_flee_round_threshold = int(params.get("king_flee_round_threshold", self.king_flee_round_threshold))
-        self.late_game_meditate_bonus = int(params.get("late_game_meditate_bonus", self.late_game_meditate_bonus))
-        self.search_sanity_min = int(params.get("search_sanity_min", self.search_sanity_min))
+        self.endgame_force_umbral = bool(
+            params.get("endgame_force_umbral", self.endgame_force_umbral)
+        )
+        self.king_flee_sanity = int(
+            params.get("king_flee_sanity", self.king_flee_sanity)
+        )
+        self.king_flee_round_threshold = int(
+            params.get("king_flee_round_threshold", self.king_flee_round_threshold)
+        )
+        self.late_game_meditate_bonus = int(
+            params.get("late_game_meditate_bonus", self.late_game_meditate_bonus)
+        )
+        self.search_sanity_min = int(
+            params.get("search_sanity_min", self.search_sanity_min)
+        )
         self._role_sanity_bias = dict(params.get("role_sanity_bias", {}))
         # Sistema de memoria (se configura desde runner.py)
         self._team_memory = None
         self._bot_memories = None
-    
+
     def set_memory(self, team_memory, bot_memories) -> None:
         """Configura el sistema de memoria para la policy."""
         self._team_memory = team_memory
         self._bot_memories = bot_memories
-    
+
     def _get_known_key_rooms(self) -> list:
         """Retorna habitaciones donde se sabe que hay llaves."""
         if self._team_memory is None:
             return []
         return self._team_memory.get_key_rooms()
-    
+
     def _get_threat_rooms(self) -> list:
         """Retorna habitaciones con amenazas conocidas."""
         if self._team_memory is None:
@@ -629,7 +682,10 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         idx = sorted_pids.index(str(pid)) if str(pid) in sorted_pids else 0
         floors = [1, 2, 3, 2]  # P1→F1, P2→F2(Umbral), P3→F3, P4→F2
         return floors[idx % 4]
-    def _best_room_for_player(self, state: GameState, pid: PlayerId, need_keys: bool = False) -> Optional[RoomId]:
+
+    def _best_room_for_player(
+        self, state: GameState, pid: PlayerId, need_keys: bool = False
+    ) -> Optional[RoomId]:
         """Mejor habitación para explorar.
 
         Por defecto prioriza el piso asignado al jugador (división de trabajo),
@@ -668,7 +724,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             pid = PlayerId(actor)
             p = state.players[pid]
         else:
-             return Action(actor=actor, type=ActionType.END_TURN, data={})
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
 
         acts = get_legal_actions(state, actor)
         if not acts:
@@ -686,12 +742,14 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         armory_streak = _policy_armory_streak(state, pid)
         avoid_armory = stall_steps >= STALL_KEY_STEPS
 
-        forced = _choose_forced_action(acts, state, pid, rng, self.cfg, team_memory=self._team_memory)
+        forced = _choose_forced_action(
+            acts, state, pid, rng, self.cfg, team_memory=self._team_memory
+        )
         if forced is not None:
             return finalize(forced)
 
         danger = _danger_score(state, pid)
-        role_bias = self._role_bias(getattr(p, 'role_id', None))
+        role_bias = self._role_bias(getattr(p, "role_id", None))
         late_game = state.round > self.king_flee_round_threshold
         on_king_floor = floor_of(p.room) == state.king_floor
         meditate_threshold = self.meditate_critical + role_bias
@@ -726,7 +784,9 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         if not can_sacrifice and p.sanity <= 0:
             meditate_threshold += 2  # Sin sacrificio disponible, urgente meditar
 
-        meditate_threshold = min(meditate_threshold, 1)  # Cap: meditar si sanity <= 1 en peor caso
+        meditate_threshold = min(
+            meditate_threshold, 1
+        )  # Cap: meditar si sanity <= 1 en peor caso
 
         carrier_caution = key_carrier and (danger > 0 or team_critical > 0)
 
@@ -740,7 +800,9 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         vial = _pick_use_object(acts, "VIAL")
         if vial:
             sanity_max = p.sanity_max or p.sanity
-            if p.sanity < sanity_max and (p.sanity <= meditate_threshold + self.vial_margin or danger > 0):
+            if p.sanity < sanity_max and (
+                p.sanity <= meditate_threshold + self.vial_margin or danger > 0
+            ):
                 return finalize(vial)
 
         compass = _pick_use_object(acts, "COMPASS")
@@ -752,7 +814,9 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             move_actions = [a for a in acts if a.type == ActionType.MOVE]
             if move_actions:
                 # Preferir mover hacia el piso objetivo (Umbral o mejor room global)
-                target_floor = floor_of(umbral) if keys_total >= self.cfg.KEYS_TO_WIN else None
+                target_floor = (
+                    floor_of(umbral) if keys_total >= self.cfg.KEYS_TO_WIN else None
+                )
                 if target_floor is None:
                     goal = _best_room_global(state)
                     if goal is not None:
@@ -775,16 +839,30 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             move_acts = [a for a in acts if a.type == ActionType.MOVE]
             if move_acts:
                 # 1. Salida directa a otro piso
-                exits = [a for a in move_acts if floor_of(RoomId(a.data.get("to"))) != state.king_floor]
+                exits = [
+                    a
+                    for a in move_acts
+                    if floor_of(RoomId(a.data.get("to"))) != state.king_floor
+                ]
                 if exits:
-                    safest = min(exits, key=lambda a: _danger_score_room(state, RoomId(a.data.get("to"))))
+                    safest = min(
+                        exits,
+                        key=lambda a: _danger_score_room(
+                            state, RoomId(a.data.get("to"))
+                        ),
+                    )
                     return finalize(safest)
                 # 2. Si no hay salida directa, moverse hacia un corredor para escapar luego
-                corridor_moves = [a for a in move_acts if is_corridor(RoomId(a.data.get("to")))]
+                corridor_moves = [
+                    a for a in move_acts if is_corridor(RoomId(a.data.get("to")))
+                ]
                 if corridor_moves:
                     return finalize(rng.choice(corridor_moves))
                 # 3. Sino, a la habitación menos peligrosa
-                safest_room = min(move_acts, key=lambda a: _danger_score_room(state, RoomId(a.data.get("to"))))
+                safest_room = min(
+                    move_acts,
+                    key=lambda a: _danger_score_room(state, RoomId(a.data.get("to"))),
+                )
                 return finalize(safest_room)
 
         # 1) Panico extremo: meditar si existe
@@ -800,7 +878,11 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                 return finalize(a)
 
         # 2.8) Endgame: con llaves suficientes, priorizar umbral agresivamente
-        if self.endgame_force_umbral and keys_total >= self.cfg.KEYS_TO_WIN and p.room != umbral:
+        if (
+            self.endgame_force_umbral
+            and keys_total >= self.cfg.KEYS_TO_WIN
+            and p.room != umbral
+        ):
             doors_actions = [a for a in acts if a.type == ActionType.USE_YELLOW_DOORS]
             if doors_actions:
                 for a in doors_actions:
@@ -825,7 +907,7 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             move_actions = [a for a in acts if a.type == ActionType.MOVE]
             if move_actions:
                 return finalize(rng.choice(move_actions))
-            
+
             # En endgame, NUNCA buscar a menos que sea una llave segura, es mejor terminar turno
             return finalize(Action(actor=actor, type=ActionType.END_TURN, data={}))
 
@@ -859,7 +941,9 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
         known_key_rooms = self._get_known_key_rooms()
         known_threat_rooms = set(self._get_threat_rooms())
         if known_key_rooms and need_keys and p.sanity > meditate_threshold:
-            prioritized_key_rooms = [room for room in known_key_rooms if room not in known_threat_rooms]
+            prioritized_key_rooms = [
+                room for room in known_key_rooms if room not in known_threat_rooms
+            ]
             if not prioritized_key_rooms:
                 prioritized_key_rooms = known_key_rooms
 
@@ -873,7 +957,10 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                 # Si puedo moverme hacia la habitación con llave
                 nxt = bfs_next_step(state, p.room, key_room)
                 if nxt is not None:
-                    if str(nxt) in known_threat_rooms and len(prioritized_key_rooms) > 1:
+                    if (
+                        str(nxt) in known_threat_rooms
+                        and len(prioritized_key_rooms) > 1
+                    ):
                         continue
                     for a in acts:
                         if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
@@ -899,7 +986,9 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
             goal = self._best_room_for_player(state, pid, need_keys=need_keys)
             current_rem = _room_remaining(state, p.room)
             same_floor_goal = goal is not None and floor_of(goal) == floor_of(p.room)
-            search_allowed = (current_rem >= self.search_local_min_remaining) or same_floor_goal
+            search_allowed = (
+                current_rem >= self.search_local_min_remaining
+            ) or same_floor_goal
 
             if goal is not None and floor_of(goal) != floor_of(p.room):
                 if not search_allowed:
@@ -911,27 +1000,41 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                     nxt = bfs_next_step(state, p.room, goal)
                     if nxt is not None:
                         for a in acts:
-                            if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                            if a.type == ActionType.MOVE and a.data.get("to") == str(
+                                nxt
+                            ):
                                 return finalize(a)
                     corridor_move = _pick_move_to_corridor(acts, floor_of(p.room))
                     if corridor_move:
                         return finalize(corridor_move)
                 else:
                     goal_rem = _room_remaining(state, goal)
-                    move_for_better = goal_rem > 0 and (current_rem == 0 or goal_rem >= current_rem + self.move_for_better_delta)
+                    move_for_better = goal_rem > 0 and (
+                        current_rem == 0
+                        or goal_rem >= current_rem + self.move_for_better_delta
+                    )
                     if move_for_better:
                         stairs = _pick_use_object(acts, "TREASURE_STAIRS")
-                        if stairs and not _temp_stairs_active_for_pid(state, p.room, pid):
+                        if stairs and not _temp_stairs_active_for_pid(
+                            state, p.room, pid
+                        ):
                             dest = _temp_stairs_dest(state, p.room, floor_of(goal))
                             if dest is not None:
                                 return finalize(stairs)
                         nxt = bfs_next_step(state, p.room, goal)
                         if nxt is not None:
                             for a in acts:
-                                if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                                if a.type == ActionType.MOVE and a.data.get(
+                                    "to"
+                                ) == str(nxt):
                                     return finalize(a)
 
-            if search_allowed and _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold) and p.sanity >= self.search_sanity_min:
+            if (
+                search_allowed
+                and _room_remaining(state, p.room) > 0
+                and (danger == 0 or p.sanity > meditate_threshold)
+                and p.sanity >= self.search_sanity_min
+            ):
                 a = _pick_first(acts, ActionType.SEARCH)
                 if a:
                     return finalize(a)
@@ -982,14 +1085,25 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                         return finalize(a)
 
             move_actions = [a for a in acts if a.type == ActionType.MOVE]
-            return finalize(rng.choice(move_actions)) if move_actions else finalize(Action(actor=actor, type=ActionType.END_TURN, data={}))
+            return (
+                finalize(rng.choice(move_actions))
+                if move_actions
+                else finalize(Action(actor=actor, type=ActionType.END_TURN, data={}))
+            )
 
         # 6) Falta llaves: SEARCH si hay cartas y no esta estancado por riesgo
-        if need_keys and _room_remaining(state, p.room) > 0 and (danger == 0 or p.sanity > meditate_threshold) and not carrier_caution:
+        if (
+            need_keys
+            and _room_remaining(state, p.room) > 0
+            and (danger == 0 or p.sanity > meditate_threshold)
+            and not carrier_caution
+        ):
             goal = _best_room_global(state)
             current_rem = _room_remaining(state, p.room)
             same_floor_goal = goal is not None and floor_of(goal) == floor_of(p.room)
-            search_allowed = (current_rem >= self.search_local_min_remaining) or same_floor_goal
+            search_allowed = (
+                current_rem >= self.search_local_min_remaining
+            ) or same_floor_goal
 
             if goal is not None and floor_of(goal) != floor_of(p.room):
                 if not search_allowed:
@@ -1001,14 +1115,19 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                     nxt = bfs_next_step(state, p.room, goal)
                     if nxt is not None:
                         for a in acts:
-                            if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                            if a.type == ActionType.MOVE and a.data.get("to") == str(
+                                nxt
+                            ):
                                 return finalize(a)
                     corridor_move = _pick_move_to_corridor(acts, floor_of(p.room))
                     if corridor_move:
                         return finalize(corridor_move)
                 else:
                     goal_rem = _room_remaining(state, goal)
-                    move_for_better = goal_rem > 0 and (current_rem == 0 or goal_rem >= current_rem + self.move_for_better_delta)
+                    move_for_better = goal_rem > 0 and (
+                        current_rem == 0
+                        or goal_rem >= current_rem + self.move_for_better_delta
+                    )
                     if move_for_better:
                         a = _pick_use_object(acts, "TREASURE_STAIRS")
                         if a and not _temp_stairs_active_for_pid(state, p.room, pid):
@@ -1018,7 +1137,9 @@ class GoalDirectedPlayerPolicy(PlayerPolicy):
                         nxt = bfs_next_step(state, p.room, goal)
                         if nxt is not None:
                             for a in acts:
-                                if a.type == ActionType.MOVE and a.data.get("to") == str(nxt):
+                                if a.type == ActionType.MOVE and a.data.get(
+                                    "to"
+                                ) == str(nxt):
                                     return finalize(a)
 
             if search_allowed and _room_remaining(state, p.room) > 0:
@@ -1067,6 +1188,7 @@ class HabitanteDeCarcosaPolicy(GoalDirectedPlayerPolicy):
     PolÃ­tica humana base: menos meditaciÃ³n, mÃ¡s movimiento y exploraciÃ³n,
     pero con foco en ganar y sin tests artificiales.
     """
+
     cfg: Config = Config()
     meditate_critical: int = -4
     move_for_better_delta: int = 1
@@ -1081,6 +1203,8 @@ class HabitanteDeCarcosaPolicy(GoalDirectedPlayerPolicy):
         self._role_sanity_bias = {}
         self._team_memory = None
         self._bot_memories = None
+
+
 @dataclass
 class HeuristicKingPolicy(KingPolicy):
     cfg: Config = Config()
@@ -1088,14 +1212,16 @@ class HeuristicKingPolicy(KingPolicy):
     def choose(self, state: GameState, rng: RNG) -> Action:
         acts = get_legal_actions(state, "KING")
         if not acts:
-             # Should not happen in canonical simulation
-             return None
+            # Should not happen in canonical simulation
+            return None
 
         # Gate: permitir WIN cuando sea alcanzable desde cierto umbral,
         # o cuando se acumulan "win_ready_hits".
         umbral = RoomId(self.cfg.UMBRAL_NODE)
         total_keys = _keys_total(state)
-        all_umbral = all((pl.at_umbral or pl.room == umbral) for pl in state.players.values())
+        all_umbral = all(
+            (pl.at_umbral or pl.room == umbral) for pl in state.players.values()
+        )
         ready_now = (total_keys >= self.cfg.KEYS_TO_WIN) and all_umbral
 
         hits = int(state.flags.get("win_ready_hits", 0)) if state.flags else 0
@@ -1103,7 +1229,9 @@ class HeuristicKingPolicy(KingPolicy):
             hits += 1
             state.flags["win_ready_hits"] = hits
 
-        allow_win = (state.round >= self.cfg.KING_ALLOW_WIN_START_ROUND) or (hits >= self.cfg.KING_ALLOW_WIN_AFTER_READY_HITS)
+        allow_win = (state.round >= self.cfg.KING_ALLOW_WIN_START_ROUND) or (
+            hits >= self.cfg.KING_ALLOW_WIN_AFTER_READY_HITS
+        )
 
         if allow_win:
             win_candidates = []
@@ -1124,7 +1252,9 @@ class HeuristicKingPolicy(KingPolicy):
             if s2.game_over and s2.outcome == "LOSE":
                 continue
 
-            min_sanity = min(p.sanity for p in s2.players.values()) if s2.players else 999
+            min_sanity = (
+                min(p.sanity for p in s2.players.values()) if s2.players else 999
+            )
             if min_sanity <= self.cfg.S_LOSS:
                 if state.round < self.cfg.KING_KILL_AVOID_START_ROUND:
                     continue
@@ -1151,7 +1281,9 @@ class RandomKingPolicy(KingPolicy):
             return None
         d4 = rng.randint(1, 4)
         d6 = rng.randint(1, 6)
-        return Action(actor="KING", type=ActionType.KING_ENDROUND, data={"d4": d4, "d6": d6})
+        return Action(
+            actor="KING", type=ActionType.KING_ENDROUND, data={"d4": d4, "d6": d6}
+        )
 
 
 @dataclass
@@ -1162,6 +1294,7 @@ class CowardPolicy(PlayerPolicy):
     - Evita habitaciones con monstruos.
     - Nunca se sacrifica.
     """
+
     cfg: Config = Config()
 
     def choose(self, state: GameState, rng: RNG) -> Action:
@@ -1171,9 +1304,10 @@ class CowardPolicy(PlayerPolicy):
             p = state.players[pid]
         else:
             return Action(actor=actor, type=ActionType.END_TURN, data={})
-            
+
         acts = get_legal_actions(state, actor)
-        if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
+        if not acts:
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
 
         forced = _choose_forced_action(acts, state, pid, rng, self.cfg)
         if forced is not None:
@@ -1182,7 +1316,8 @@ class CowardPolicy(PlayerPolicy):
         # 1. Self-Preservation: Meditate if ANY damage taken
         if p.sanity < (p.sanity_max or 5):
             a = _pick_first(acts, ActionType.MEDITATE)
-            if a: return a
+            if a:
+                return a
 
         # 2. Avoid Sacrificing (Accept if forced, but prefer Accept over Sacrifice??)
         # Actually logic says if pending sacrifice check, only valid actions are SACRIFICE or ACCEPT_SACRIFICE.
@@ -1192,12 +1327,17 @@ class CowardPolicy(PlayerPolicy):
         # Usually Sacrifice is "Save the Group". Coward saves SELF.
         # If Accept leads to death, they might Sacrifice.
         # If forced choice:
-        sac_acts = [a for a in acts if a.type in (ActionType.SACRIFICE, ActionType.ACCEPT_SACRIFICE)]
+        sac_acts = [
+            a
+            for a in acts
+            if a.type in (ActionType.SACRIFICE, ActionType.ACCEPT_SACRIFICE)
+        ]
         if sac_acts:
             # Prefer ACCEPT_SACRIFICE unless it kills instantly?
             # For simplicity: Coward never Sacrifices voluntarily.
             a = _pick_first(acts, ActionType.ACCEPT_SACRIFICE)
-            if a: return a
+            if a:
+                return a
             return acts[0]
 
         # 3. Heuristica humana: usar especiales si aplica
@@ -1214,12 +1354,12 @@ class CowardPolicy(PlayerPolicy):
             target_room = RoomId(a.data["to"])
             if floor_of(target_room) != state.king_floor:
                 safe_moves.append(a)
-        
+
         if safe_moves:
             return rng.choice(safe_moves)
         elif move_acts:
             return rng.choice(move_acts)
-            
+
         return rng.choice(acts)
 
 
@@ -1232,12 +1372,14 @@ class BerserkerPolicy(PlayerPolicy):
     - Siempre SACRIFICE si está disponible.
     - Busca monstruos o items.
     """
+
     cfg: Config = Config()
 
     def choose(self, state: GameState, rng: RNG) -> Action:
         actor = _get_active_actor(state)
         acts = get_legal_actions(state, actor)
-        if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
+        if not acts:
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
 
         if actor in state.players:
             forced = _choose_forced_action(acts, state, PlayerId(actor), rng, self.cfg)
@@ -1246,11 +1388,13 @@ class BerserkerPolicy(PlayerPolicy):
 
         # 1. ALWAYS SACRIFICE (Heroic/Crazy)
         a = _pick_first(acts, ActionType.SACRIFICE)
-        if a: return a
+        if a:
+            return a
 
         # 2. SEARCH Priority
         a = _pick_first(acts, ActionType.SEARCH)
-        if a: return a
+        if a:
+            return a
 
         # 3. Special Rooms (Motemey, Armory, etc)
         special_acts = [a for a in acts if "USE_" in a.type.value]
@@ -1269,18 +1413,20 @@ class SpeedrunnerPolicy(PlayerPolicy):
     - Ignora todo lo demás (monstruos, loot extra, meditar).
     - Solo medita si es CRÍTICO para no morir antes de llegar.
     """
+
     cfg: Config = Config()
 
     def choose(self, state: GameState, rng: RNG) -> Action:
         actor = _get_active_actor(state)
         # Verify valid player actor
         if actor not in state.players:
-             return Action(actor=actor, type=ActionType.END_TURN, data={})
-        
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
+
         pid = PlayerId(actor)
         p = state.players[pid]
         acts = get_legal_actions(state, actor)
-        if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
+        if not acts:
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
 
         forced = _choose_forced_action(acts, state, pid, rng, self.cfg)
         if forced is not None:
@@ -1292,7 +1438,8 @@ class SpeedrunnerPolicy(PlayerPolicy):
         # 1. Emergency Meditate (Don't die on split)
         if p.sanity <= -2:
             a = _pick_first(acts, ActionType.MEDITATE)
-            if a: return a
+            if a:
+                return a
 
         # 2. Win condition
         if keys_total >= self.cfg.KEYS_TO_WIN:
@@ -1314,7 +1461,8 @@ class SpeedrunnerPolicy(PlayerPolicy):
                         return a
         elif _room_remaining(state, p.room) > 0:
             a = _pick_first(acts, ActionType.SEARCH)
-            if a: return a
+            if a:
+                return a
 
         return rng.choice(acts)
 
@@ -1325,12 +1473,14 @@ class RandomPolicy(PlayerPolicy):
     Política Aleatoria (Baseline):
     - Elige cualquier acción legal con probabilidad uniforme.
     """
+
     cfg: Config = Config()
 
     def choose(self, state: GameState, rng: RNG) -> Action:
         actor = _get_active_actor(state)
         acts = get_legal_actions(state, actor)
-        if not acts: return Action(actor=actor, type=ActionType.END_TURN, data={})
+        if not acts:
+            return Action(actor=actor, type=ActionType.END_TURN, data={})
         return rng.choice(acts)
 
 
@@ -1359,7 +1509,9 @@ class BCNNPlayerPolicy(PlayerPolicy):
         self._goal_fallback = GoalDirectedPlayerPolicy(self.cfg)
 
         # Locate checkpoint relative to repo root
-        checkpoint_path = _Path(__file__).parent.parent / "models_bc" / "bc_mlp_all_best.pt"
+        checkpoint_path = (
+            _Path(__file__).parent.parent / "models_bc" / "bc_mlp_all_best.pt"
+        )
         checkpoint = torch.load(str(checkpoint_path), map_location="cpu")
 
         obs_dim = checkpoint.get("obs_dim", 10)
@@ -1374,8 +1526,11 @@ class BCNNPlayerPolicy(PlayerPolicy):
         else:
             # Hardcoded fallback consistent with all known training runs
             raw_mapping = {
-                "MOVE": 0, "ACCEPT_SACRIFICE": 1, "MEDITATE": 2,
-                "END_TURN": 3, "USE_HEALER_HEAL": 4,
+                "MOVE": 0,
+                "ACCEPT_SACRIFICE": 1,
+                "MEDITATE": 2,
+                "END_TURN": 3,
+                "USE_HEALER_HEAL": 4,
             }
 
         # Build reverse map: model_index → ActionType (only for indices 0..num_actions-1)
@@ -1401,18 +1556,21 @@ class BCNNPlayerPolicy(PlayerPolicy):
         features = compute_features(state, self.cfg)
         tension = tension_T(state, self.cfg, features=features)
 
-        obs = np.array([
-            features.get("P_sanity", 0.0),
-            features.get("P_keys", 0.0),
-            features.get("P_mon", 0.0),
-            features.get("P_umbral", 0.0),
-            features.get("P_debuff", 0.0),
-            features.get("P_king_risk", 0.0),
-            features.get("P_crown", 0.0),
-            features.get("P_round", 0.0),
-            tension,
-            state.king_floor / 3.0,
-        ], dtype=np.float32)
+        obs = np.array(
+            [
+                features.get("P_sanity", 0.0),
+                features.get("P_keys", 0.0),
+                features.get("P_mon", 0.0),
+                features.get("P_umbral", 0.0),
+                features.get("P_debuff", 0.0),
+                features.get("P_king_risk", 0.0),
+                features.get("P_crown", 0.0),
+                features.get("P_round", 0.0),
+                tension,
+                state.king_floor / 3.0,
+            ],
+            dtype=np.float32,
+        )
 
         return np.clip(obs, 0.0, 1.0)
 
@@ -1583,6 +1741,7 @@ class PPOCARCOPlayerPolicy(PlayerPolicy):
         # BaseAlgorithm.load lo levanta igual por clase. Fallback a PPO regular.
         try:
             from sb3_contrib import MaskablePPO as _SB3Masked
+
             self._model = _SB3Masked.load(model_path, env=self._env, device="cpu")
             self._is_maskable = True
             print(f"[PPOCARCO] modelo cargado como MaskablePPO: {model_path}")
@@ -1615,11 +1774,12 @@ class PPOCARCOPlayerPolicy(PlayerPolicy):
             # [LIVE-ACT] Forward manual para capturar activaciones en vivo.
             # Replica exactamente model.predict(deterministic=True, action_masks=masks)
             # pero expone obs / hidden / logits / probs / value.
-            act = None
             self.last_activations = None
             try:
                 policy = self._model.policy
-                obs_t = self._torch.as_tensor(obs, dtype=self._torch.float32).unsqueeze(0)
+                obs_t = self._torch.as_tensor(obs, dtype=self._torch.float32).unsqueeze(
+                    0
+                )
                 latent = policy.extract_features(obs_t, None)
                 policy_latent = policy.mlp_extractor.policy_net(latent)
                 value_latent = policy.mlp_extractor.value_net(latent)
@@ -1629,14 +1789,20 @@ class PPOCARCOPlayerPolicy(PlayerPolicy):
                 if self._is_maskable:
                     masks = self._env.action_masks()
                     if masks is not None:
-                        m_t = self._torch.as_tensor(masks, dtype=self._torch.float32).unsqueeze(0)
-                        logits = self._torch.where(m_t > 0, logits, self._torch.tensor(-1e10))
+                        m_t = self._torch.as_tensor(
+                            masks, dtype=self._torch.float32
+                        ).unsqueeze(0)
+                        logits = self._torch.where(
+                            m_t > 0, logits, self._torch.tensor(-1e10)
+                        )
                 probs = self._torch.softmax(logits, dim=-1)
                 action_id = int(self._torch.argmax(logits, dim=-1).item())
                 self.last_activations = {
                     "actor": actor,
                     "obs": [float(x) for x in obs],
-                    "policy_hidden": [float(x) for x in policy_latent.squeeze(0).cpu().numpy()],
+                    "policy_hidden": [
+                        float(x) for x in policy_latent.squeeze(0).cpu().numpy()
+                    ],
                     "logits": [float(x) for x in logits.squeeze(0).cpu().numpy()],
                     "probs": [float(x) for x in probs.squeeze(0).cpu().numpy()],
                     "action_idx": action_id,
@@ -1647,7 +1813,9 @@ class PPOCARCOPlayerPolicy(PlayerPolicy):
                 # Fallback al predict estándar (sin activaciones)
                 if self._is_maskable:
                     masks = self._env.action_masks()
-                    action_id, _ = self._model.predict(obs, deterministic=True, action_masks=masks)
+                    action_id, _ = self._model.predict(
+                        obs, deterministic=True, action_masks=masks
+                    )
                 else:
                     action_id, _ = self._model.predict(obs, deterministic=True)
 
@@ -1770,8 +1938,12 @@ class PolicyCommittee(PlayerPolicy):
     con table_path=<models/seed_to_policy.json> (default).
     """
 
-    def __init__(self, cfg: Config = None, model_path: str = None,
-                 table_path: Optional[str] = None):
+    def __init__(
+        self,
+        cfg: Config = None,
+        model_path: str = None,
+        table_path: Optional[str] = None,
+    ):
         cfg = cfg or Config()
         self._goal = GoalDirectedPlayerPolicy(cfg)
         self._net = None
@@ -1800,8 +1972,10 @@ class PolicyCommittee(PlayerPolicy):
         if tp is not None:
             try:
                 import json as _json
-                self._table = {int(k): v for k, v in
-                               _json.load(open(tp)).get("table", {}).items()}
+
+                self._table = {
+                    int(k): v for k, v in _json.load(open(tp)).get("table", {}).items()
+                }
             except Exception as e:
                 print(f"[COMMITTEE] no pude cargar tabla {tp}: {e}")
         else:
@@ -1824,10 +1998,12 @@ class PolicyCommittee(PlayerPolicy):
                 return self._ensemble
             if entry.startswith("PPO_MASK:"):
                 # [092] Delegar a un modelo RL maskable específico por ruta.
-                rpath = entry[len("PPO_MASK:"):]
+                rpath = entry[len("PPO_MASK:") :]
                 if rpath not in self._mask_nets:
                     try:
-                        self._mask_nets[rpath] = PPOCARCOPlayerPolicy(self._goal.cfg, model_path=rpath)
+                        self._mask_nets[rpath] = PPOCARCOPlayerPolicy(
+                            self._goal.cfg, model_path=rpath
+                        )
                     except Exception as e:
                         print(f"[COMMITTEE] no pude cargar PPO_MASK {rpath}: {e}")
                         return self._goal
@@ -1870,7 +2046,9 @@ KING_POLICY_REGISTRY = {
 }
 
 
-def get_player_policy(policy_name: str, cfg: Config, model_path: Optional[str] = None) -> PlayerPolicy:
+def get_player_policy(
+    policy_name: str, cfg: Config, model_path: Optional[str] = None
+) -> PlayerPolicy:
     name = (policy_name or "GOAL").upper()
     cls = PLAYER_POLICY_REGISTRY.get(name)
     if cls is None:

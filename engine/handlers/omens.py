@@ -11,7 +11,9 @@ from engine.pathing import find_nearest_empty_room
 from engine.handlers.monsters import apply_monster_post_spawn, try_monster_spawn
 from engine.objects import can_discard
 
-OmenHandler = Callable[[GameState, PlayerId, str, RoomId, int, bool, Config, Optional[RNG]], bool]
+OmenHandler = Callable[
+    [GameState, PlayerId, str, RoomId, int, bool, Config, Optional[RNG]], bool
+]
 
 # Registry for omen handlers (resolved by omen_id)
 OMEN_HANDLERS: Dict[str, OmenHandler] = {}
@@ -29,7 +31,14 @@ def get_omen_handler(omen_id: str) -> OmenHandler | None:
     return OMEN_HANDLERS.get(omen_id)
 
 
-def _spawn_monster(state: GameState, pid: PlayerId, monster_id: str, room: RoomId, cfg: Config, rng: Optional[RNG]) -> None:
+def _spawn_monster(
+    state: GameState,
+    pid: PlayerId,
+    monster_id: str,
+    room: RoomId,
+    cfg: Config,
+    rng: Optional[RNG],
+) -> None:
     from engine.systems.monsters import on_monster_enters_room
 
     monster = MonsterState(monster_id=monster_id, room=room)
@@ -45,10 +54,21 @@ def _cap_actions_on_floor(state: GameState, floor: int) -> None:
 
 
 @register_omen("ARAÑA")
-def _omen_spider(state: GameState, pid: PlayerId, omen_id: str, spawn_pos: RoomId, total: int, is_low: bool, cfg: Config, rng: Optional[RNG]) -> bool:
+def _omen_spider(
+    state: GameState,
+    pid: PlayerId,
+    omen_id: str,
+    spawn_pos: RoomId,
+    total: int,
+    is_low: bool,
+    cfg: Config,
+    rng: Optional[RNG],
+) -> bool:
     # CANON: 0-1 -> Araña. 2+ -> Pierdes el turno + Araña bebé en habitación cercana sin jugadores.
     if is_low:
-        exists = any("SPIDER" in m.monster_id or "ARAÑA" in m.monster_id for m in state.monsters)
+        exists = any(
+            "SPIDER" in m.monster_id or "ARAÑA" in m.monster_id for m in state.monsters
+        )
         if not exists:
             _spawn_monster(state, pid, "SPIDER", spawn_pos, cfg, rng)
     else:
@@ -60,7 +80,16 @@ def _omen_spider(state: GameState, pid: PlayerId, omen_id: str, spawn_pos: RoomI
 
 
 @register_omen("DUENDE")
-def _omen_goblin(state: GameState, pid: PlayerId, omen_id: str, spawn_pos: RoomId, total: int, is_low: bool, cfg: Config, rng: Optional[RNG]) -> bool:
+def _omen_goblin(
+    state: GameState,
+    pid: PlayerId,
+    omen_id: str,
+    spawn_pos: RoomId,
+    total: int,
+    is_low: bool,
+    cfg: Config,
+    rng: Optional[RNG],
+) -> bool:
     if is_low:
         exists = any("DUENDE" in m.monster_id for m in state.monsters)
         if not exists:
@@ -78,7 +107,16 @@ def _omen_goblin(state: GameState, pid: PlayerId, omen_id: str, spawn_pos: RoomI
 
 
 @register_omen("REINA_HELADA")
-def _omen_ice_queen(state: GameState, pid: PlayerId, omen_id: str, spawn_pos: RoomId, total: int, is_low: bool, cfg: Config, rng: Optional[RNG]) -> bool:
+def _omen_ice_queen(
+    state: GameState,
+    pid: PlayerId,
+    omen_id: str,
+    spawn_pos: RoomId,
+    total: int,
+    is_low: bool,
+    cfg: Config,
+    rng: Optional[RNG],
+) -> bool:
     corridor = RoomId(f"F{floor_of(spawn_pos)}_P")
 
     if is_low:
@@ -93,7 +131,16 @@ def _omen_ice_queen(state: GameState, pid: PlayerId, omen_id: str, spawn_pos: Ro
 
 
 @register_omen("TUE_TUE")
-def _omen_tue_tue(state: GameState, pid: PlayerId, omen_id: str, spawn_pos: RoomId, total: int, is_low: bool, cfg: Config, rng: Optional[RNG]) -> bool:
+def _omen_tue_tue(
+    state: GameState,
+    pid: PlayerId,
+    omen_id: str,
+    spawn_pos: RoomId,
+    total: int,
+    is_low: bool,
+    cfg: Config,
+    rng: Optional[RNG],
+) -> bool:
     # CANON: 0-1 cuenta como aparición (sin ficha). 2+ -> cordura vuelve a 0.
     p = state.players[pid]
     if is_low:

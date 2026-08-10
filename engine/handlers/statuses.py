@@ -18,7 +18,9 @@ STATUS_END_OF_ROUND_HANDLERS: Dict[str, StatusEndOfRoundHandler] = {}
 STATUS_END_OF_TURN_HANDLERS: Dict[str, StatusEndOfTurnHandler] = {}
 
 
-def register_status_end_of_round(status_id: str) -> Callable[[StatusEndOfRoundHandler], StatusEndOfRoundHandler]:
+def register_status_end_of_round(
+    status_id: str,
+) -> Callable[[StatusEndOfRoundHandler], StatusEndOfRoundHandler]:
     def decorator(fn: StatusEndOfRoundHandler) -> StatusEndOfRoundHandler:
         STATUS_END_OF_ROUND_HANDLERS[status_id] = fn
         return fn
@@ -26,7 +28,9 @@ def register_status_end_of_round(status_id: str) -> Callable[[StatusEndOfRoundHa
     return decorator
 
 
-def register_status_end_of_turn(status_id: str) -> Callable[[StatusEndOfTurnHandler], StatusEndOfTurnHandler]:
+def register_status_end_of_turn(
+    status_id: str,
+) -> Callable[[StatusEndOfTurnHandler], StatusEndOfTurnHandler]:
     def decorator(fn: StatusEndOfTurnHandler) -> StatusEndOfTurnHandler:
         STATUS_END_OF_TURN_HANDLERS[status_id] = fn
         return fn

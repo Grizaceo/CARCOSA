@@ -32,7 +32,11 @@ def room_from_d4(floor: int, roll: int) -> RoomId:
 
 
 def canonical_room_ids() -> List[RoomId]:
-    return [room_id(f, r) for f in range(1, FLOORS + 1) for r in range(1, ROOMS_PER_FLOOR + 1)]
+    return [
+        room_id(f, r)
+        for f in range(1, FLOORS + 1)
+        for r in range(1, ROOMS_PER_FLOOR + 1)
+    ]
 
 
 SUSHI_CYCLE: Dict[RoomId, RoomId] = {
@@ -67,8 +71,8 @@ def rotate_boxes_intra_floor(box_at_room: Dict[RoomId, str]) -> Dict[RoomId, str
     """
     _validate_box_mapping(box_at_room)
     rotated = dict(box_at_room)
-    
-    # Ciclo por piso: R1 (src) -> R4 (dst) ??? 
+
+    # Ciclo por piso: R1 (src) -> R4 (dst) ???
     # Espérate, el ciclo P0 dice: R1->R4->R3->R2->R1 ??
     # El prompt dice: (R1→R4→R3→R2→R1 por piso).
     # O sea:
@@ -77,7 +81,7 @@ def rotate_boxes_intra_floor(box_at_room: Dict[RoomId, str]) -> Dict[RoomId, str
     # R4 -> R3
     # R3 -> R2
     # R2 -> R1
-    
+
     for floor in range(1, FLOORS + 1):
         # Mapeo intra-piso
         cycle = {
@@ -89,7 +93,7 @@ def rotate_boxes_intra_floor(box_at_room: Dict[RoomId, str]) -> Dict[RoomId, str
         for src, dst in cycle.items():
             if src in box_at_room:
                 rotated[dst] = box_at_room[src]
-                
+
     return rotated
 
 
@@ -150,28 +154,28 @@ def bfs_dist_to_targets(start: RoomId, targets: set[RoomId]) -> int:
     """Retorna la distancia mínima desde start a cualquiera de los targets."""
     if start in targets:
         return 0
-    
+
     queue = [(start, 0)]
     visited = {start}
-    
+
     while queue:
         current, dist = queue.pop(0)
-        
+
         # Check adjacent neighbors for targets in case we popped a node that IS a target?
         # No, current is popped from queue. Check if current is target?
         # Wait, if `start` is target, handled above.
         # Use queue check.
-        
+
         if current in targets:
             return dist
-        
+
         for nb in neighbors(current):
             if nb not in visited:
                 if nb in targets:
-                     return dist + 1
+                    return dist + 1
                 visited.add(nb)
                 queue.append((nb, dist + 1))
-                
+
     return 999  # Unreachable
 
 
@@ -183,17 +187,17 @@ def get_next_move_to_targets(start: RoomId, targets: set[RoomId]) -> RoomId:
     """
     if start in targets:
         return start
-        
+
     best_step = start
     min_dist = 999
-    
+
     # Evaluar cada vecino
     for nb in neighbors(start):
         d = bfs_dist_to_targets(nb, targets)
         if d < min_dist:
             min_dist = d
             best_step = nb
-            
+
     return best_step
 
 
@@ -204,7 +208,7 @@ def get_next_move_away_from_targets(start: RoomId, targets: set[RoomId]) -> Room
     """
     best_step = start
     max_dist = -1
-    
+
     # Evaluar cada vecino
     for nb in neighbors(start):
         # Distancia desde el vecino al target más cercano
@@ -212,5 +216,5 @@ def get_next_move_away_from_targets(start: RoomId, targets: set[RoomId]) -> Room
         if d > max_dist:
             max_dist = d
             best_step = nb
-            
+
     return best_step

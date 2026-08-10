@@ -13,7 +13,9 @@ ObjectUseHandler = Callable[[GameState, PlayerId, Config, Optional[RNG]], None]
 OBJECT_USE_HANDLERS: Dict[str, ObjectUseHandler] = {}
 
 
-def register_object_use(object_id: str) -> Callable[[ObjectUseHandler], ObjectUseHandler]:
+def register_object_use(
+    object_id: str,
+) -> Callable[[ObjectUseHandler], ObjectUseHandler]:
     def decorator(fn: ObjectUseHandler) -> ObjectUseHandler:
         OBJECT_USE_HANDLERS[object_id] = fn
         return fn

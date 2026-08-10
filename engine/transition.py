@@ -43,6 +43,7 @@ from engine.compat.legacy import (
     normalize_action_type,
 )
 
+
 def _apply_minus5_transitions(s, cfg):
     apply_minus5_transitions(s, cfg)
 
@@ -51,8 +52,9 @@ def _apply_minus5_consequences(s, pid, cfg):
     apply_minus5_consequences(s, pid, cfg)
 
 
-
-def _consume_action_if_needed(action_type: ActionType, cost_override: Optional[int] = None) -> int:
+def _consume_action_if_needed(
+    action_type: ActionType, cost_override: Optional[int] = None
+) -> int:
     return consume_action_cost(action_type, cost_override)
 
 
@@ -88,20 +90,25 @@ def _on_monster_enters_room(s: GameState, room: RoomId) -> None:
     legacy_on_monster_enters_room(s, room)
 
 
-def _resolve_event(s: GameState, pid: PlayerId, event_id: str, cfg: Config, rng: RNG, card_prefix: str = "EVENT"):
+def _resolve_event(
+    s: GameState,
+    pid: PlayerId,
+    event_id: str,
+    cfg: Config,
+    rng: RNG,
+    card_prefix: str = "EVENT",
+):
     legacy_resolve_event(s, pid, event_id, cfg, rng, card_prefix=card_prefix)
 
 
 def _update_umbral_flags(s, cfg):
     from engine.systems.rooms import update_umbral_flags
+
     update_umbral_flags(s, cfg)
 
 
 def _apply_status_effects_end_of_round(s: GameState) -> None:
     apply_end_of_round_status_effects(s)
-
-
-
 
 
 def _presence_damage_for_round(round_n: int) -> int:
@@ -144,8 +151,9 @@ def _start_new_round(s, cfg):
     legacy_start_new_round(s)
 
 
-
-def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = None) -> GameState:
+def step(
+    state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = None
+) -> GameState:
     cfg = cfg or Config()
     s = state.clone()
     if hasattr(s, "last_sanity_loss_events"):
@@ -153,10 +161,12 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
 
     if not isinstance(action.type, ActionType):
         normalized = normalize_action_type(str(action.type))
-        action = Action(actor=action.actor, type=ActionType(normalized), data=action.data)
+        action = Action(
+            actor=action.actor, type=ActionType(normalized), data=action.data
+        )
 
     legal = get_legal_actions(s, action.actor)
-    
+
     # Validación: KING_ENDROUND puede tener cualquier data (se ignora y se usa RNG)
     if action.type == ActionType.KING_ENDROUND and action.actor == "KING":
         # Solo verificar que existe al menos una acción KING_ENDROUND legal
@@ -166,15 +176,23 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
         raise ValueError(f"Illegal action for actor={action.actor}: {action}")
 
     s.action_log.append(
-        {"round": s.round, "phase": s.phase, "actor": action.actor, "type": action.type.value, "data": action.data}
+        {
+            "round": s.round,
+            "phase": s.phase,
+            "actor": action.actor,
+            "type": action.type.value,
+            "data": action.data,
+        }
     )
 
     # CANON Fix #A: Handle Pending Sacrifice Check
     pending_pid_str = pending_sacrifice_pid(s)
     if pending_pid_str:
         if action.actor != pending_pid_str:
-             raise ValueError(f"Pending sacrifice check for {pending_pid_str}, but {action.actor} acted.")
-        
+            raise ValueError(
+                f"Pending sacrifice check for {pending_pid_str}, but {action.actor} acted."
+            )
+
         if action.type == ActionType.SACRIFICE:
             # Player chose to SACRIFICE
             # Apply sacrifice cost
@@ -184,7 +202,7 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             pop_pending_sacrifice_damage(s, PlayerId(pending_pid_str))
             pop_pending_sacrifice(s)
             return _finalize_and_return(s, cfg)
-            
+
         elif action.type == ActionType.ACCEPT_SACRIFICE:
             # Player chose to accept consequences
             pending_damage = pop_pending_sacrifice_damage(s, PlayerId(pending_pid_str))
@@ -201,9 +219,11 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
             apply_minus5_consequences(s, PlayerId(pending_pid_str), cfg)
             pop_pending_sacrifice(s)
             return _finalize_and_return(s, cfg)
-            
+
         else:
-             raise ValueError(f"Illegal action during sacrifice check: {action.type}. Must be SACRIFICE or ACCEPT_SACRIFICE.")
+            raise ValueError(
+                f"Illegal action during sacrifice check: {action.type}. Must be SACRIFICE or ACCEPT_SACRIFICE."
+            )
 
     if s.phase == "PLAYER":
         return apply_player_action(s, action, rng, cfg)
@@ -214,20 +234,19 @@ def step(state: GameState, action: Action, rng: RNG, cfg: Optional[Config] = Non
     return _finalize_and_return(s, cfg)
 
 
-
-def _apply_player_action(s: GameState, action: Action, rng: RNG, cfg: Config) -> GameState:
+def _apply_player_action(
+    s: GameState, action: Action, rng: RNG, cfg: Config
+) -> GameState:
     return apply_player_action(s, action, rng, cfg)
 
     # FASE REY (fin de ronda)
     # -------------------------
 
 
-
-def _resolve_king_phase(s: GameState, action: Action, rng: RNG, cfg: Config) -> GameState:
+def _resolve_king_phase(
+    s: GameState, action: Action, rng: RNG, cfg: Config
+) -> GameState:
     return resolve_king_phase(s, action, rng, cfg)
-
-
-
 
 
 def _monster_phase(s: GameState, cfg: Config) -> None:
@@ -236,4 +255,3 @@ def _monster_phase(s: GameState, cfg: Config) -> None:
 
 def _move_monsters(s: GameState, cfg: Config) -> None:
     legacy_move_monsters(s, cfg)
-

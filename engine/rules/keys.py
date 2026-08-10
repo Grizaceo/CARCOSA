@@ -15,6 +15,9 @@ def get_effective_keys_total(state: GameState, cfg: Config) -> int:
     """
     base = get_base_keys_total(cfg)
     for room in state.rooms.values():
-        if normalize_room_type(room.special_card_id or "") == "CAMARA_LETAL" and room.special_revealed:
+        if (
+            normalize_room_type(room.special_card_id or "") == "CAMARA_LETAL"
+            and room.special_revealed
+        ):
             return base + 1
     return base

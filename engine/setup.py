@@ -32,8 +32,7 @@ def validate_special_rooms_invariants(state: GameState) -> None:
     """
     # Invariante 1: Validar exactamente 3 especiales en total
     total_specials = sum(
-        1 for room in state.rooms.values()
-        if room.special_card_id is not None
+        1 for room in state.rooms.values() if room.special_card_id is not None
     )
     if total_specials != 3:
         raise ValueError(
@@ -44,7 +43,8 @@ def validate_special_rooms_invariants(state: GameState) -> None:
     # Invariante 2: Validar exactamente 1 por piso
     for floor in [1, 2, 3]:
         specials_in_floor = sum(
-            1 for room_id, room in state.rooms.items()
+            1
+            for room_id, room in state.rooms.items()
             if room.special_card_id is not None
             and str(room_id).startswith(f"F{floor}_")
         )
@@ -71,20 +71,25 @@ def validate_special_rooms_invariants(state: GameState) -> None:
 # Pool canónico de habitaciones especiales (juego físico) - 7 tipos
 # Actualizado 2026-01-21 conforme a Carcosa_Libro_Tecnico_CANON.md
 SPECIAL_ROOMS_POOL = [
-    "TABERNA",           # FREE - Recuperación de cordura
-    "MOTEMEY",           # FREE - Compra: -2 cordura, ofrece 2 cartas
-    "ARMERIA",           # FREE - Adquisición de equipo
+    "TABERNA",  # FREE - Recuperación de cordura
+    "MOTEMEY",  # FREE - Compra: -2 cordura, ofrece 2 cartas
+    "ARMERIA",  # FREE - Adquisición de equipo
     "PUERTAS_AMARILLO",  # PAID - Transporte entre pisos
-    "CAMARA_LETAL",      # PAID - 1 acción por jugador participante
-    "SALON_BELLEZA",     # PAID - Aplica estado Vanidad
-    "MONASTERIO_LOCURA", # PAID - Mecánica especial
+    "CAMARA_LETAL",  # PAID - 1 acción por jugador participante
+    "SALON_BELLEZA",  # PAID - Aplica estado Vanidad
+    "MONASTERIO_LOCURA",  # PAID - Mecánica especial
 ]
 
 # Costos de acción canónicos (2026-01-21)
 # FREE = No consume acción del jugador
 # PAID = Consume 1 acción del jugador
 FREE_SPECIAL_ROOMS = {"TABERNA", "MOTEMEY", "ARMERIA"}
-PAID_SPECIAL_ROOMS = {"PUERTAS_AMARILLO", "CAMARA_LETAL", "SALON_BELLEZA", "MONASTERIO_LOCURA"}
+PAID_SPECIAL_ROOMS = {
+    "PUERTAS_AMARILLO",
+    "CAMARA_LETAL",
+    "SALON_BELLEZA",
+    "MONASTERIO_LOCURA",
+}
 
 # Aliases para compatibilidad hacia atrás (nombres legacy → canónicos)
 ROOM_TYPE_ALIASES = {
@@ -159,9 +164,7 @@ def setup_special_rooms(state: GameState, rng: RNG) -> None:
         if room_id not in state.rooms:
             # Crear room si no existe
             state.rooms[room_id] = RoomState(
-                room_id=room_id,
-                deck=DeckState(cards=[]),
-                revealed=0
+                room_id=room_id, deck=DeckState(cards=[]), revealed=0
             )
 
         room_state = state.rooms[room_id]
@@ -176,8 +179,7 @@ def setup_special_rooms(state: GameState, rng: RNG) -> None:
 
     # Invariante 1: Validar exactamente 3 especiales en total
     total_specials = sum(
-        1 for room in state.rooms.values()
-        if room.special_card_id is not None
+        1 for room in state.rooms.values() if room.special_card_id is not None
     )
     if total_specials != 3:
         raise ValueError(
@@ -188,9 +190,9 @@ def setup_special_rooms(state: GameState, rng: RNG) -> None:
     # Invariante 2: Validar exactamente 1 por piso
     for floor in [1, 2, 3]:
         specials_in_floor = sum(
-            1 for room_id, room in state.rooms.items()
-            if room.special_card_id is not None
-            and room_id.startswith(f"F{floor}_")
+            1
+            for room_id, room in state.rooms.items()
+            if room.special_card_id is not None and room_id.startswith(f"F{floor}_")
         )
         if specials_in_floor != 1:
             raise ValueError(
@@ -227,33 +229,38 @@ def setup_motemey_deck(state: GameState, rng: RNG) -> None:
     Referencia: Canon Implementation Plan
     """
     cards = []
-    
+
     # 3x COMPASS
     cards.extend(["COMPASS"] * 3)
-    
+
     # 3x VIAL
     cards.extend(["VIAL"] * 3)
-    
+
     # 2x BLUNT
     cards.extend(["BLUNT"] * 2)
-    
+
     # 4x TESOROS
-    treasures = ["TREASURE_RING", "TREASURE_STAIRS", "TREASURE_SCROLL", "TREASURE_PENDANT"]
+    treasures = [
+        "TREASURE_RING",
+        "TREASURE_STAIRS",
+        "TREASURE_SCROLL",
+        "TREASURE_PENDANT",
+    ]
     cards.extend(treasures)
-    
+
     # 1x KEY
     cards.append("KEY")
-    
+
     # 1x TALE (Randomly selected from the 4 tales)
     tales = ["TALE_REPAIRER", "TALE_MASK", "TALE_DRAGON", "TALE_SIGN"]
     # Seleccionamos uno consistente para toda la partida (o un set)
     # Por ahora 1 random tale.
     selected_tale = rng.choice(tales)
     cards.append(selected_tale)
-    
+
     # Mezclar
     rng.shuffle(cards)
-    
+
     # Asignar a state
     state.motemey_deck = DeckState(cards=cards)
     state.motemey_deck.top = 0
@@ -303,7 +310,7 @@ def setup_canonical_deck(state: GameState, rng: RNG) -> None:
     all_tales = ["TALE_REPAIRER", "TALE_MASK", "TALE_DRAGON", "TALE_SIGN"]
     selected_tales = rng.sample(all_tales, k=3)
     cards.extend(selected_tales)
-    
+
     cards.append("TREASURE_RING")
     cards.append("RING")
 
@@ -318,38 +325,37 @@ def setup_canonical_deck(state: GameState, rng: RNG) -> None:
 
     # Distribute to Rooms (12 rooms: F1_R1..F3_R4)
     # Total 108. 108 / 12 = 9 cards per room.
-    
+
     rooms_target = []
     for f in [1, 2, 3]:
         for r in [1, 2, 3, 4]:
             rooms_target.append(RoomId(f"F{f}_R{r}"))
-            
+
     # Asignar
     expected_total = 108
     if len(cards) != expected_total:
-         # Log warning but continue? No, raise to ensure fidelity.
-         # But during dev maybe just print?
-         pass # Assume correct for now
-         
-    chunk_size = len(cards) // len(rooms_target) # 9
-    
+        # Log warning but continue? No, raise to ensure fidelity.
+        # But during dev maybe just print?
+        pass  # Assume correct for now
+
+    chunk_size = len(cards) // len(rooms_target)  # 9
+
     start = 0
     for rid in rooms_target:
         end = start + chunk_size
         # Handle remainder if any (though 108/12 = 9 exact)
         if rid == rooms_target[-1]:
             end = len(cards)
-            
+
         room_cards = cards[start:end]
-        
+
         # Room must exist
         if rid not in state.rooms:
-             state.rooms[rid] = RoomState(room_id=rid, deck=DeckState(cards=[]))
-             
+            state.rooms[rid] = RoomState(room_id=rid, deck=DeckState(cards=[]))
+
         state.rooms[rid].deck = DeckState(cards=room_cards)
         state.rooms[rid].deck.top = 0
         start = end
 
     # Keep boxes aligned with room decks for active_deck_for_room
     sync_boxes_from_rooms(state)
-

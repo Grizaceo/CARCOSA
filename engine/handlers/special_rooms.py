@@ -19,14 +19,19 @@ SpecialRoomHandler = Callable[[GameState, PlayerId, Action, RNG, Config], None]
 SPECIAL_ROOM_ACTIONS: Dict[ActionType, SpecialRoomHandler] = {}
 
 
-def register_special_room_action(action_type: ActionType) -> Callable[[SpecialRoomHandler], SpecialRoomHandler]:
+def register_special_room_action(
+    action_type: ActionType,
+) -> Callable[[SpecialRoomHandler], SpecialRoomHandler]:
     def decorator(fn: SpecialRoomHandler) -> SpecialRoomHandler:
         SPECIAL_ROOM_ACTIONS[action_type] = fn
         return fn
+
     return decorator
 
 
-def handle_special_room_action(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> bool:
+def handle_special_room_action(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> bool:
     handler = SPECIAL_ROOM_ACTIONS.get(action.type)
     if handler is None:
         return False
@@ -38,7 +43,9 @@ def handle_special_room_action(state: GameState, pid: PlayerId, action: Action, 
 SPECIAL_ROOM_HANDLERS = SPECIAL_ROOM_ACTIONS
 
 
-def register_special_room(action_type: ActionType) -> Callable[[SpecialRoomHandler], SpecialRoomHandler]:
+def register_special_room(
+    action_type: ActionType,
+) -> Callable[[SpecialRoomHandler], SpecialRoomHandler]:
     return register_special_room_action(action_type)
 
 
@@ -47,7 +54,9 @@ def get_special_room_handler(action_type: ActionType) -> SpecialRoomHandler | No
 
 
 @register_special_room_action(ActionType.USE_MOTEMEY_BUY)
-def _motemey_buy(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _motemey_buy(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     p = state.players[pid]
     if p.sanity < 2:
         state.motemey_event_active = False
@@ -72,7 +81,9 @@ def _motemey_buy(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg:
             else:
                 deck.put_bottom(chosen)
         else:
-            if not add_object(state, pid, chosen_str, discard_choice=action.data.get("discard_choice")):
+            if not add_object(
+                state, pid, chosen_str, discard_choice=action.data.get("discard_choice")
+            ):
                 deck.put_bottom(chosen)
 
         deck.put_bottom(rejected)
@@ -80,7 +91,9 @@ def _motemey_buy(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg:
 
 
 @register_special_room_action(ActionType.USE_MOTEMEY_BUY_START)
-def _motemey_buy_start(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _motemey_buy_start(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     p = state.players[pid]
     apply_sanity_loss(state, p, 2, source="MOTEMEY_BUY", cfg=cfg)
     deck = state.motemey_deck
@@ -94,7 +107,9 @@ def _motemey_buy_start(state: GameState, pid: PlayerId, action: Action, rng: RNG
 
 
 @register_special_room_action(ActionType.USE_MOTEMEY_BUY_CHOOSE)
-def _motemey_buy_choose(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _motemey_buy_choose(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     p = state.players[pid]
     if state.pending_motemey_choice and str(pid) in state.pending_motemey_choice:
         cards = state.pending_motemey_choice[str(pid)]
@@ -117,7 +132,12 @@ def _motemey_buy_choose(state: GameState, pid: PlayerId, action: Action, rng: RN
                     else:
                         state.motemey_deck.put_bottom(chosen)
             else:
-                if not add_object(state, pid, chosen_str, discard_choice=action.data.get("discard_choice")):
+                if not add_object(
+                    state,
+                    pid,
+                    chosen_str,
+                    discard_choice=action.data.get("discard_choice"),
+                ):
                     pass
 
             state.motemey_deck.put_bottom(rejected)
@@ -129,7 +149,9 @@ def _motemey_buy_choose(state: GameState, pid: PlayerId, action: Action, rng: RN
 
 
 @register_special_room_action(ActionType.USE_MOTEMEY_SELL)
-def _motemey_sell(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _motemey_sell(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     p = state.players[pid]
     item_name = action.data.get("item_name", "")
     if item_name in p.objects and not is_soulbound(item_name):
@@ -142,7 +164,9 @@ def _motemey_sell(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg
 
 
 @register_special_room_action(ActionType.USE_YELLOW_DOORS)
-def _yellow_doors(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _yellow_doors(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     target_id = PlayerId(action.data.get("target_player", ""))
     if target_id in state.players:
         target = state.players[target_id]
@@ -154,7 +178,9 @@ def _yellow_doors(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg
 
 
 @register_special_room_action(ActionType.USE_TABERNA_ROOMS)
-def _taberna_rooms(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _taberna_rooms(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     p = state.players[pid]
     apply_sanity_loss(state, p, 1, source="TABERNA", cfg=cfg)
     state.taberna_used_this_turn[pid] = True
@@ -162,17 +188,30 @@ def _taberna_rooms(state: GameState, pid: PlayerId, action: Action, rng: RNG, cf
     room_a = RoomId(action.data.get("room_a", ""))
     room_b = RoomId(action.data.get("room_b", ""))
 
-    deck_a = state.boxes[state.box_at_room.get(room_a)].deck if room_a in state.box_at_room else None
-    deck_b = state.boxes[state.box_at_room.get(room_b)].deck if room_b in state.box_at_room else None
+    deck_a = (
+        state.boxes[state.box_at_room.get(room_a)].deck
+        if room_a in state.box_at_room
+        else None
+    )
+    deck_b = (
+        state.boxes[state.box_at_room.get(room_b)].deck
+        if room_b in state.box_at_room
+        else None
+    )
 
     card_a = deck_a.cards[deck_a.top] if deck_a and deck_a.remaining() > 0 else None
     card_b = deck_b.cards[deck_b.top] if deck_b and deck_b.remaining() > 0 else None
 
-    state.last_peek = [{"room": str(room_a), "card": str(card_a)}, {"room": str(room_b), "card": str(card_b)}]
+    state.last_peek = [
+        {"room": str(room_a), "card": str(card_a)},
+        {"room": str(room_b), "card": str(card_b)},
+    ]
 
 
 @register_special_room_action(ActionType.USE_ARMORY_DROP)
-def _armory_drop(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _armory_drop(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     p = state.players[pid]
     item_name = action.data.get("item_name", "")
     item_type = action.data.get("item_type", "object")
@@ -185,57 +224,83 @@ def _armory_drop(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg:
         if item_type == "key" and p.keys > 0:
             p.keys -= 1
             state.armory_storage[armory_room].append({"type": "key", "value": 1})
-        elif item_type == "object" and item_name in p.objects and not is_soulbound(item_name):
+        elif (
+            item_type == "object"
+            and item_name in p.objects
+            and not is_soulbound(item_name)
+        ):
             p.objects.remove(item_name)
             state.armory_storage[armory_room].append(item_name)
 
 
 @register_special_room_action(ActionType.USE_ARMORY_TAKE)
-def _armory_take(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _armory_take(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     p = state.players[pid]
     armory_room = p.room
-    if armory_room in state.armory_storage and len(state.armory_storage[armory_room]) > 0:
+    if (
+        armory_room in state.armory_storage
+        and len(state.armory_storage[armory_room]) > 0
+    ):
         item = state.armory_storage[armory_room].pop()
         if isinstance(item, dict):
             item_name = item.get("value", "")
             if item.get("type") == "key":
                 p.keys += item.get("value", 1)
             else:
-                if not add_object(state, pid, item_name, discard_choice=action.data.get("discard_choice")):
+                if not add_object(
+                    state,
+                    pid,
+                    item_name,
+                    discard_choice=action.data.get("discard_choice"),
+                ):
                     state.armory_storage[armory_room].append(item)
         else:
-            if not add_object(state, pid, item, discard_choice=action.data.get("discard_choice")):
+            if not add_object(
+                state, pid, item, discard_choice=action.data.get("discard_choice")
+            ):
                 state.armory_storage[armory_room].append(item)
 
 
 @register_special_room_action(ActionType.USE_CAPILLA)
-def _capilla(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _capilla(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     p = state.players[pid]
     d6 = rng.randint(1, 6)
     heal_amount = d6 + 2
     heal_player(p, heal_amount)
     if d6 == 1:
         from engine.effects.event_utils import add_status
+
         add_status(p, "PARANOIA")
 
 
 @register_special_room_action(ActionType.USE_SALON_BELLEZA)
-def _salon_belleza(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _salon_belleza(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     p = state.players[pid]
     state.salon_belleza_uses += 1
     state.flags[f"PROTECCION_AMARILLO_{pid}"] = state.round + 1
     if state.salon_belleza_uses % 2 == 0:
         from engine.effects.event_utils import add_status
+
         add_status(p, "VANIDAD")
 
 
 @register_special_room_action(ActionType.USE_CAMARA_LETAL_RITUAL)
-def _camara_letal(state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config) -> None:
+def _camara_letal(
+    state: GameState, pid: PlayerId, action: Action, rng: RNG, cfg: Config
+) -> None:
     if state.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False):
         return
 
     p = state.players[pid]
-    players_in_room = [p_id for p_id, player in state.players.items() if player.room == p.room]
+    players_in_room = [
+        p_id for p_id, player in state.players.items() if player.room == p.room
+    ]
     if len(players_in_room) != 2:
         return
 

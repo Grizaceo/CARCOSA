@@ -50,13 +50,17 @@ try:
     from stable_baselines3 import PPO, A2C, DQN
     from stable_baselines3.common.vec_env import DummyVecEnv
     from stable_baselines3.common.buffers import RolloutBuffer
+
     HAS_SB3 = True
 except ImportError:
     HAS_SB3 = False
-    print("ERROR: stable-baselines3 no instalado. Instalar con: pip install stable-baselines3")
+    print(
+        "ERROR: stable-baselines3 no instalado. Instalar con: pip install stable-baselines3"
+    )
 
 try:
     from sb3_contrib import MaskablePPO
+
     HAS_SB3_CONTRIB = True
 except ImportError:
     MaskablePPO = None
@@ -140,17 +144,23 @@ def _load_model(
                 "MaskablePPO requiere sb3-contrib. Instalar con: pip install sb3-contrib"
             )
         try:
-            return MaskablePPO.load(model_path, env=env, tensorboard_log=tensorboard_log)
+            return MaskablePPO.load(
+                model_path, env=env, tensorboard_log=tensorboard_log
+            )
         except Exception:
             if args is None:
                 raise
             ppo_model = PPO.load(model_path, env=env, tensorboard_log=tensorboard_log)
-            return _bootstrap_maskable_from_ppo(ppo_model, env=env, args=args, tensorboard_log=tensorboard_log)
+            return _bootstrap_maskable_from_ppo(
+                ppo_model, env=env, args=args, tensorboard_log=tensorboard_log
+            )
 
     return PPO.load(model_path, env=env, tensorboard_log=tensorboard_log)
 
 
-def _load_training_model(model_path: str, env, tensorboard_log: str, args: argparse.Namespace):
+def _load_training_model(
+    model_path: str, env, tensorboard_log: str, args: argparse.Namespace
+):
     return _load_model(
         model_path=model_path,
         algorithm=args.algorithm,
@@ -227,7 +237,9 @@ def _clip01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
-def _reward_to_unit_interval(avg_reward: float, reward_floor: float, reward_ceiling: float) -> float:
+def _reward_to_unit_interval(
+    avg_reward: float, reward_floor: float, reward_ceiling: float
+) -> float:
     if reward_ceiling <= reward_floor:
         return 0.0
     return _clip01((avg_reward - reward_floor) / (reward_ceiling - reward_floor))
@@ -285,7 +297,9 @@ def _distance_to_umbral(state, umbral_node: str, room) -> int:
     return 999
 
 
-def _all_players_within_umbral_distance(state, umbral_node: str, max_distance: int = 1) -> bool:
+def _all_players_within_umbral_distance(
+    state, umbral_node: str, max_distance: int = 1
+) -> bool:
     return all(
         _distance_to_umbral(state, umbral_node, player.room) <= max_distance
         for player in state.players.values()
@@ -299,7 +313,12 @@ def _all_players_at_umbral(state, umbral_node: str) -> bool:
     )
 
 
-def _lex_metric_compare(candidate_value: float, incumbent_value: float, higher_is_better: bool, epsilon: float) -> int:
+def _lex_metric_compare(
+    candidate_value: float,
+    incumbent_value: float,
+    higher_is_better: bool,
+    epsilon: float,
+) -> int:
     if higher_is_better:
         if candidate_value > incumbent_value + epsilon:
             return 1
@@ -367,28 +386,46 @@ def compare_metrics_lexicographic(
     incumbent_metrics: Dict[str, float],
     args: argparse.Namespace,
 ) -> tuple[bool, str, float]:
-    candidate_match_rate = float(candidate_metrics.get("requested_executed_match_rate", 0.0))
-    candidate_fallback_rate = float(candidate_metrics.get("fallback_substitution_rate", 1.0))
-    candidate_minus5_with_keys_rate = float(candidate_metrics.get("minus5_entry_with_keys_rate", 0.0))
+    candidate_match_rate = float(
+        candidate_metrics.get("requested_executed_match_rate", 0.0)
+    )
+    candidate_fallback_rate = float(
+        candidate_metrics.get("fallback_substitution_rate", 1.0)
+    )
+    candidate_minus5_with_keys_rate = float(
+        candidate_metrics.get("minus5_entry_with_keys_rate", 0.0)
+    )
     if candidate_match_rate + 1e-9 < args.min_match_rate:
         return False, "action_gate_match", candidate_match_rate - args.min_match_rate
     if candidate_fallback_rate - 1e-9 > args.max_fallback_substitution_rate:
-        return False, "action_gate_fallback", candidate_fallback_rate - args.max_fallback_substitution_rate
+        return (
+            False,
+            "action_gate_fallback",
+            candidate_fallback_rate - args.max_fallback_substitution_rate,
+        )
     if candidate_minus5_with_keys_rate - 1e-9 > args.max_minus5_with_keys_rate:
-        return False, "risk_gate_minus5_with_keys", candidate_minus5_with_keys_rate - args.max_minus5_with_keys_rate
+        return (
+            False,
+            "risk_gate_minus5_with_keys",
+            candidate_minus5_with_keys_rate - args.max_minus5_with_keys_rate,
+        )
 
     ordered_checks = _selector_order_checks(args)
 
     for metric_name, higher_is_better, epsilon in ordered_checks:
         candidate_value = float(candidate_metrics.get(metric_name, 0.0))
         incumbent_value = float(incumbent_metrics.get(metric_name, 0.0))
-        cmp_result = _lex_metric_compare(candidate_value, incumbent_value, higher_is_better, epsilon)
+        cmp_result = _lex_metric_compare(
+            candidate_value, incumbent_value, higher_is_better, epsilon
+        )
         if cmp_result > 0:
             return True, metric_name, candidate_value - incumbent_value
         if cmp_result < 0:
             return False, metric_name, candidate_value - incumbent_value
 
-    score_delta = float(candidate_metrics.get("score", 0.0) - incumbent_metrics.get("score", 0.0))
+    score_delta = float(
+        candidate_metrics.get("score", 0.0) - incumbent_metrics.get("score", 0.0)
+    )
     return score_delta >= args.min_improvement, "score_tiebreak", score_delta
 
 
@@ -513,7 +550,9 @@ def evaluate_model(
                 }
                 for pid, player in env.state.players.items()
             }
-            pre_total_keys = sum(player_info["keys"] for player_info in pre_player_snapshot.values())
+            pre_total_keys = sum(
+                player_info["keys"] for player_info in pre_player_snapshot.values()
+            )
             entered_minus5_with_keys_this_step = False
 
             actor = _current_actor(env)
@@ -541,7 +580,9 @@ def evaluate_model(
 
             action = _predict_action(model, obs, env=env, algorithm=algorithm)
             action_id = int(action)
-            pred_type = action_types[action_id] if 0 <= action_id < len(action_types) else None
+            pred_type = (
+                action_types[action_id] if 0 <= action_id < len(action_types) else None
+            )
 
             if actor != "KING" and pred_type in legal_types:
                 predicted_legal_type_steps += 1
@@ -556,20 +597,26 @@ def evaluate_model(
             ep_reward += float(reward)
             ep_steps += 1
             current_player_keys = {
-                str(pid): int(player.keys)
-                for pid, player in env.state.players.items()
+                str(pid): int(player.keys) for pid, player in env.state.players.items()
             }
 
             keys_in_hand = int(info.get("keys_in_hand", 0))
             for milestone in key_milestones:
-                if keys_in_hand >= milestone and milestone_first_step[milestone] is None:
+                if (
+                    keys_in_hand >= milestone
+                    and milestone_first_step[milestone] is None
+                ):
                     milestone_first_step[milestone] = ep_steps
 
             if keys_in_hand >= keys_goal:
                 reached_keys_goal = True
-            if _all_players_within_umbral_distance(env.state, umbral_node, max_distance=1):
+            if _all_players_within_umbral_distance(
+                env.state, umbral_node, max_distance=1
+            ):
                 all_near_umbral = True
-            if keys_in_hand >= keys_goal and _all_players_at_umbral(env.state, umbral_node):
+            if keys_in_hand >= keys_goal and _all_players_at_umbral(
+                env.state, umbral_node
+            ):
                 had_keys_and_all_at_umbral = True
 
             executed_action_type = info.get("executed_action_type")
@@ -582,7 +629,11 @@ def evaluate_model(
             if executed_action_type == ActionType.ACCEPT_SACRIFICE.value:
                 accept_sacrifice_action_steps += 1
 
-            if keys_goal_first_step is None and keys_in_hand >= keys_goal and pre_total_keys < keys_goal:
+            if (
+                keys_goal_first_step is None
+                and keys_in_hand >= keys_goal
+                and pre_total_keys < keys_goal
+            ):
                 keys_goal_first_step = ep_steps
                 keys_goal_first_source = executed_action_type or "UNKNOWN"
                 keys_goal_reach_events += 1
@@ -611,9 +662,8 @@ def evaluate_model(
                 before = pre_player_snapshot.get(pid_key)
                 if before is None:
                     continue
-                entered_minus5 = (
-                    (not bool(before["at_minus5"]))
-                    and (bool(player.at_minus5) or int(player.sanity) <= -5)
+                entered_minus5 = (not bool(before["at_minus5"])) and (
+                    bool(player.at_minus5) or int(player.sanity) <= -5
                 )
                 if entered_minus5:
                     minus5_entry_events += 1
@@ -621,7 +671,11 @@ def evaluate_model(
                         minus5_entry_with_keys_events += 1
                         entered_minus5_with_keys_this_step = True
 
-            if keys_goal_first_step is not None and keys_goal_lost_step is None and keys_in_hand < keys_goal:
+            if (
+                keys_goal_first_step is not None
+                and keys_goal_lost_step is None
+                and keys_in_hand < keys_goal
+            ):
                 keys_goal_lost_step = ep_steps
                 keys_goal_lost_events += 1
                 loss_action = executed_action_type or "UNKNOWN"
@@ -630,7 +684,8 @@ def evaluate_model(
                 lost_carriers = [
                     pid
                     for pid, before_snapshot in pre_player_snapshot.items()
-                    if int(current_player_keys.get(pid, 0)) < int(before_snapshot.get("keys", 0))
+                    if int(current_player_keys.get(pid, 0))
+                    < int(before_snapshot.get("keys", 0))
                 ]
                 for pid in lost_carriers:
                     keys_goal_lost_carrier_counter[pid] += 1
@@ -642,7 +697,9 @@ def evaluate_model(
                 keys_goal_loss_reason_counter[keys_goal_lost_reason] += 1
 
                 if keys_goal_first_step is not None:
-                    keys_goal_steps_to_loss_sum += max(0, int(ep_steps) - int(keys_goal_first_step))
+                    keys_goal_steps_to_loss_sum += max(
+                        0, int(ep_steps) - int(keys_goal_first_step)
+                    )
                     keys_goal_steps_to_loss_count += 1
 
                 if entered_minus5_with_keys_this_step:
@@ -675,9 +732,15 @@ def evaluate_model(
                 for entry in env.shared_info_memory.values()
                 if int(entry.get("seen_step", -1)) == step_id
             ]
-            if any(entry.get("observation_type") == ActionType.PEEK_ROOM_DECK.value for entry in seen_this_step):
+            if any(
+                entry.get("observation_type") == ActionType.PEEK_ROOM_DECK.value
+                for entry in seen_this_step
+            ):
                 effective_peek_steps += 1
-            if any(entry.get("observation_type") == ActionType.SEARCH.value for entry in seen_this_step):
+            if any(
+                entry.get("observation_type") == ActionType.SEARCH.value
+                for entry in seen_this_step
+            ):
                 effective_search_steps += 1
 
             for memory_key, after_entry in env.shared_info_memory.items():
@@ -691,7 +754,9 @@ def evaluate_model(
                     if source_player and source_player != actor:
                         usage_events_cross += delta
 
-                prev_resolved = False if before_entry is None else before_entry["resolved"]
+                prev_resolved = (
+                    False if before_entry is None else before_entry["resolved"]
+                )
                 curr_resolved = bool(after_entry.get("resolved", False))
                 if (not prev_resolved) and curr_resolved:
                     resolved_events_total += 1
@@ -716,8 +781,12 @@ def evaluate_model(
             milestone_step_sums[milestone] += int(first_step)
 
         if keys_goal_first_step is not None:
-            survival_end_step = keys_goal_lost_step if keys_goal_lost_step is not None else ep_steps
-            keys_goal_survival_steps_sum += max(0, int(survival_end_step) - int(keys_goal_first_step))
+            survival_end_step = (
+                keys_goal_lost_step if keys_goal_lost_step is not None else ep_steps
+            )
+            keys_goal_survival_steps_sum += max(
+                0, int(survival_end_step) - int(keys_goal_first_step)
+            )
             keys_goal_survival_steps_count += 1
             if keys_goal_lost_step is None:
                 keys_goal_survived_to_end_episodes += 1
@@ -756,7 +825,10 @@ def evaluate_model(
                     fail_after_keys_goal_without_full_umbral += 1
                     if keys_goal_lost_step is None:
                         keys_goal_nonwin_with_keys_without_umbral_events += 1
-                    if "MINUS5" not in outcome_raw and "KEYS_DESTROYED" not in outcome_raw:
+                    if (
+                        "MINUS5" not in outcome_raw
+                        and "KEYS_DESTROYED" not in outcome_raw
+                    ):
                         fail_after_keys_goal_due_umbral_only += 1
         if all_near_umbral:
             all_near_umbral_episodes += 1
@@ -774,56 +846,94 @@ def evaluate_model(
         "avg_reward": float(np.mean(rewards)) if rewards else 0.0,
         "std_reward": float(np.std(rewards)) if rewards else 0.0,
         "avg_steps": float(np.mean(steps_list)) if steps_list else 0.0,
-        "rate_reached_keys_goal": (reached_keys_goal_episodes / episodes) if episodes else 0.0,
-        "win_given_reached_keys_goal": (wins_after_keys_goal / reached_keys_goal_episodes) if reached_keys_goal_episodes else 0.0,
+        "rate_reached_keys_goal": (reached_keys_goal_episodes / episodes)
+        if episodes
+        else 0.0,
+        "win_given_reached_keys_goal": (
+            wins_after_keys_goal / reached_keys_goal_episodes
+        )
+        if reached_keys_goal_episodes
+        else 0.0,
         "episodes_with_keys_and_all_at_umbral": episodes_with_keys_and_all_at_umbral,
-        "rate_keys_goal_and_all_at_umbral": (episodes_with_keys_and_all_at_umbral / episodes) if episodes else 0.0,
+        "rate_keys_goal_and_all_at_umbral": (
+            episodes_with_keys_and_all_at_umbral / episodes
+        )
+        if episodes
+        else 0.0,
         "fail_after_keys_goal_total": fail_after_keys_goal_total,
-        "fail_after_keys_goal_rate": (fail_after_keys_goal_total / episodes) if episodes else 0.0,
+        "fail_after_keys_goal_rate": (fail_after_keys_goal_total / episodes)
+        if episodes
+        else 0.0,
         "fail_after_keys_goal_without_full_umbral": fail_after_keys_goal_without_full_umbral,
         "fail_after_keys_goal_without_full_umbral_share": (
             fail_after_keys_goal_without_full_umbral / fail_after_keys_goal_total
-        ) if fail_after_keys_goal_total else 0.0,
+        )
+        if fail_after_keys_goal_total
+        else 0.0,
         "fail_after_keys_goal_with_full_umbral": fail_after_keys_goal_with_full_umbral,
         "fail_after_keys_goal_with_full_umbral_share": (
             fail_after_keys_goal_with_full_umbral / fail_after_keys_goal_total
-        ) if fail_after_keys_goal_total else 0.0,
+        )
+        if fail_after_keys_goal_total
+        else 0.0,
         "fail_after_keys_goal_due_umbral_only": fail_after_keys_goal_due_umbral_only,
         "fail_after_keys_goal_due_umbral_only_share": (
             fail_after_keys_goal_due_umbral_only / fail_after_keys_goal_total
-        ) if fail_after_keys_goal_total else 0.0,
+        )
+        if fail_after_keys_goal_total
+        else 0.0,
         "keys_goal_reach_events": keys_goal_reach_events,
         "keys_goal_lost_events": keys_goal_lost_events,
         "keys_goal_loss_rate_given_reached": (
             keys_goal_lost_events / keys_goal_reach_events
-        ) if keys_goal_reach_events else 0.0,
+        )
+        if keys_goal_reach_events
+        else 0.0,
         "keys_goal_survived_to_end_episodes": keys_goal_survived_to_end_episodes,
         "keys_goal_survived_to_end_rate_given_reached": (
             keys_goal_survived_to_end_episodes / keys_goal_reach_events
-        ) if keys_goal_reach_events else 0.0,
+        )
+        if keys_goal_reach_events
+        else 0.0,
         "avg_steps_4th_key_survived": (
             keys_goal_survival_steps_sum / keys_goal_survival_steps_count
-        ) if keys_goal_survival_steps_count else 0.0,
+        )
+        if keys_goal_survival_steps_count
+        else 0.0,
         "keys_goal_lost_with_minus5_with_keys_events": keys_goal_lost_with_minus5_with_keys_events,
         "keys_goal_lost_with_minus5_with_keys_share": (
             keys_goal_lost_with_minus5_with_keys_events / keys_goal_lost_events
-        ) if keys_goal_lost_events else 0.0,
+        )
+        if keys_goal_lost_events
+        else 0.0,
         "avg_carriers_when_4th_key_reached": (
             keys_goal_carriers_at_reach_sum / keys_goal_carriers_at_reach_count
-        ) if keys_goal_carriers_at_reach_count else 0.0,
+        )
+        if keys_goal_carriers_at_reach_count
+        else 0.0,
         "avg_steps_from_4th_key_to_loss_when_lost": (
             keys_goal_steps_to_loss_sum / keys_goal_steps_to_loss_count
-        ) if keys_goal_steps_to_loss_count else 0.0,
+        )
+        if keys_goal_steps_to_loss_count
+        else 0.0,
         "avg_team_distance_to_umbral_at_end_after_4th_key": (
             keys_goal_end_team_distance_sum / keys_goal_end_team_distance_count
-        ) if keys_goal_end_team_distance_count else 0.0,
+        )
+        if keys_goal_end_team_distance_count
+        else 0.0,
         "avg_team_distance_to_umbral_at_end_after_4th_key_nonwin": (
-            keys_goal_end_team_distance_nonwin_sum / keys_goal_end_team_distance_nonwin_count
-        ) if keys_goal_end_team_distance_nonwin_count else 0.0,
+            keys_goal_end_team_distance_nonwin_sum
+            / keys_goal_end_team_distance_nonwin_count
+        )
+        if keys_goal_end_team_distance_nonwin_count
+        else 0.0,
         "keys_goal_nonwin_with_keys_without_umbral_events": keys_goal_nonwin_with_keys_without_umbral_events,
         "keys_goal_nonwin_with_keys_without_umbral_rate_given_reached": (
-            keys_goal_nonwin_with_keys_without_umbral_events / reached_keys_goal_episodes
-        ) if reached_keys_goal_episodes else 0.0,
+            keys_goal_nonwin_with_keys_without_umbral_events
+            / reached_keys_goal_episodes
+        )
+        if reached_keys_goal_episodes
+        else 0.0,
         "keys_goal_source_counts": dict(keys_goal_source_counter),
         "keys_goal_carrier_counts": dict(keys_goal_carrier_counter),
         "keys_goal_loss_action_counts": dict(keys_goal_loss_action_counter),
@@ -831,39 +941,77 @@ def evaluate_model(
         "keys_goal_lost_carrier_counts": dict(keys_goal_lost_carrier_counter),
         "keys_goal_post_reach_reason_counts": dict(keys_goal_post_reach_reason_counter),
         "keys_goal_terminal_outcome_counts": dict(keys_goal_terminal_outcome_counter),
-        "rate_all_near_umbral": (all_near_umbral_episodes / episodes) if episodes else 0.0,
-        "predicted_legal_rate": (predicted_legal_type_steps / player_steps) if player_steps else 0.0,
-        "requested_executed_match_rate": (requested_matched_executed_steps / player_steps) if player_steps else 0.0,
-        "invalid_intent_rate": (invalid_intent_steps / player_steps) if player_steps else 0.0,
+        "rate_all_near_umbral": (all_near_umbral_episodes / episodes)
+        if episodes
+        else 0.0,
+        "predicted_legal_rate": (predicted_legal_type_steps / player_steps)
+        if player_steps
+        else 0.0,
+        "requested_executed_match_rate": (
+            requested_matched_executed_steps / player_steps
+        )
+        if player_steps
+        else 0.0,
+        "invalid_intent_rate": (invalid_intent_steps / player_steps)
+        if player_steps
+        else 0.0,
         "masked_out_rate": (masked_out_steps / player_steps) if player_steps else 0.0,
-        "fallback_substitution_rate": (fallback_substitution_steps / player_steps) if player_steps else 0.0,
+        "fallback_substitution_rate": (fallback_substitution_steps / player_steps)
+        if player_steps
+        else 0.0,
         "peek_available_steps": peek_available_steps,
-        "pred_peek_rate_when_available": (pred_peek_when_available / peek_available_steps) if peek_available_steps else 0.0,
-        "pred_skip_rate_when_available": (pred_skip_when_available / peek_available_steps) if peek_available_steps else 0.0,
-        "exec_peek_rate_when_available": (exec_peek_when_available / peek_available_steps) if peek_available_steps else 0.0,
-        "exec_skip_rate_when_available": (exec_skip_when_available / peek_available_steps) if peek_available_steps else 0.0,
+        "pred_peek_rate_when_available": (
+            pred_peek_when_available / peek_available_steps
+        )
+        if peek_available_steps
+        else 0.0,
+        "pred_skip_rate_when_available": (
+            pred_skip_when_available / peek_available_steps
+        )
+        if peek_available_steps
+        else 0.0,
+        "exec_peek_rate_when_available": (
+            exec_peek_when_available / peek_available_steps
+        )
+        if peek_available_steps
+        else 0.0,
+        "exec_skip_rate_when_available": (
+            exec_skip_when_available / peek_available_steps
+        )
+        if peek_available_steps
+        else 0.0,
         "fallback_rate": (fallback_steps / player_steps) if player_steps else 0.0,
-        "effective_peek_rate_over_total": (effective_peek_steps / total_steps) if total_steps else 0.0,
+        "effective_peek_rate_over_total": (effective_peek_steps / total_steps)
+        if total_steps
+        else 0.0,
         "effective_peek_steps": effective_peek_steps,
         "effective_search_steps": effective_search_steps,
         "usage_events_total": usage_events_total,
         "usage_events_cross": usage_events_cross,
-        "usage_cross_ratio": (usage_events_cross / usage_events_total) if usage_events_total else 0.0,
+        "usage_cross_ratio": (usage_events_cross / usage_events_total)
+        if usage_events_total
+        else 0.0,
         "resolved_events_total": resolved_events_total,
         "resolved_events_cross": resolved_events_cross,
-        "resolved_cross_ratio": (resolved_events_cross / resolved_events_total) if resolved_events_total else 0.0,
+        "resolved_cross_ratio": (resolved_events_cross / resolved_events_total)
+        if resolved_events_total
+        else 0.0,
         "minus5_losses": minus5_losses,
         "minus5_rate": (minus5_losses / episodes) if episodes else 0.0,
         "minus5_entry_events": minus5_entry_events,
         "minus5_entry_with_keys_events": minus5_entry_with_keys_events,
         "minus5_entry_with_keys_rate": (
             minus5_entry_with_keys_events / minus5_entry_events
-        ) if minus5_entry_events else 0.0,
+        )
+        if minus5_entry_events
+        else 0.0,
         "sacrifice_action_steps": sacrifice_action_steps,
         "accept_sacrifice_action_steps": accept_sacrifice_action_steps,
         "sacrifice_vs_accept_ratio": (
             sacrifice_action_steps / accept_sacrifice_action_steps
-        ) if accept_sacrifice_action_steps else float(sacrifice_action_steps),
+        )
+        if accept_sacrifice_action_steps
+        else float(sacrifice_action_steps),
         "key_destroyed_losses": key_destroyed_losses,
         "key_destroyed_rate": (key_destroyed_losses / episodes) if episodes else 0.0,
         "action_source_counts": dict(action_source_counter),
@@ -871,13 +1019,19 @@ def evaluate_model(
 
     for milestone in key_milestones:
         hit_count = milestone_hits[milestone]
-        metrics[f"rate_reached_{milestone}_keys"] = (hit_count / episodes) if episodes else 0.0
+        metrics[f"rate_reached_{milestone}_keys"] = (
+            (hit_count / episodes) if episodes else 0.0
+        )
         metrics[f"avg_step_to_{milestone}_keys_when_reached"] = (
-            milestone_step_sums[milestone] / hit_count
-        ) if hit_count else 0.0
+            (milestone_step_sums[milestone] / hit_count) if hit_count else 0.0
+        )
 
-    metrics["time_to_first_key_avg"] = metrics.get("avg_step_to_1_keys_when_reached", 0.0)
-    metrics["time_to_keys_goal_avg"] = metrics.get(f"avg_step_to_{keys_goal}_keys_when_reached", 0.0)
+    metrics["time_to_first_key_avg"] = metrics.get(
+        "avg_step_to_1_keys_when_reached", 0.0
+    )
+    metrics["time_to_keys_goal_avg"] = metrics.get(
+        f"avg_step_to_{keys_goal}_keys_when_reached", 0.0
+    )
 
     _compute_score(metrics, args)
     return metrics
@@ -927,9 +1081,13 @@ def run_adaptive_finetune(args: argparse.Namespace) -> Dict[str, Any]:
         raise RuntimeError("stable-baselines3 no está disponible")
 
     args.algorithm = _normalize_algorithm_name(getattr(args, "algorithm", "ppo"))
-    args.selector_profile = str(getattr(args, "selector_profile", "default")).strip().lower()
+    args.selector_profile = (
+        str(getattr(args, "selector_profile", "default")).strip().lower()
+    )
     if args.selector_profile not in {"default", "funnel", "funnel_k4"}:
-        raise ValueError("--selector-profile debe ser 'default', 'funnel' o 'funnel_k4'")
+        raise ValueError(
+            "--selector-profile debe ser 'default', 'funnel' o 'funnel_k4'"
+        )
 
     if args.algorithm == "maskable_ppo" and not HAS_SB3_CONTRIB:
         raise RuntimeError(
@@ -947,7 +1105,11 @@ def run_adaptive_finetune(args: argparse.Namespace) -> Dict[str, Any]:
         raise ValueError("--total-timesteps debe ser > 0")
 
     env_kwargs = _parse_json_dict(args.env_overrides)
-    eval_env_kwargs = _parse_json_dict(args.eval_env_overrides) if args.eval_env_overrides else dict(env_kwargs)
+    eval_env_kwargs = (
+        _parse_json_dict(args.eval_env_overrides)
+        if args.eval_env_overrides
+        else dict(env_kwargs)
+    )
 
     if "curriculum_closing_prob" not in env_kwargs:
         env_kwargs["curriculum_closing_prob"] = args.curriculum_closing_prob
@@ -962,11 +1124,17 @@ def run_adaptive_finetune(args: argparse.Namespace) -> Dict[str, Any]:
     if "curriculum_keys34_max_keys" not in env_kwargs:
         env_kwargs["curriculum_keys34_max_keys"] = args.curriculum_keys34_max_keys
     if "curriculum_keys34_fragile_sanity_min" not in env_kwargs:
-        env_kwargs["curriculum_keys34_fragile_sanity_min"] = args.curriculum_keys34_fragile_sanity_min
+        env_kwargs["curriculum_keys34_fragile_sanity_min"] = (
+            args.curriculum_keys34_fragile_sanity_min
+        )
     if "curriculum_keys34_fragile_sanity_max" not in env_kwargs:
-        env_kwargs["curriculum_keys34_fragile_sanity_max"] = args.curriculum_keys34_fragile_sanity_max
+        env_kwargs["curriculum_keys34_fragile_sanity_max"] = (
+            args.curriculum_keys34_fragile_sanity_max
+        )
     if "curriculum_keys34_fragile_carriers" not in env_kwargs:
-        env_kwargs["curriculum_keys34_fragile_carriers"] = args.curriculum_keys34_fragile_carriers
+        env_kwargs["curriculum_keys34_fragile_carriers"] = (
+            args.curriculum_keys34_fragile_carriers
+        )
 
     if "curriculum_closing_prob" not in eval_env_kwargs:
         eval_env_kwargs["curriculum_closing_prob"] = args.curriculum_eval_closing_prob
@@ -1050,19 +1218,30 @@ def run_adaptive_finetune(args: argparse.Namespace) -> Dict[str, Any]:
         chunk_seed = args.seed + chunk_index * args.chunk_seed_stride
         train_env_kwargs = dict(env_kwargs)
         curriculum_mode = "baseline"
-        incumbent_rate4 = float(incumbent.get("rate_reached_4_keys", incumbent.get("rate_reached_keys_goal", 0.0)))
-        if args.curriculum_auto_focus_keys34 and incumbent_rate4 < args.curriculum_focus_threshold_rate4:
-            train_env_kwargs["curriculum_closing_prob"] = args.curriculum_closing_prob_below_threshold
+        incumbent_rate4 = float(
+            incumbent.get(
+                "rate_reached_4_keys", incumbent.get("rate_reached_keys_goal", 0.0)
+            )
+        )
+        if (
+            args.curriculum_auto_focus_keys34
+            and incumbent_rate4 < args.curriculum_focus_threshold_rate4
+        ):
+            train_env_kwargs["curriculum_closing_prob"] = (
+                args.curriculum_closing_prob_below_threshold
+            )
             train_env_kwargs["curriculum_keys34_prob"] = max(
                 float(train_env_kwargs.get("curriculum_keys34_prob", 0.0)),
                 args.curriculum_keys34_prob_focus,
             )
             curriculum_mode = "keys34_focus"
 
-        train_env = DummyVecEnv([
-            _make_env_factory(chunk_seed, i, train_env_kwargs)
-            for i in range(args.n_envs)
-        ])
+        train_env = DummyVecEnv(
+            [
+                _make_env_factory(chunk_seed, i, train_env_kwargs)
+                for i in range(args.n_envs)
+            ]
+        )
 
         model = _load_training_model(
             model_path=current_best_path,
@@ -1243,7 +1422,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["default", "funnel", "funnel_k4"],
         help="Perfil del selector lexicográfico (default, funnel o funnel_k4).",
     )
-    parser.add_argument("--base-model", type=str, required=True, help="Modelo inicial (.zip)")
+    parser.add_argument(
+        "--base-model", type=str, required=True, help="Modelo inicial (.zip)"
+    )
     parser.add_argument("--total-timesteps", type=int, default=50_000)
     parser.add_argument("--chunk-timesteps", type=int, default=5_000)
     parser.add_argument("--n-envs", type=int, default=4)
@@ -1268,9 +1449,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument("--save-dir", type=str, default="models/rl_adaptive_select")
-    parser.add_argument("--log-dir", type=str, default="runs/rl_training_adaptive_select")
+    parser.add_argument(
+        "--log-dir", type=str, default="runs/rl_training_adaptive_select"
+    )
 
-    parser.add_argument("--env-overrides", type=str, default="{}", help="JSON con kwargs para CarcosaEnv en train")
+    parser.add_argument(
+        "--env-overrides",
+        type=str,
+        default="{}",
+        help="JSON con kwargs para CarcosaEnv en train",
+    )
     parser.add_argument(
         "--eval-env-overrides",
         type=str,
@@ -1395,7 +1583,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reward-ceiling", type=float, default=5.0)
     parser.add_argument("--min-improvement", type=float, default=1e-4)
 
-    parser.add_argument("--progress", action="store_true", help="Mostrar barra de progreso en cada chunk")
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="Mostrar barra de progreso en cada chunk",
+    )
     return parser
 
 
@@ -1404,8 +1596,13 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.curriculum_keys34_max_keys < args.curriculum_keys34_min_keys:
-        raise ValueError("--curriculum-keys34-max-keys debe ser >= --curriculum-keys34-min-keys")
-    if args.curriculum_keys34_fragile_sanity_max < args.curriculum_keys34_fragile_sanity_min:
+        raise ValueError(
+            "--curriculum-keys34-max-keys debe ser >= --curriculum-keys34-min-keys"
+        )
+    if (
+        args.curriculum_keys34_fragile_sanity_max
+        < args.curriculum_keys34_fragile_sanity_min
+    ):
         raise ValueError(
             "--curriculum-keys34-fragile-sanity-max debe ser >= --curriculum-keys34-fragile-sanity-min"
         )

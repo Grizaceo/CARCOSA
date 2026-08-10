@@ -26,18 +26,29 @@ class Config:
 
     # --- Debuffs ---
     E_MAX_PER_PLAYER: float = 3.0
-    NEGATIVE_STATUS_IDS: Set[str] = field(default_factory=lambda: {
-        "TRAPPED", "TRAPPED_SPIDER", "MALDITO", "ENVENENADO", 
-        "PARANOIA", "STUN", "VANIDAD"
-    })
+    NEGATIVE_STATUS_IDS: Set[str] = field(
+        default_factory=lambda: {
+            "TRAPPED",
+            "TRAPPED_SPIDER",
+            "MALDITO",
+            "ENVENENADO",
+            "PARANOIA",
+            "STUN",
+            "VANIDAD",
+        }
+    )
 
     # --- Llaves ---
     KEYS_TO_WIN: int = 4
-    KEYS_TOTAL: int = 6              # pool canónico base: 5 en mazos + 1 en Motemey
-    KEYS_LOSE_THRESHOLD: int = 3     # derrota si quedan <= 3 llaves "en juego" (no destruidas)
+    KEYS_TOTAL: int = 6  # pool canónico base: 5 en mazos + 1 en Motemey
+    KEYS_LOSE_THRESHOLD: int = (
+        3  # derrota si quedan <= 3 llaves "en juego" (no destruidas)
+    )
 
     # --- Roles ---
-    ROLE_DRAW_MODE: str = "RANDOM_UNIQUE"  # FIXED | RANDOM_UNIQUE | RANDOM_WITH_REPLACEMENT
+    ROLE_DRAW_MODE: str = (
+        "RANDOM_UNIQUE"  # FIXED | RANDOM_UNIQUE | RANDOM_WITH_REPLACEMENT
+    )
     ROLE_POOL: tuple[str, ...] = field(
         default_factory=lambda: (
             "HEALER",

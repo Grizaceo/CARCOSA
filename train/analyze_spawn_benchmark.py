@@ -10,9 +10,11 @@ Extrae:
 - Overlap con GOAL y best_evolved
 - Redondeo de techo empírico (unión)
 """
+
 import json
 import argparse
 from pathlib import Path
+
 
 def extract_wins(summary_path: str) -> dict:
     """Returns {model_name: set(winning_seeds)}"""
@@ -29,6 +31,7 @@ def extract_wins(summary_path: str) -> dict:
             wins[model] = {int(s) for s, r in seeds.items() if r.get("win")}
     return wins
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("benchmark", help="Path to benchmark_summary.json")
@@ -37,11 +40,13 @@ def main():
 
     wins = extract_wins(args.benchmark)
     print(f"=== Benchmark: {Path(args.benchmark).name} ===\n")
-    
+
     for model, win_set in sorted(wins.items()):
-        print(f"  {model}: {len(win_set)}/{len(win_set)} wins ({100*len(win_set)/300:.1f}% of 300)")
-        print(f"    Seeds: {sorted(win_set)[:20]}{'...' if len(win_set)>20 else ''}")
-    
+        print(
+            f"  {model}: {len(win_set)}/{len(win_set)} wins ({100 * len(win_set) / 300:.1f}% of 300)"
+        )
+        print(f"    Seeds: {sorted(win_set)[:20]}{'...' if len(win_set) > 20 else ''}")
+
     if args.baseline and Path(args.baseline).exists():
         baseline_wins = extract_wins(args.baseline)
         print(f"\n=== Baseline comparison: {Path(args.baseline).name} ===\n")
@@ -54,17 +59,22 @@ def main():
                 print(f"    Jitter:   {len(wins[model])} wins")
                 print(f"    Novelas (new wins): {len(novelas)} {sorted(novelas)}")
                 if lost:
-                    print(f"    Lost (was winning, now losing): {len(lost)} {sorted(lost)}")
-    
+                    print(
+                        f"    Lost (was winning, now losing): {len(lost)} {sorted(lost)}"
+                    )
+
     # Union (techo empírico)
     all_wins = set()
     for s in wins.values():
         all_wins |= s
-    print(f"\n  UNION (techo empírico): {len(all_wins)}/300 = {100*len(all_wins)/300:.1f}%")
-    
+    print(
+        f"\n  UNION (techo empírico): {len(all_wins)}/300 = {100 * len(all_wins) / 300:.1f}%"
+    )
+
     # Seeds nunca ganadas
     never_won = set(range(300)) - all_wins
-    print(f"  Never won: {len(never_won)}/300 = {100*len(never_won)/300:.1f}%")
+    print(f"  Never won: {len(never_won)}/300 = {100 * len(never_won) / 300:.1f}%")
+
 
 if __name__ == "__main__":
     main()

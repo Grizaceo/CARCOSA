@@ -36,7 +36,7 @@ def advance_turn_or_king(state: GameState) -> None:
 def start_new_round(state: GameState) -> None:
     # TANK: Apply +1 shield at round start
     apply_tank_shields(state)
-    
+
     order = state.turn_order
     if not order:
         state.phase = "PLAYER"

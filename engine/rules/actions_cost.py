@@ -5,7 +5,9 @@ from typing import Optional
 from engine.actions import ActionType
 
 
-def consume_action_cost(action_type: ActionType, cost_override: Optional[int] = None) -> int:
+def consume_action_cost(
+    action_type: ActionType, cost_override: Optional[int] = None
+) -> int:
     if cost_override is not None:
         return cost_override
 

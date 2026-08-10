@@ -19,7 +19,11 @@ def _keys_in_game(state: GameState, cfg: Config) -> int:
 
 def _summary(state: GameState, cfg: Config) -> Dict[str, Any]:
     sanities = [p.sanity for p in state.players.values()] if state.players else []
-    umbral_frac = (sum(1 for p in state.players.values() if p.at_umbral) / len(state.players)) if state.players else 0.0
+    umbral_frac = (
+        (sum(1 for p in state.players.values() if p.at_umbral) / len(state.players))
+        if state.players
+        else 0.0
+    )
     return {
         "min_sanity": min(sanities) if sanities else None,
         "mean_sanity": (sum(sanities) / len(sanities)) if sanities else None,
@@ -31,7 +35,6 @@ def _summary(state: GameState, cfg: Config) -> Dict[str, Any]:
         "umbral_frac": umbral_frac,
         "king_floor": state.king_floor,
     }
-
 
 
 def calculate_reward(state: GameState, next_state: GameState, cfg: Config) -> float:
@@ -60,8 +63,8 @@ def calculate_reward(state: GameState, next_state: GameState, cfg: Config) -> fl
         reward += 1.0 * (keys_next - keys_prev)
 
     # 2. Key Pool Increase (Cámara Letal success)
-    # Check effective keys total? 
-    # Hard to track directly without diffing cfg/state complexly. 
+    # Check effective keys total?
+    # Hard to track directly without diffing cfg/state complexly.
     # Let's stick to keys in hand for now.
 
     # 3. Exploration (Revealed Rooms)
@@ -77,7 +80,7 @@ def calculate_reward(state: GameState, next_state: GameState, cfg: Config) -> fl
     diff_sanity = sanity_next - sanity_prev
     # Note: diff_sanity is negative if damage taken
     if diff_sanity < 0:
-        reward += 0.1 * diff_sanity # -0.1 per point lost
+        reward += 0.1 * diff_sanity  # -0.1 per point lost
 
     return reward
 
@@ -116,27 +119,22 @@ def transition_record(
         "actor": action["actor"],
         "action_type": action["type"],
         "action_data": action_data,
-
         "reward": reward,  # New RL Field
-
         "T_pre": T0,
         "T_post": T1,
         "features_pre": f0,
         "features_post": f1,
-
         "summary_pre": _summary(state, cfg),
         "summary_post": _summary(next_state, cfg),
-
         "king_utility_pre": king_utility(state, cfg, features=f0),
         "king_utility_post": king_utility(next_state, cfg, features=f1),
-        "king_reward": king_utility(next_state, cfg, features=f1) - king_utility(state, cfg, features=f0),
-
+        "king_reward": king_utility(next_state, cfg, features=f1)
+        - king_utility(state, cfg, features=f0),
         "done": bool(next_state.game_over),
         "outcome": next_state.outcome,
         "sanity_loss_events": list(getattr(next_state, "last_sanity_loss_events", [])),
-        
         # FULL REPLAY STATE
-        "full_state": state.to_dict()
+        "full_state": state.to_dict(),
     }
     if roles_assigned is not None:
         rec["roles_assigned"] = roles_assigned
@@ -153,6 +151,7 @@ def write_jsonl(path: str, records: List[Dict[str, Any]]) -> None:
 def write_jsonl_to_string(records: List[Dict[str, Any]]) -> str:
     """Escribe records a un string en formato JSONL."""
     import io
+
     buffer = io.StringIO()
     for r in records:
         buffer.write(json.dumps(r, ensure_ascii=False) + "\n")

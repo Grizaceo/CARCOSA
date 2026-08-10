@@ -14,7 +14,9 @@ def active_box_id_for_room(state: "GameState", room_id: "RoomId") -> Optional[st
     return state.box_at_room.get(room_id)
 
 
-def active_deck_for_room(state: "GameState", room_id: "RoomId") -> Optional["DeckState"]:
+def active_deck_for_room(
+    state: "GameState", room_id: "RoomId"
+) -> Optional["DeckState"]:
     if is_corridor(room_id):
         return None
     box_id = state.box_at_room.get(room_id)

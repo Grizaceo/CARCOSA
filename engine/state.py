@@ -39,7 +39,7 @@ class PlayerState:
     at_minus5: bool = False
     # Ronda en la que se aplicaron los efectos de llegar a -5 (para evitar reactivacion en la misma ronda)
     last_minus5_round: int = -1
-    
+
     # FASE 1: Sistema de roles
     role_id: str = "DEFAULT"  # Rol del personaje (HEALER, TANK, etc.)
     double_roll_used_this_turn: bool = False  # Para High Roller
@@ -95,7 +95,7 @@ class DeckState:
         # Umbral: cuando top alcanza la mitad del array
         if self.top >= len(self.cards) // 2 and self.top > 0:
             # Remover cartas consumidas (antes de top)
-            self.cards = self.cards[self.top:]
+            self.cards = self.cards[self.top :]
             self.top = 0
 
 
@@ -106,10 +106,14 @@ class RoomState:
     revealed: int = 0
 
     # P1: Sistema de habitaciones especiales
-    special_card_id: Optional[str] = None  # ID de la habitación especial ("CAMARA_LETAL", "TABERNA", etc.)
-    special_revealed: bool = False          # Si la carta especial ha sido revelada
-    special_destroyed: bool = False         # Si fue destruida por monstruo
-    special_activation_count: int = 0       # Contador de activaciones (para Salón de Belleza, etc.)
+    special_card_id: Optional[str] = (
+        None  # ID de la habitación especial ("CAMARA_LETAL", "TABERNA", etc.)
+    )
+    special_revealed: bool = False  # Si la carta especial ha sido revelada
+    special_destroyed: bool = False  # Si fue destruida por monstruo
+    special_activation_count: int = (
+        0  # Contador de activaciones (para Salón de Belleza, etc.)
+    )
 
 
 @dataclass
@@ -145,8 +149,12 @@ class GameState:
     # Rey
     king_floor: int = 1
     king_vanish_ends: int = 0
-    false_king_floor: Optional[int] = None  # P0.4b: Falso Rey en piso (None = no existe)
-    false_king_round_appeared: Optional[int] = None  # Ronda en que CROWN activó Falso Rey
+    false_king_floor: Optional[int] = (
+        None  # P0.4b: Falso Rey en piso (None = no existe)
+    )
+    false_king_round_appeared: Optional[int] = (
+        None  # Ronda en que CROWN activó Falso Rey
+    )
 
     # Escaleras
     stairs: Dict[int, RoomId] = field(default_factory=dict)
@@ -164,7 +172,7 @@ class GameState:
 
     # Cola y logs
     event_queue: List[Dict[str, Any]] = field(default_factory=list)
-    
+
     # B2: MOTEMEY deck y estado
     motemey_deck: DeckState = field(default_factory=lambda: DeckState(cards=[]))
     motemey_event_active: bool = False  # Supuesto: hay evento MOTEMEY activo
@@ -173,21 +181,21 @@ class GameState:
     # Almacena {player_id: [card1, card2]} cuando jugador inicia compra
     # None cuando no hay elección pendiente
     pending_motemey_choice: Optional[Dict[str, List[CardId]]] = None
-    
+
     # B5: Taberna flag (una vez por turno)
     taberna_used_this_turn: Dict[PlayerId, bool] = field(default_factory=dict)
-    
+
     # B5: PEEK flag (una vez por turno)
     peek_used_this_turn: Dict[PlayerId, bool] = field(default_factory=dict)
-    
+
     # CANON Fix #C: Last peek data for UI/Serialization
     # List of {"room": str, "card": str}
     last_peek: Optional[List[Dict[str, str]]] = None
-    
+
     # Reina Helada: jugadores con movimiento bloqueado (turno de entrada)
     # Se limpia al inicio del siguiente turno
     movement_blocked_players: List[PlayerId] = field(default_factory=list)
-    
+
     # B6: Armory storage (por room_id, lista de items, capacidad 2)
     armory_storage: Dict[RoomId, List[str]] = field(default_factory=dict)
     action_log: List[Dict[str, Any]] = field(default_factory=list)
@@ -199,25 +207,31 @@ class GameState:
 
     # CORRECCIÓN: llaves destruidas (para "llaves en juego" = KEYS_TOTAL - keys_destroyed)
     keys_destroyed: int = 0
-    
+
     # FASE 2: Pozo de descarte común (objetos, estados expirados, etc.)
     discard_pile: List[str] = field(default_factory=list)
-    
+
     # FASE 4: Libro de Chambers y Vanish del Rey
     chambers_book_holder: Optional[PlayerId] = None  # Quién tiene el Libro
     chambers_tales_attached: int = 0  # Cuentos unidos (0-4)
     king_vanished_turns: int = 0  # Turnos restantes de vanish del Rey
-    
+
     # Estado de Habitaciones Especiales
-    salon_belleza_uses: int = 0  # Contador de activaciones del Salón (3er uso -> Vanidad)
+    salon_belleza_uses: int = (
+        0  # Contador de activaciones del Salón (3er uso -> Vanidad)
+    )
     tue_tue_revelations: int = 0  # Contador de revelaciones de Tue-Tue
-    
+
     # Anillo activado (para efecto de -2 cordura/turno)
     ring_activated_by: Optional[PlayerId] = None
-    
+
     # Tracking de derrota
-    last_sanity_loss_event: Optional[str] = None  # Fuente del último daño significativo (que llevó a -5)
-    last_sanity_loss_events: List[str] = field(default_factory=list)  # Eventos de daño a -5 en el último step
+    last_sanity_loss_event: Optional[str] = (
+        None  # Fuente del último daño significativo (que llevó a -5)
+    )
+    last_sanity_loss_events: List[str] = field(
+        default_factory=list
+    )  # Eventos de daño a -5 en el último step
 
     def __post_init__(self) -> None:
         ensure_canonical_rooms(self)
@@ -289,7 +303,10 @@ class GameState:
         roles_assigned_data = d.get("roles_assigned", {})
         roles_assigned = {str(k): str(v) for k, v in roles_assigned_data.items()}
 
-        monsters = [MonsterState(monster_id=m["monster_id"], room=RoomId(m["room"])) for m in d.get("monsters", [])]
+        monsters = [
+            MonsterState(monster_id=m["monster_id"], room=RoomId(m["room"]))
+            for m in d.get("monsters", [])
+        ]
 
         rooms: Dict[RoomId, RoomState] = {}
         for rid, rdata in d.get("rooms", {}).items():
@@ -319,7 +336,9 @@ class GameState:
         box_at_room = {RoomId(k): str(v) for k, v in d.get("box_at_room", {}).items()}
 
         turn_order = [PlayerId(x) for x in d.get("turn_order", list(players.keys()))]
-        remaining_actions = {PlayerId(k): int(v) for k, v in d.get("remaining_actions", {}).items()}
+        remaining_actions = {
+            PlayerId(k): int(v) for k, v in d.get("remaining_actions", {}).items()
+        }
 
         stairs = {int(k): RoomId(v) for k, v in d.get("stairs", {}).items()}
 
@@ -344,14 +363,20 @@ class GameState:
 
         # B5: Taberna used this turn
         taberna_used_this_turn_data = d.get("taberna_used_this_turn", {})
-        taberna_used_this_turn = {PlayerId(k): bool(v) for k, v in taberna_used_this_turn_data.items()}
+        taberna_used_this_turn = {
+            PlayerId(k): bool(v) for k, v in taberna_used_this_turn_data.items()
+        }
 
         # B5: PEEK used this turn
         peek_used_this_turn_data = d.get("peek_used_this_turn", {})
-        peek_used_this_turn = {PlayerId(k): bool(v) for k, v in peek_used_this_turn_data.items()}
+        peek_used_this_turn = {
+            PlayerId(k): bool(v) for k, v in peek_used_this_turn_data.items()
+        }
 
         # B6: Armory storage
-        armory_storage = {RoomId(k): list(v) for k, v in d.get("armory_storage", {}).items()}
+        armory_storage = {
+            RoomId(k): list(v) for k, v in d.get("armory_storage", {}).items()
+        }
 
         return GameState(
             round=int(d["round"]),
@@ -363,8 +388,12 @@ class GameState:
             box_at_room=box_at_room,
             king_floor=int(d.get("king_floor", 1)),
             king_vanish_ends=int(d.get("king_vanish_ends", 0)),
-            false_king_floor=int(d["false_king_floor"]) if d.get("false_king_floor") else None,
-            false_king_round_appeared=int(d["false_king_round_appeared"]) if d.get("false_king_round_appeared") else None,
+            false_king_floor=int(d["false_king_floor"])
+            if d.get("false_king_floor")
+            else None,
+            false_king_round_appeared=int(d["false_king_round_appeared"])
+            if d.get("false_king_round_appeared")
+            else None,
             stairs=stairs,
             phase=d.get("phase", "PLAYER"),
             turn_order=turn_order,
@@ -391,20 +420,22 @@ class GameState:
             # B6: ARMORY
             armory_storage=armory_storage,
             # Reina Helada: movimiento bloqueado
-            movement_blocked_players=[PlayerId(x) for x in d.get("movement_blocked_players", [])],
-            
+            movement_blocked_players=[
+                PlayerId(x) for x in d.get("movement_blocked_players", [])
+            ],
             # FASE 3: Habitaciones Especiales
             salon_belleza_uses=int(d.get("salon_belleza_uses", 0)),
             tue_tue_revelations=int(d.get("tue_tue_revelations", 0)),
-            
             # FASE 4: Libro Chambers y Vanish
-            chambers_book_holder=PlayerId(d["chambers_book_holder"]) if d.get("chambers_book_holder") else None,
+            chambers_book_holder=PlayerId(d["chambers_book_holder"])
+            if d.get("chambers_book_holder")
+            else None,
             chambers_tales_attached=int(d.get("chambers_tales_attached", 0)),
             king_vanished_turns=int(d.get("king_vanished_turns", 0)),
-            
             # Anillo
-            ring_activated_by=PlayerId(d["ring_activated_by"]) if d.get("ring_activated_by") else None,
-            
+            ring_activated_by=PlayerId(d["ring_activated_by"])
+            if d.get("ring_activated_by")
+            else None,
             # Tracking
             last_sanity_loss_event=d.get("last_sanity_loss_event"),
             last_sanity_loss_events=list(d.get("last_sanity_loss_events", [])),

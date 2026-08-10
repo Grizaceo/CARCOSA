@@ -42,7 +42,9 @@ def has_pending_sacrifice_damage(state: GameState, pid: PlayerId) -> bool:
     return str(pid) in _pending_damage_map(state)
 
 
-def set_pending_sacrifice_damage(state: GameState, pid: PlayerId, amount: int, source: str | None) -> None:
+def set_pending_sacrifice_damage(
+    state: GameState, pid: PlayerId, amount: int, source: str | None
+) -> None:
     pending = _pending_damage_map(state)
     pid_str = str(pid)
     if pid_str in pending:
@@ -60,6 +62,7 @@ def pop_pending_sacrifice_damage(state: GameState, pid: PlayerId) -> dict | None
     else:
         state.flags.pop(PENDING_SACRIFICE_DAMAGE_FLAG, None)
     return info
+
 
 def queue_pending_sacrifice(state: GameState, pid: PlayerId) -> None:
     queue = _pending_queue(state)
@@ -83,14 +86,18 @@ def pop_pending_sacrifice(state: GameState) -> str | None:
     return pid_str
 
 
-def apply_sacrifice_choice(state: GameState, pid: PlayerId, cfg, choice: dict | None) -> None:
+def apply_sacrifice_choice(
+    state: GameState, pid: PlayerId, cfg, choice: dict | None
+) -> None:
     p = state.players[pid]
     opts = available_sacrifice_options(p)
 
     mode = (choice or {}).get("mode")
     if mode == "OBJECT_SLOT":
         if not opts["can_reduce_object_slots"]:
-            raise ValueError("Sacrifice OBJECT_SLOT not available (no object slots to reduce).")
+            raise ValueError(
+                "Sacrifice OBJECT_SLOT not available (no object slots to reduce)."
+            )
 
         p.object_slots_penalty = max(0, int(getattr(p, "object_slots_penalty", 0)) + 1)
 
@@ -109,7 +116,9 @@ def apply_sacrifice_choice(state: GameState, pid: PlayerId, cfg, choice: dict | 
 
     elif mode == "SANITY_MAX":
         if not opts["can_reduce_sanity"]:
-            raise ValueError("Sacrifice SANITY_MAX not available (sanity_max already at -1).")
+            raise ValueError(
+                "Sacrifice SANITY_MAX not available (sanity_max already at -1)."
+            )
         p.sanity_max = max(-1, int(p.sanity_max) - 1)
         if p.sanity > p.sanity_max:
             p.sanity = p.sanity_max
@@ -119,7 +128,9 @@ def apply_sacrifice_choice(state: GameState, pid: PlayerId, cfg, choice: dict | 
         elif opts["can_reduce_sanity"] and not opts["object_options"]:
             apply_sacrifice_choice(state, pid, cfg, {"mode": "SANITY_MAX"})
         else:
-            raise ValueError("Sacrifice choice requires explicit mode when multiple options exist.")
+            raise ValueError(
+                "Sacrifice choice requires explicit mode when multiple options exist."
+            )
 
     p.sanity = 0
     p.at_minus5 = False

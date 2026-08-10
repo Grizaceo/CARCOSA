@@ -56,7 +56,9 @@ def _bump(counter: Dict[str, int], key: str, amount: int = 1) -> None:
     counter[key] = counter.get(key, 0) + amount
 
 
-def _capture_observed_cards(state: GameState, action: Action, actor: str, step_idx: int) -> List[CardMemory]:
+def _capture_observed_cards(
+    state: GameState, action: Action, actor: str, step_idx: int
+) -> List[CardMemory]:
     """Captura cartas observadas por acciones de información (SEARCH/PEEK/TABERNA)."""
     if actor not in state.players:
         return []
@@ -125,11 +127,11 @@ def _setup_special_rooms(rng: RNG) -> Dict[str, Dict[int, int]]:
         Ejemplo: {"CAMARA_LETAL": {1: 2}, "MOTEMEY": {2: 3}, "PUERTAS": {3: 1}}
     """
     available_special_rooms = [
-        "MOTEMEY",      # B2
-        "CAMARA_LETAL", # B3
-        "PUERTAS",      # B4 (Puertas Amarillas)
-        "PEEK",         # B5 (Mirador / Taberna)
-        "ARMERY"        # B6 (Armería)
+        "MOTEMEY",  # B2
+        "CAMARA_LETAL",  # B3
+        "PUERTAS",  # B4 (Puertas Amarillas)
+        "PEEK",  # B5 (Mirador / Taberna)
+        "ARMERY",  # B6 (Armería)
     ]
 
     # Sortear 3 habitaciones especiales
@@ -148,9 +150,7 @@ def _setup_special_rooms(rng: RNG) -> Dict[str, Dict[int, int]]:
         d4_roll = rng.randint(1, 4)
 
         # Cada tipo solo aparece en UN piso
-        special_room_locations[special_type] = {
-            floor_num: d4_roll
-        }
+        special_room_locations[special_type] = {floor_num: d4_roll}
 
     return special_room_locations
 
@@ -183,10 +183,15 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     else:
         roles_assigned = draw_roles(p_ids, role_mode, role_pool, rng)
         p_defs = [(pid, roles_assigned[pid]) for pid in p_ids]
-    
+
     players = {}
-    corridors = [corridor_id(1), corridor_id(2), corridor_id(1), corridor_id(2)] # Split start
-    
+    corridors = [
+        corridor_id(1),
+        corridor_id(2),
+        corridor_id(1),
+        corridor_id(2),
+    ]  # Split start
+
     for i, (pid_str, role) in enumerate(p_defs):
         pid = PlayerId(pid_str)
         s_max = get_sanity_max(role)
@@ -198,7 +203,7 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
             role_id=role,
             sanity_max=s_max,
             objects=items,
-            keys=0
+            keys=0,
         )
 
     # 2. Create GameState with empty rooms initially (but valid dict)
@@ -209,23 +214,24 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
     # 3. Setup Canonical Special Rooms & Motemey Deck
     # This populates state.rooms (via special rooms) and state.motemey_deck
     from engine.setup import setup_special_rooms, setup_motemey_deck
+
     setup_special_rooms(state, rng)
     setup_motemey_deck(state, rng)
 
     # 4. Fill standard rooms (Corridors + R1-R4) respecting existing special rooms
     room_ids: List[RoomId] = []
-    
+
     for f in (1, 2, 3):
         # Corridor setup
         c_id = corridor_id(f)
         if c_id not in rooms:
-             rooms[c_id] = RoomState(room_id=c_id, deck=DeckState(cards=[]))
-        
+            rooms[c_id] = RoomState(room_id=c_id, deck=DeckState(cards=[]))
+
         # Room setup
         for r in (1, 2, 3, 4):
             rid = room_id(f, r)
             room_ids.append(rid)
-            
+
             # If room not created by setup_special_rooms, create empty standard room
             if rid not in rooms:
                 rooms[rid] = RoomState(
@@ -234,20 +240,22 @@ def make_smoke_state(seed: int = 1, cfg: Optional[Config] = None) -> GameState:
                     special_card_id=None,
                     special_revealed=False,
                     special_destroyed=False,
-                    special_activation_count=0
+                    special_activation_count=0,
                 )
 
     # 5. Populate Decks CANONICALLY
     # ===============================
     # Use the centralized setup logic from engine.setup
     from engine.setup import setup_canonical_deck
+
     setup_canonical_deck(state, rng)
 
     # Flag setup handled by setup_special_rooms
-    state.flags["CAMARA_LETAL_PRESENT"] = "CAMARA_LETAL" in state.flags.get("SPECIAL_ROOMS_SELECTED", [])
+    state.flags["CAMARA_LETAL_PRESENT"] = "CAMARA_LETAL" in state.flags.get(
+        "SPECIAL_ROOMS_SELECTED", []
+    )
 
     return state
-
 
 
 def run_episode(
@@ -261,22 +269,26 @@ def run_episode(
 ) -> GameState:
     cfg = cfg or Config()
     rng = RNG(seed)
-    state = initial_state if initial_state is not None else make_smoke_state(seed=seed, cfg=cfg)
+    state = (
+        initial_state
+        if initial_state is not None
+        else make_smoke_state(seed=seed, cfg=cfg)
+    )
 
     # Policy Selection
     from sim.mcts_policy import MCTSPlayerPolicy
-    
+
     if policy_name == "MCTS":
         # Extraer config de argumentos si existen, por ahora defaults
         # Hack: Parse args generically or expect caller to modify cfg?
         # For P0 CLI args are parsed in main(), but run_episode receives only signature args.
         # We'll rely on MCTSPlayerPolicy defaults or update cfg if we want to pass them.
-        # Better: Pass params via kwargs or extend Config. 
+        # Better: Pass params via kwargs or extend Config.
         # Since I can't easily change run_episode signature without breaking other calls (if any),
         # I will assume defaults for now or pass via cfg if I had added them to Config.
         # BUT `main` has `args`. `run_episode` doesn't take kwargs.
         # I'll rely on defaults for P0 or simple hack:
-        ppol = MCTSPlayerPolicy(cfg, rollouts=getattr(cfg, "MCTS_ROLLOUTS", 100)) 
+        ppol = MCTSPlayerPolicy(cfg, rollouts=getattr(cfg, "MCTS_ROLLOUTS", 100))
     else:
         ppol = get_player_policy(policy_name, cfg, model_path=model_path)
 
@@ -308,15 +320,17 @@ def run_episode(
     bot_memories = create_bot_memories([str(pid) for pid in state.players.keys()])
     team_memory.sync_from_state(state)
     # Pasar memoria a la policy si la soporta
-    if hasattr(ppol, 'set_memory'):
+    if hasattr(ppol, "set_memory"):
         ppol.set_memory(team_memory, bot_memories)
 
     while step_idx < max_steps and not state.game_over:
         # Check for Sacrifice Interrupt
         pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
         if isinstance(pending_sacrifice_pid, list):
-            pending_sacrifice_pid = pending_sacrifice_pid[0] if pending_sacrifice_pid else None
-        
+            pending_sacrifice_pid = (
+                pending_sacrifice_pid[0] if pending_sacrifice_pid else None
+            )
+
         if pending_sacrifice_pid:
             episode_stats["sacrifice"]["opportunities"] += 1
             legal_for_pending = get_legal_actions(state, str(pending_sacrifice_pid))
@@ -326,23 +340,25 @@ def run_episode(
             # INTERRUPT: Only the pending player can act (Sacrifice/Accept)
             actor = str(pending_sacrifice_pid)
             # Use player policy for this decision
-            action = ppol.choose(state, rng) 
+            action = ppol.choose(state, rng)
             # Note: Policies must be robust enough to pick SACRIFICE/ACCEPT if available.
         elif state.phase == "PLAYER":
             if "PENDING_SACRIFICE_CHECK" in state.flags:
-                print(f"DEBUG RUNNER WARN: Flag exists but value is '{state.flags['PENDING_SACRIFICE_CHECK']}'")
+                print(
+                    f"DEBUG RUNNER WARN: Flag exists but value is '{state.flags['PENDING_SACRIFICE_CHECK']}'"
+                )
             actor = str(state.turn_order[state.turn_pos])
             action = ppol.choose(state, rng)
         else:
             actor = "KING"
             action = kpol.choose(state, rng)
-            
+
         if action is None:
             # Fallback if policy fails (should be rare)
             if actor == "KING":
-                 action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+                action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
             else:
-                 action = Action(actor=actor, type=ActionType.END_TURN, data={})
+                action = Action(actor=actor, type=ActionType.END_TURN, data={})
 
         # Safety: si la policy devuelve una acción ilegal, escoger una legal
         legal = get_legal_actions(state, actor)
@@ -352,7 +368,9 @@ def run_episode(
             else:
                 # Sin acciones legales: forzar END_TURN o KING_ENDROUND
                 if actor == "KING":
-                    action = Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
+                    action = Action(
+                        actor="KING", type=ActionType.KING_ENDROUND, data={}
+                    )
                 else:
                     action = Action(actor=actor, type=ActionType.END_TURN, data={})
 
@@ -387,7 +405,11 @@ def run_episode(
             who = actor if actor in state.players else "UNKNOWN"
             _bump(episode_stats["sacrifice"]["keys_destroyed_by"], str(who), keys_delta)
             source = state.last_sanity_loss_event or "UNKNOWN"
-            _bump(episode_stats["sacrifice"]["keys_destroyed_sources"], str(source), keys_delta)
+            _bump(
+                episode_stats["sacrifice"]["keys_destroyed_sources"],
+                str(source),
+                keys_delta,
+            )
 
         # === Memory System Updates ===
         # Sincronizar posiciones de boxes después de rotación (KING_ENDROUND)
@@ -396,7 +418,7 @@ def run_episode(
             team_memory.age_all_memories(bot_memories)
             # Re-optimizar asignaciones con memorias envejecidas
             team_memory.optimize_assignments(bot_memories)
-        
+
         observed_cards = _capture_observed_cards(state, action, actor, step_idx)
         if observed_cards:
             for card_mem in observed_cards:
@@ -439,7 +461,9 @@ def run_episode(
     write_jsonl(out_path, records)
     role_draw_mode = getattr(cfg, "ROLE_DRAW_MODE", "FIXED")
     role_pool = list(getattr(cfg, "ROLE_POOL", []) or [])
-    roles_assigned = state.roles_assigned or {str(pid): p.role_id for pid, p in state.players.items()}
+    roles_assigned = state.roles_assigned or {
+        str(pid): p.role_id for pid, p in state.players.items()
+    }
 
     summary = {
         "policy": policy_name,
@@ -460,7 +484,15 @@ def run_episode(
         json.dump(summary, f, ensure_ascii=False, indent=2)
     print(f"Saved run to: {out_path}")
     print(f"Saved summary to: {summary_path}")
-    print("Finished:", state.game_over, state.outcome, "round", state.round, "steps", step_idx)
+    print(
+        "Finished:",
+        state.game_over,
+        state.outcome,
+        "round",
+        state.round,
+        "steps",
+        step_idx,
+    )
     return state
 
 
@@ -469,21 +501,43 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--max-steps", type=int, default=2000)
     ap.add_argument("--out", type=str, default=None)
-    ap.add_argument("--policy", type=str, default="GOAL", 
-                    choices=["GOAL", "HABITANTEDECARCOSA", "COWARD", "BERSERKER", "SPEEDRUNNER", "RANDOM", "MCTS", "BCNN", "HYBRID"],
-                    help="Player policy to use")
-    
+    ap.add_argument(
+        "--policy",
+        type=str,
+        default="GOAL",
+        choices=[
+            "GOAL",
+            "HABITANTEDECARCOSA",
+            "COWARD",
+            "BERSERKER",
+            "SPEEDRUNNER",
+            "RANDOM",
+            "MCTS",
+            "BCNN",
+            "HYBRID",
+        ],
+        help="Player policy to use",
+    )
+
     # MCTS Args
     ap.add_argument("--mcts-rollouts", type=int, default=100)
     # Role draw args
-    ap.add_argument("--role-draw-mode", type=str, default=None,
-                    choices=["FIXED", "RANDOM_UNIQUE", "RANDOM_WITH_REPLACEMENT"],
-                    help="Role draw mode for player setup")
-    ap.add_argument("--role-pool", type=str, default=None,
-                    help="Comma-separated role ids for draw pool (e.g., HEALER,TANK,SCOUT)")
-    
+    ap.add_argument(
+        "--role-draw-mode",
+        type=str,
+        default=None,
+        choices=["FIXED", "RANDOM_UNIQUE", "RANDOM_WITH_REPLACEMENT"],
+        help="Role draw mode for player setup",
+    )
+    ap.add_argument(
+        "--role-pool",
+        type=str,
+        default=None,
+        help="Comma-separated role ids for draw pool (e.g., HEALER,TANK,SCOUT)",
+    )
+
     args = ap.parse_args()
-    
+
     role_pool = None
     if args.role_pool:
         role_pool = [r.strip() for r in args.role_pool.split(",") if r.strip()]
@@ -496,13 +550,13 @@ def main():
 
     # Inject params into Config via constructor
     cfg = Config(**cfg_kwargs)
-    
+
     run_episode(
-        max_steps=args.max_steps, 
-        seed=args.seed, 
+        max_steps=args.max_steps,
+        seed=args.seed,
         out_path=args.out,
         policy_name=args.policy,
-        cfg=cfg
+        cfg=cfg,
     )
 
 

@@ -5,7 +5,11 @@ from typing import Callable, Dict
 from engine.board import floor_of
 from engine.boxes import active_deck_for_room
 from engine.config import Config
-from engine.effects.event_utils import add_status, remove_all_statuses, get_player_by_turn_offset
+from engine.effects.event_utils import (
+    add_status,
+    remove_all_statuses,
+    get_player_by_turn_offset,
+)
 from engine.inventory import add_object
 from engine.rng import RNG
 from engine.state import GameState
@@ -31,7 +35,14 @@ def get_event_handler(event_id: str) -> EventHandler | None:
     return EVENT_HANDLERS.get(event_id)
 
 
-def resolve_event(state: GameState, pid: PlayerId, event_id: str, cfg: Config, rng: RNG, card_prefix: str = "EVENT") -> None:
+def resolve_event(
+    state: GameState,
+    pid: PlayerId,
+    event_id: str,
+    cfg: Config,
+    rng: RNG,
+    card_prefix: str = "EVENT",
+) -> None:
     """
     Resuelve un evento por su ID.
 
@@ -74,13 +85,17 @@ def resolve_event(state: GameState, pid: PlayerId, event_id: str, cfg: Config, r
         deck.put_bottom(CardId(f"{card_prefix}:{event_id}"))
 
 
-def _event_golpe_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_golpe_amarillo(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """Golpe de Amarillo (ex Reflejo): Pierdes 2 de cordura."""
     p = s.players[pid]
     apply_sanity_loss(s, p, 2, source="GOLPE_AMARILLO")
 
 
-def _event_espejo_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_espejo_amarillo(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """Espejo de Amarillo: invierte la cordura (cordura x -1)."""
     p = s.players[pid]
     target = -p.sanity
@@ -89,10 +104,14 @@ def _event_espejo_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config,
     else:
         amount = p.sanity - target
         if amount > 0:
-            apply_sanity_loss(s, p, amount, source="ESPEJO_AMARILLO", cfg=cfg, apply_vanidad=False)
+            apply_sanity_loss(
+                s, p, amount, source="ESPEJO_AMARILLO", cfg=cfg, apply_vanidad=False
+            )
 
 
-def _event_hay_cadaver(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_hay_cadaver(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """
     Hay un cadaver: segun Total.
     0-2: Pierdes turno siguiente
@@ -110,7 +129,9 @@ def _event_hay_cadaver(s: GameState, pid: PlayerId, total: int, cfg: Config, rng
             s.discard_pile.append("BLUNT")
 
 
-def _event_comida_servida(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_comida_servida(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """
     Una comida servida: segun Total.
     0: -3 cordura
@@ -133,14 +154,18 @@ def _event_comida_servida(s: GameState, pid: PlayerId, total: int, cfg: Config, 
             target_player = s.players[target_pid]
             from_room = target_player.room
             target_player.room = p.room
-            enter_room_and_reveal(s, target_pid, p.room, from_room=from_room, cfg=cfg, rng=rng)
+            enter_room_and_reveal(
+                s, target_pid, p.room, from_room=from_room, cfg=cfg, rng=rng
+            )
 
             heal_player(p, 2)
             target = s.players[target_pid]
             heal_player(target, 2)
 
 
-def _event_divan_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_divan_amarillo(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """
     Un divan de Amarillo: segun Total.
     0-3: Quita todos los estados
@@ -158,7 +183,9 @@ def _event_divan_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, 
         add_status(p, "SANIDAD", duration=2)
 
 
-def _event_cambia_caras(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_cambia_caras(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """
     Cambia caras: segun Total.
     0-3: Swap con jugador a la derecha (orden turno +1, ej 1->2)
@@ -175,10 +202,14 @@ def _event_cambia_caras(s: GameState, pid: PlayerId, total: int, cfg: Config, rn
     from_room_t = target.room
     p.room, target.room = target.room, p.room
     enter_room_and_reveal(s, pid, p.room, from_room=from_room_p, cfg=cfg, rng=rng)
-    enter_room_and_reveal(s, target_pid, target.room, from_room=from_room_t, cfg=cfg, rng=rng)
+    enter_room_and_reveal(
+        s, target_pid, target.room, from_room=from_room_t, cfg=cfg, rng=rng
+    )
 
 
-def _event_furia_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_furia_amarillo(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """
     La furia de Amarillo: segun Total.
     0: Dobla efecto del Rey PERMANENTEMENTE
@@ -206,7 +237,9 @@ def _event_furia_amarillo(s: GameState, pid: PlayerId, total: int, cfg: Config, 
         s.king_vanished_turns = 1
 
 
-def _event_ascensor(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_ascensor(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """
     Ascensor:
     0: Fin turno
@@ -232,7 +265,9 @@ def _event_ascensor(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: R
         enter_room_and_reveal(s, pid, new_rid, from_room=from_room, cfg=cfg, rng=rng)
 
 
-def _event_trampilla(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_trampilla(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """
     Trampilla:
     0: Fin turno
@@ -259,7 +294,9 @@ def _event_trampilla(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: 
         enter_room_and_reveal(s, pid, new_rid, from_room=from_room, cfg=cfg, rng=rng)
 
 
-def _event_motemey_trigger(s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG) -> None:
+def _event_motemey_trigger(
+    s: GameState, pid: PlayerId, total: int, cfg: Config, rng: RNG
+) -> None:
     """
     Evento Motemey: Abre tienda inmediatamente.
     Funciona igual que la habitacion: Compra (2 san) o Venta (gratis).

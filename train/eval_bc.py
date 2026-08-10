@@ -1,21 +1,29 @@
 """Evalúa CarcosaPolicyNet (BC) en el env por N episodios y reporta win-rate."""
+
 import sys
 from pathlib import Path
 import numpy as np
 import torch
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from train.carcosa_env import CarcosaEnv
 from train.model import CarcosaPolicyNet
 
+
 def main():
     import argparse
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
     ap.add_argument("--episodes", type=int, default=20)
     args = ap.parse_args()
 
     ckpt = torch.load(args.model, map_location="cpu")
-    model = CarcosaPolicyNet(obs_dim=ckpt["obs_dim"], num_actions=ckpt["num_actions"], hidden_sizes=ckpt["hidden_sizes"])
+    model = CarcosaPolicyNet(
+        obs_dim=ckpt["obs_dim"],
+        num_actions=ckpt["num_actions"],
+        hidden_sizes=ckpt["hidden_sizes"],
+    )
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
 
@@ -41,8 +49,11 @@ def main():
         out = info.get("outcome", "TIMEOUT")
         if "WIN" in str(out):
             wins += 1
-        print(f"Ep {ep+1}: {out}  reward={total:.1f}")
-    print(f"\nBC Wins: {wins}/{args.episodes} ({wins/args.episodes:.1%})  avg_reward={np.mean(rewards):.1f}")
+        print(f"Ep {ep + 1}: {out}  reward={total:.1f}")
+    print(
+        f"\nBC Wins: {wins}/{args.episodes} ({wins / args.episodes:.1%})  avg_reward={np.mean(rewards):.1f}"
+    )
+
 
 if __name__ == "__main__":
     main()

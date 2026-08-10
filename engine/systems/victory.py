@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from engine.rules.victory_defeat import can_win, can_lose_all_minus5, can_lose_keys_destroyed
+from engine.rules.victory_defeat import (
+    can_win,
+    can_lose_all_minus5,
+    can_lose_keys_destroyed,
+)
 from engine.state import GameState
 
 

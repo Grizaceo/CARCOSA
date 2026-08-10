@@ -39,7 +39,9 @@ def _get_predict_params(model) -> list:
         return []
 
 
-def diagnose_episode(env, model=None, seed: int = 0, max_steps: int = 2000) -> Dict[str, Any]:
+def diagnose_episode(
+    env, model=None, seed: int = 0, max_steps: int = 2000
+) -> Dict[str, Any]:
     """
     Corre un episodio completo y captura métricas diagnósticas estilo Pezza.
 
@@ -65,27 +67,28 @@ def diagnose_episode(env, model=None, seed: int = 0, max_steps: int = 2000) -> D
     end_turn_count = 0
     key_gain_events = 0  # veces que el equipo ganó una key
     key_loss_events = 0  # veces que el equipo perdió una key
-    sanction_count = 0  # sanciones recibidas (proxy de daño del King)
     peek_count = 0  # exploración de mazo
 
     prev_keys = sum(p.keys for p in env.state.players.values())
-    prev_sanity = sum(p.sanity for p in env.state.players.values())
     prev_round = env.state.round
 
     done = False
     steps = 0
-    final_reward = 0.0
     reward_accum = 0.0
 
     # Detectar si el modelo soporta action_masks (MaskablePPO vs PPO estándar)
-    _supports_masks = hasattr(model, 'predict') and 'action_masks' in _get_predict_params(model)
+    _supports_masks = hasattr(
+        model, "predict"
+    ) and "action_masks" in _get_predict_params(model)
 
     while not done and steps < max_steps:
         if model is not None:
             if _supports_masks:
                 try:
                     action_masks = env.action_masks()
-                    action, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
+                    action, _ = model.predict(
+                        obs, action_masks=action_masks, deterministic=True
+                    )
                 except Exception:
                     action, _ = model.predict(obs, deterministic=True)
             else:
@@ -97,8 +100,11 @@ def diagnose_episode(env, model=None, seed: int = 0, max_steps: int = 2000) -> D
 
         # Capturar tipo de acción ANTES del step
         action_type = "UNKNOWN"
-        if hasattr(env, 'last_action_debug') and env.last_action_debug:
-            action_type = env.last_action_debug.get("executed_action_type", "UNKNOWN") or "UNKNOWN"
+        if hasattr(env, "last_action_debug") and env.last_action_debug:
+            action_type = (
+                env.last_action_debug.get("executed_action_type", "UNKNOWN")
+                or "UNKNOWN"
+            )
         else:
             if 0 <= action < len(env.ACTION_TYPES):
                 action_type = env.ACTION_TYPES[action].value
@@ -142,7 +148,6 @@ def diagnose_episode(env, model=None, seed: int = 0, max_steps: int = 2000) -> D
             prev_round = env.state.round
 
         prev_keys = curr_keys
-        prev_sanity = curr_sanity
 
     # Métricas finales
     outcome = info.get("outcome", "TIMEOUT")
@@ -156,23 +161,26 @@ def diagnose_episode(env, model=None, seed: int = 0, max_steps: int = 2000) -> D
         # --- VELOCIDAD (Pezza: duración del combate) ---
         "pezza_speed_win_round": final_round if outcome == "WIN" else None,
         "pezza_speed_lose_round": final_round if "LOSE" in str(outcome) else None,
-        "pezza_speed_timeout": 1 if outcome == "TIMEOUT" or "TIMEOUT" in str(outcome) else 0,
+        "pezza_speed_timeout": 1
+        if outcome == "TIMEOUT" or "TIMEOUT" in str(outcome)
+        else 0,
         "pezza_steps_total": steps,
-
         # --- AGRESIVIDAD OFENSIVA (Pezza: daño/segundo → keys/ronda) ---
-        "pezza_keys_per_round": float(final_keys) / max(1, final_round) if final_round > 0 else 0.0,
+        "pezza_keys_per_round": float(final_keys) / max(1, final_round)
+        if final_round > 0
+        else 0.0,
         "pezza_key_gain_events": key_gain_events,
         "pezza_key_loss_events": key_loss_events,
         "pezza_key_net": key_gain_events - key_loss_events,
         "pezza_key_progress_rate": key_gain_events / max(1, final_round),
-
         # --- EFFICIENCY (Pezza: HP del ganador → sanity/keys al ganar) ---
         "pezza_final_sanity": final_sanity,
         "pezza_final_keys": final_keys,
         "pezza_keys_to_win": keys_needed,
         "pezza_keys_deficit": keys_needed - final_keys,
-        "pezza_efficiency_sanity_per_key": final_sanity / max(1, final_keys) if final_keys > 0 else None,
-
+        "pezza_efficiency_sanity_per_key": final_sanity / max(1, final_keys)
+        if final_keys > 0
+        else None,
         # --- ESTILO DE JUEGO (Pezza: acciones ofensivas vs defensivas) ---
         "pezza_action_search_pct": search_count / max(1, steps) * 100,
         "pezza_action_move_pct": move_count / max(1, steps) * 100,
@@ -180,16 +188,20 @@ def diagnose_episode(env, model=None, seed: int = 0, max_steps: int = 2000) -> D
         "pezza_action_end_turn_pct": end_turn_count / max(1, steps) * 100,
         "pezza_action_peek_pct": peek_count / max(1, steps) * 100,
         "pezza_search_to_move_ratio": search_count / max(1, move_count),
-
         # --- PROGRESIÓN (Pezza: trayectoria de HP → trayectoria de keys/sanity) ---
         "pezza_keys_trajectory": keys_per_round,  # lista: keys al final de cada ronda
         "pezza_sanity_trajectory": sanity_per_round,
         "pezza_umbral_trajectory": umbral_distance_per_round,
-        "pezza_keys_at_round_10": keys_per_round[9] if len(keys_per_round) > 9 else None,
-        "pezza_keys_at_round_20": keys_per_round[19] if len(keys_per_round) > 19 else None,
-        "pezza_sanity_at_round_10": sanity_per_round[9] if len(sanity_per_round) > 9 else None,
+        "pezza_keys_at_round_10": keys_per_round[9]
+        if len(keys_per_round) > 9
+        else None,
+        "pezza_keys_at_round_20": keys_per_round[19]
+        if len(keys_per_round) > 19
+        else None,
+        "pezza_sanity_at_round_10": sanity_per_round[9]
+        if len(sanity_per_round) > 9
+        else None,
         "pezza_rounds_to_first_key": _rounds_to_first_key(keys_per_round),
-
         # --- RESULTADO ---
         "outcome": outcome,
         "win": outcome == "WIN",
@@ -213,19 +225,20 @@ def _team_umbral_distance_quick(state) -> int:
     """Distancia mínima del equipo al Umbral (proxy de cercanía a la meta)."""
     try:
         # Distancia Manhattan aproximada al umbral más cercano
-        min_dist = float('inf')
+        min_dist = float("inf")
         for player in state.players.values():
             # Si no hay floor info, usar 0
             dist = 0
             try:
                 from engine.board import floor_of
+
                 p_floor = floor_of(player.room)
                 # El umbral está en el piso -1 (abajo)
                 dist = abs(p_floor - (-1)) + 1  # floors + 1 room
             except Exception:
                 dist = 0
             min_dist = min(min_dist, dist)
-        return int(min_dist) if min_dist != float('inf') else 0
+        return int(min_dist) if min_dist != float("inf") else 0
     except Exception:
         return 0
 
@@ -288,33 +301,64 @@ def diagnose_model(
         "n_wins": len(wins),
         "n_losses": len(losses),
         "n_timeouts": len(timeouts),
-
         # Velocidad
-        "avg_win_round": np.mean([m["pezza_speed_win_round"] for m in wins if m["pezza_speed_win_round"] is not None]) if wins else None,
-        "avg_lose_round": np.mean([m["pezza_speed_lose_round"] for m in losses if m["pezza_speed_lose_round"] is not None]) if losses else None,
+        "avg_win_round": np.mean(
+            [
+                m["pezza_speed_win_round"]
+                for m in wins
+                if m["pezza_speed_win_round"] is not None
+            ]
+        )
+        if wins
+        else None,
+        "avg_lose_round": np.mean(
+            [
+                m["pezza_speed_lose_round"]
+                for m in losses
+                if m["pezza_speed_lose_round"] is not None
+            ]
+        )
+        if losses
+        else None,
         "timeout_rate": len(timeouts) / max(1, len(per_episode)) * 100,
-
         # Agresividad
         "avg_keys_per_round": np.mean([m["pezza_keys_per_round"] for m in per_episode]),
-        "avg_key_gain_events": np.mean([m["pezza_key_gain_events"] for m in per_episode]),
-        "avg_key_loss_events": np.mean([m["pezza_key_loss_events"] for m in per_episode]),
+        "avg_key_gain_events": np.mean(
+            [m["pezza_key_gain_events"] for m in per_episode]
+        ),
+        "avg_key_loss_events": np.mean(
+            [m["pezza_key_loss_events"] for m in per_episode]
+        ),
         "avg_key_net": np.mean([m["pezza_key_net"] for m in per_episode]),
-
         # Efficiency
         "avg_final_keys": np.mean([m["pezza_final_keys"] for m in per_episode]),
         "avg_keys_deficit": np.mean([m["pezza_keys_deficit"] for m in per_episode]),
         "avg_final_sanity": np.mean([m["pezza_final_sanity"] for m in per_episode]),
-
         # Estilo
         "avg_search_pct": np.mean([m["pezza_action_search_pct"] for m in per_episode]),
         "avg_move_pct": np.mean([m["pezza_action_move_pct"] for m in per_episode]),
         "avg_use_pct": np.mean([m["pezza_action_use_pct"] for m in per_episode]),
-        "avg_end_turn_pct": np.mean([m["pezza_action_end_turn_pct"] for m in per_episode]),
-        "avg_search_to_move_ratio": np.mean([m["pezza_search_to_move_ratio"] for m in per_episode]),
-
+        "avg_end_turn_pct": np.mean(
+            [m["pezza_action_end_turn_pct"] for m in per_episode]
+        ),
+        "avg_search_to_move_ratio": np.mean(
+            [m["pezza_search_to_move_ratio"] for m in per_episode]
+        ),
         # Progresión
-        "avg_rounds_to_first_key": np.mean([m["pezza_rounds_to_first_key"] for m in per_episode if m["pezza_rounds_to_first_key"] is not None]) if any(m["pezza_rounds_to_first_key"] is not None for m in per_episode) else None,
-        "pct_never_got_key": sum(1 for m in per_episode if m["pezza_rounds_to_first_key"] is None) / len(per_episode) * 100,
+        "avg_rounds_to_first_key": np.mean(
+            [
+                m["pezza_rounds_to_first_key"]
+                for m in per_episode
+                if m["pezza_rounds_to_first_key"] is not None
+            ]
+        )
+        if any(m["pezza_rounds_to_first_key"] is not None for m in per_episode)
+        else None,
+        "pct_never_got_key": sum(
+            1 for m in per_episode if m["pezza_rounds_to_first_key"] is None
+        )
+        / len(per_episode)
+        * 100,
     }
 
     # === DIAGNÓSTICO TEXTUAL ===
@@ -343,20 +387,21 @@ def _diagnose_maskable(env, model, seed: int) -> Dict[str, Any]:
     key_loss_events = 0
 
     prev_keys = sum(p.keys for p in env.state.players.values())
-    prev_sanity = sum(p.sanity for p in env.state.players.values())
     prev_round = env.state.round
 
     done = False
     steps = 0
     reward_accum = 0.0
 
-    _supports_masks = 'action_masks' in _get_predict_params(model)
+    _supports_masks = "action_masks" in _get_predict_params(model)
 
     while not done and steps < 2000:
         if _supports_masks:
             try:
                 action_masks = env.action_masks()
-                action, _ = model.predict(obs, action_masks=action_masks, deterministic=True)
+                action, _ = model.predict(
+                    obs, action_masks=action_masks, deterministic=True
+                )
             except Exception:
                 action, _ = model.predict(obs, deterministic=True)
         else:
@@ -368,8 +413,11 @@ def _diagnose_maskable(env, model, seed: int) -> Dict[str, Any]:
         steps += 1
 
         action_type = "UNKNOWN"
-        if hasattr(env, 'last_action_debug') and env.last_action_debug:
-            action_type = env.last_action_debug.get("executed_action_type", "UNKNOWN") or "UNKNOWN"
+        if hasattr(env, "last_action_debug") and env.last_action_debug:
+            action_type = (
+                env.last_action_debug.get("executed_action_type", "UNKNOWN")
+                or "UNKNOWN"
+            )
         elif 0 <= action < len(env.ACTION_TYPES):
             action_type = env.ACTION_TYPES[action].value
 
@@ -398,7 +446,6 @@ def _diagnose_maskable(env, model, seed: int) -> Dict[str, Any]:
             prev_round = env.state.round
 
         prev_keys = curr_keys
-        prev_sanity = curr_sanity
 
     outcome = info.get("outcome", "TIMEOUT")
     final_round = info.get("round", env.state.round)
@@ -411,7 +458,9 @@ def _diagnose_maskable(env, model, seed: int) -> Dict[str, Any]:
         "pezza_speed_lose_round": final_round if "LOSE" in str(outcome) else None,
         "pezza_speed_timeout": 1 if "TIMEOUT" in str(outcome) else 0,
         "pezza_steps_total": steps,
-        "pezza_keys_per_round": float(final_keys) / max(1, final_round) if final_round > 0 else 0.0,
+        "pezza_keys_per_round": float(final_keys) / max(1, final_round)
+        if final_round > 0
+        else 0.0,
         "pezza_key_gain_events": key_gain_events,
         "pezza_key_loss_events": key_loss_events,
         "pezza_key_net": key_gain_events - key_loss_events,
@@ -454,57 +503,79 @@ def _generate_diagnosis(agg: Dict, episodes: List[Dict]) -> str:
         lines.append(f"   Derrotas en promedio: ronda {agg['avg_lose_round']:.1f}")
         if agg["avg_win_round"] is not None:
             ratio = agg["avg_lose_round"] / agg["avg_win_round"]
-            lines.append(f"   Ratio derrota/victoria: {ratio:.2f}x (>1.5 = el bot pierde lento, gana lento)")
+            lines.append(
+                f"   Ratio derrota/victoria: {ratio:.2f}x (>1.5 = el bot pierde lento, gana lento)"
+            )
 
     # 2. AGRESIVIDAD
     lines.append("")
     lines.append("2. AGRESIVIDAD OFENSIVA (Pezza: daño/seg → keys/ronda)")
     lines.append(f"   Keys/ronda promedio: {agg['avg_keys_per_round']:.3f}")
     lines.append(f"   Eventos de ganar keys: {agg['avg_key_gain_events']:.1f}/episodio")
-    lines.append(f"   Eventos de perder keys: {agg['avg_key_loss_events']:.1f}/episodio")
+    lines.append(
+        f"   Eventos de perder keys: {agg['avg_key_loss_events']:.1f}/episodio"
+    )
     lines.append(f"   Net de keys: {agg['avg_key_net']:.1f}/episodio")
-    if agg['avg_key_loss_events'] > agg['avg_key_gain_events']:
-        lines.append("   ⚠ PIERDE MÁS KEYS DE LAS QUE GANA — el bot es reactivo, no ofensivo")
-    if agg['avg_keys_per_round'] < 0.3:
-        lines.append("   ⚠ Keys/ronda < 0.3 — el bot apenas busca keys (falta de agresividad)")
+    if agg["avg_key_loss_events"] > agg["avg_key_gain_events"]:
+        lines.append(
+            "   ⚠ PIERDE MÁS KEYS DE LAS QUE GANA — el bot es reactivo, no ofensivo"
+        )
+    if agg["avg_keys_per_round"] < 0.3:
+        lines.append(
+            "   ⚠ Keys/ronda < 0.3 — el bot apenas busca keys (falta de agresividad)"
+        )
 
     # 3. EFFICIENCY
     lines.append("")
     lines.append("3. EFFICIENCY (Pezza: HP del ganador → keys/sanity al final)")
-    lines.append(f"   Keys finales promedio: {agg['avg_final_keys']:.1f}/{agg.get('pezza_keys_to_win', 4)}")
+    lines.append(
+        f"   Keys finales promedio: {agg['avg_final_keys']:.1f}/{agg.get('pezza_keys_to_win', 4)}"
+    )
     lines.append(f"   Deficit de keys: {agg['avg_keys_deficit']:.1f}")
     lines.append(f"   Sanity final promedio: {agg['avg_final_sanity']:.1f}")
-    if agg['avg_keys_deficit'] > 2:
+    if agg["avg_keys_deficit"] > 2:
         lines.append("   ⚠ DEFICIT > 2 keys — el bot no llega ni cerca de la meta")
 
     # 4. ESTILO
     lines.append("")
     lines.append("4. ESTILO DE JUEGO (Pezza: ofensivo vs defensivo)")
-    lines.append(f"   SEARCH: {agg['avg_search_pct']:.1f}%  MOVE: {agg['avg_move_pct']:.1f}%  USE: {agg['avg_use_pct']:.1f}%  END_TURN: {agg['avg_end_turn_pct']:.1f}%")
+    lines.append(
+        f"   SEARCH: {agg['avg_search_pct']:.1f}%  MOVE: {agg['avg_move_pct']:.1f}%  USE: {agg['avg_use_pct']:.1f}%  END_TURN: {agg['avg_end_turn_pct']:.1f}%"
+    )
     lines.append(f"   Ratio SEARCH/MOVE: {agg['avg_search_to_move_ratio']:.2f}")
-    if agg['avg_end_turn_pct'] > 40:
+    if agg["avg_end_turn_pct"] > 40:
         lines.append("   ⚠ END_TURN > 40% — el bot pasa demasiado (no toma iniciativa)")
-    if agg['avg_search_pct'] < 20:
-        lines.append("   ⚠ SEARCH < 20% — el bot no explora lo suficiente para encontrar keys")
-    if agg['avg_use_pct'] < 5:
-        lines.append("   ⚠ USE < 5% — el bot casi no usa objetos (puede estar ignorando recursos)")
+    if agg["avg_search_pct"] < 20:
+        lines.append(
+            "   ⚠ SEARCH < 20% — el bot no explora lo suficiente para encontrar keys"
+        )
+    if agg["avg_use_pct"] < 5:
+        lines.append(
+            "   ⚠ USE < 5% — el bot casi no usa objetos (puede estar ignorando recursos)"
+        )
 
     # 5. PROGRESIÓN
     lines.append("")
     lines.append("5. PROGRESIÓN (Pezza: trayectoria de HP → trayectoria de keys)")
-    if agg['avg_rounds_to_first_key'] is not None:
-        lines.append(f"   Rondas promedio a primera key: {agg['avg_rounds_to_first_key']:.1f}")
+    if agg["avg_rounds_to_first_key"] is not None:
+        lines.append(
+            f"   Rondas promedio a primera key: {agg['avg_rounds_to_first_key']:.1f}"
+        )
     else:
         lines.append("   NUNCA consigue keys en ningún episodio")
-    lines.append(f"   % episodios que NUNCA consiguieron key: {agg['pct_never_got_key']:.1f}%")
-    if agg['pct_never_got_key'] > 50:
-        lines.append("   ⚠ >50% de episodios sin NINGUNA key — el bot no tiene dirección ofensiva")
+    lines.append(
+        f"   % episodios que NUNCA consiguieron key: {agg['pct_never_got_key']:.1f}%"
+    )
+    if agg["pct_never_got_key"] > 50:
+        lines.append(
+            "   ⚠ >50% de episodios sin NINGUNA key — el bot no tiene dirección ofensiva"
+        )
 
     # 6. TIMEOUTS
     lines.append("")
     lines.append("6. TIMEOUTS (Pezza: got stuck → nuestro: stall sin game_over)")
     lines.append(f"   Rate de timeout: {agg['timeout_rate']:.1f}%")
-    if agg['timeout_rate'] > 20:
+    if agg["timeout_rate"] > 20:
         lines.append("   ⚠ >20% timeouts — el bot se queda dando vueltas sin progresar")
 
     # VEREDICTO
@@ -513,19 +584,19 @@ def _generate_diagnosis(agg: Dict, episodes: List[Dict]) -> str:
     lines.append("VEREDICTO")
     lines.append("=" * 60)
     problems = []
-    if agg['avg_keys_per_round'] < 0.3:
+    if agg["avg_keys_per_round"] < 0.3:
         problems.append("falta agresividad ofensiva (keys/ronda baja)")
-    if agg['avg_key_loss_events'] > agg['avg_key_gain_events']:
+    if agg["avg_key_loss_events"] > agg["avg_key_gain_events"]:
         problems.append("pierde más keys de las que gana")
-    if agg['avg_keys_deficit'] > 2:
+    if agg["avg_keys_deficit"] > 2:
         problems.append("no llega cerca de la meta de keys")
-    if agg['avg_end_turn_pct'] > 40:
+    if agg["avg_end_turn_pct"] > 40:
         problems.append("demasiado pasivo (END_TURN alto)")
-    if agg['avg_search_pct'] < 20:
+    if agg["avg_search_pct"] < 20:
         problems.append("no explora lo suficiente")
-    if agg['pct_never_got_key'] > 50:
+    if agg["pct_never_got_key"] > 50:
         problems.append("sin dirección ofensiva")
-    if agg['timeout_rate'] > 20:
+    if agg["timeout_rate"] > 20:
         problems.append("se queda stuck (timeouts)")
 
     if problems:
@@ -533,7 +604,9 @@ def _generate_diagnosis(agg: Dict, episodes: List[Dict]) -> str:
         for p in problems:
             lines.append(f"  • {p}")
     else:
-        lines.append("No se detectaron problemas obvios — el bot juega bien pero no gana (¿problema de suerte/setup?)")
+        lines.append(
+            "No se detectaron problemas obvios — el bot juega bien pero no gana (¿problema de suerte/setup?)"
+        )
 
     lines.append("")
     return "\n".join(lines)
@@ -548,29 +621,33 @@ def diagnose_goal(seeds: range = range(50)) -> Dict[str, Any]:
         st = run_episode(max_steps=2000, seed=seed, policy_name="GOAL")
         final_keys = sum(p.keys for p in st.players.values())
         final_sanity = sum(p.sanity for p in st.players.values())
-        per_episode.append({
-            "pezza_speed_win_round": st.round if st.outcome == "WIN" else None,
-            "pezza_speed_lose_round": st.round if st.outcome != "WIN" else None,
-            "pezza_speed_timeout": 1 if "TIMEOUT" in str(st.outcome) else 0,
-            "pezza_keys_per_round": float(final_keys) / max(1, st.round),
-            "pezza_final_keys": final_keys,
-            "pezza_keys_deficit": st.config.KEYS_TO_WIN if hasattr(st, 'config') else 4 - final_keys,
-            "pezza_final_sanity": final_sanity,
-            "pezza_key_gain_events": 0,  # GOAL no trackea esto
-            "pezza_key_loss_events": 0,
-            "pezza_key_net": 0,
-            "pezza_action_search_pct": 0,  # GOAL no trackea acciones
-            "pezza_action_move_pct": 0,
-            "pezza_action_use_pct": 0,
-            "pezza_action_end_turn_pct": 0,
-            "pezza_search_to_move_ratio": 0,
-            "pezza_rounds_to_first_key": None,
-            "outcome": st.outcome,
-            "win": st.outcome == "WIN",
-            "round": st.round,
-            "seed": seed,
-            "reward_total": 0,
-        })
+        per_episode.append(
+            {
+                "pezza_speed_win_round": st.round if st.outcome == "WIN" else None,
+                "pezza_speed_lose_round": st.round if st.outcome != "WIN" else None,
+                "pezza_speed_timeout": 1 if "TIMEOUT" in str(st.outcome) else 0,
+                "pezza_keys_per_round": float(final_keys) / max(1, st.round),
+                "pezza_final_keys": final_keys,
+                "pezza_keys_deficit": st.config.KEYS_TO_WIN
+                if hasattr(st, "config")
+                else 4 - final_keys,
+                "pezza_final_sanity": final_sanity,
+                "pezza_key_gain_events": 0,  # GOAL no trackea esto
+                "pezza_key_loss_events": 0,
+                "pezza_key_net": 0,
+                "pezza_action_search_pct": 0,  # GOAL no trackea acciones
+                "pezza_action_move_pct": 0,
+                "pezza_action_use_pct": 0,
+                "pezza_action_end_turn_pct": 0,
+                "pezza_search_to_move_ratio": 0,
+                "pezza_rounds_to_first_key": None,
+                "outcome": st.outcome,
+                "win": st.outcome == "WIN",
+                "round": st.round,
+                "seed": seed,
+                "reward_total": 0,
+            }
+        )
 
     wins = [m for m in per_episode if m["win"]]
     losses = [m for m in per_episode if "LOSE" in str(m["outcome"])]
@@ -582,8 +659,24 @@ def diagnose_goal(seeds: range = range(50)) -> Dict[str, Any]:
         "n_wins": len(wins),
         "n_losses": len(losses),
         "n_timeouts": len(timeouts),
-        "avg_win_round": np.mean([m["pezza_speed_win_round"] for m in wins if m["pezza_speed_win_round"] is not None]) if wins else None,
-        "avg_lose_round": np.mean([m["pezza_speed_lose_round"] for m in losses if m["pezza_speed_lose_round"] is not None]) if losses else None,
+        "avg_win_round": np.mean(
+            [
+                m["pezza_speed_win_round"]
+                for m in wins
+                if m["pezza_speed_win_round"] is not None
+            ]
+        )
+        if wins
+        else None,
+        "avg_lose_round": np.mean(
+            [
+                m["pezza_speed_lose_round"]
+                for m in losses
+                if m["pezza_speed_lose_round"] is not None
+            ]
+        )
+        if losses
+        else None,
         "timeout_rate": len(timeouts) / max(1, len(per_episode)) * 100,
         "avg_keys_per_round": np.mean([m["pezza_keys_per_round"] for m in per_episode]),
         "avg_key_gain_events": 0,
@@ -611,7 +704,10 @@ def diagnose_goal(seeds: range = range(50)) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Métricas diagnósticas Pezza para CARCOSA")
+
+    parser = argparse.ArgumentParser(
+        description="Métricas diagnósticas Pezza para CARCOSA"
+    )
     parser.add_argument("model", type=str, help="Ruta al modelo .zip o 'GOAL'")
     parser.add_argument("--seeds", type=int, default=50, help="Número de seeds")
     parser.add_argument("--device", type=str, default="cpu")
@@ -621,7 +717,12 @@ if __name__ == "__main__":
     if args.model == "GOAL":
         result = diagnose_goal(seeds=range(args.seeds))
     else:
-        result = diagnose_model(args.model, seeds=range(args.seeds), device=args.device, king_enabled=args.king_enabled)
+        result = diagnose_model(
+            args.model,
+            seeds=range(args.seeds),
+            device=args.device,
+            king_enabled=args.king_enabled,
+        )
 
     print(result["diagnosis"])
     print("\n--- AGREGATE ---")

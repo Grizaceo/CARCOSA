@@ -12,6 +12,7 @@ Uso:
   python train/evolve.py --base-model models/ppo_carcosa_final_20260803_224539.zip \
       --generations 4 --mutants 4 --mutate-steps 100000 --sigma 0.02
 """
+
 import sys
 import os
 import argparse
@@ -24,6 +25,7 @@ from train.carcosa_env import CarcosaEnv
 from stable_baselines3 import PPO
 
 EVAL_SEEDS = list(range(30))  # fijo para comparación justa entre generaciones
+
 
 def evaluate(model, episodes=30):
     env = CarcosaEnv()
@@ -40,6 +42,7 @@ def evaluate(model, episodes=30):
     env.close()
     return wins / episodes
 
+
 def mutate_model(src_zip, sigma):
     """Carga pesos de un modelo SB3, perturba, devuelve ruta a un .zip mutado."""
     tmp_env = CarcosaEnv()
@@ -50,12 +53,15 @@ def mutate_model(src_zip, sigma):
             if p.requires_grad:
                 noise = torch.randn_like(p) * sigma
                 p.add_(noise)
-    stem = Path(src_zip).stem  # sin .zip (defensa: evita doble .zip en generaciones recursivas)
+    stem = Path(
+        src_zip
+    ).stem  # sin .zip (defensa: evita doble .zip en generaciones recursivas)
     uid = uuid.uuid4().hex[:8]
     out = str(Path(src_zip).parent / f"{stem}_mut_{uid}.zip")
     model.save(out)
     tmp_env.close()
     return out
+
 
 def train_continue(model_zip, steps, lr=1e-4):
     tmp_env = CarcosaEnv()
@@ -66,6 +72,7 @@ def train_continue(model_zip, steps, lr=1e-4):
     model.save(out)
     tmp_env.close()
     return out
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -84,7 +91,7 @@ def main():
         mutants = []
         for m in range(args.mutants):
             mpath = mutate_model(base, args.sigma)
-            print(f"  mutante {m+1}/{args.mutants}: {Path(mpath).name}")
+            print(f"  mutante {m + 1}/{args.mutants}: {Path(mpath).name}")
             mutants.append(mpath)
         results = []
         for mpath in mutants:
@@ -92,13 +99,17 @@ def main():
             model = PPO.load(tpath, env=CarcosaEnv())
             wr = evaluate(model, args.eval_episodes)
             results.append((wr, tpath))
-            print(f"    mutante {Path(mpath).name} -> win-rate {wr*100:.1f}%")
-            try: os.remove(mpath)
-            except OSError: pass
+            print(f"    mutante {Path(mpath).name} -> win-rate {wr * 100:.1f}%")
+            try:
+                os.remove(mpath)
+            except OSError:
+                pass
         results.sort(key=lambda x: -x[0])
         best_wr, best_path = results[0]
         history.append({"gen": gen, "best_win_rate": best_wr, "best_model": best_path})
-        print(f"  >> MEJOR GEN {gen}: win-rate {best_wr*100:.1f}%  ({Path(best_path).name})")
+        print(
+            f"  >> MEJOR GEN {gen}: win-rate {best_wr * 100:.1f}%  ({Path(best_path).name})"
+        )
         if best_wr >= 0.10:
             print(f"  >> OBJETIVO 10% ALCANZADO en gen {gen}")
             break
@@ -106,13 +117,17 @@ def main():
 
     print("\n=== HISTORIAL DE EVOLUCIÓN ===")
     for h in history:
-        print(f"  Gen {h['gen']}: {h['best_win_rate']*100:.1f}%  ({Path(h['best_model']).name})")
+        print(
+            f"  Gen {h['gen']}: {h['best_win_rate'] * 100:.1f}%  ({Path(h['best_model']).name})"
+        )
     # guardar mejor modelo como 'best_evolved'
     best = max(history, key=lambda h: h["best_win_rate"])
     import shutil
+
     final = "models/best_evolved.zip"
     shutil.copy(best["best_model"], final)
     print(f"\nMejor modelo evolucionado guardado en: {final}")
+
 
 if __name__ == "__main__":
     main()

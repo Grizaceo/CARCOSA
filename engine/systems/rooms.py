@@ -44,12 +44,16 @@ def on_player_enters_room(state: GameState, pid: PlayerId, room: RoomId) -> None
     room_state = state.rooms[room]
 
     # Si hay una carta especial boca abajo, revelarla
-    if (room_state.special_card_id is not None and
-        not room_state.special_revealed and
-        not room_state.special_destroyed):
+    if (
+        room_state.special_card_id is not None
+        and not room_state.special_revealed
+        and not room_state.special_destroyed
+    ):
         room_state.special_revealed = True
         # Log o tracking de revelación
-        state.flags[f"SPECIAL_REVEALED_{room}_{room_state.special_card_id}"] = state.round
+        state.flags[f"SPECIAL_REVEALED_{room}_{room_state.special_card_id}"] = (
+            state.round
+        )
 
 
 def enter_room_and_reveal(
@@ -70,15 +74,21 @@ def enter_room_and_reveal(
     on_player_enters_room(state, pid, room)
 
     if from_room is not None:
-        if (not is_corridor(from_room)) and is_corridor(room) and floor_of(from_room) == floor_of(room):
+        if (
+            (not is_corridor(from_room))
+            and is_corridor(room)
+            and floor_of(from_room) == floor_of(room)
+        ):
             state.flags["PENDING_HALLWAY_PEEK"] = str(pid)
             return
 
     # Lazy imports to avoid circular dependencies with handlers/events.
     from engine.systems.decks import reveal_one
     from engine.handlers.cards import resolve_card_minimal
+
     if cfg is None:
         from engine.config import Config
+
         cfg = Config()
 
     card = reveal_one(state, room)
@@ -94,12 +104,16 @@ def update_umbral_flags(state: GameState, cfg) -> None:
 def handle_hallway_peek_action(state: GameState, pid: PlayerId, action: Action) -> bool:
     if action.type == ActionType.PEEK_ROOM_DECK:
         target_room = RoomId(action.data["room_id"])
-        if floor_of(target_room) != floor_of(state.players[pid].room) or is_corridor(target_room):
+        if floor_of(target_room) != floor_of(state.players[pid].room) or is_corridor(
+            target_room
+        ):
             raise ValueError("Invalid room for peek")
         deck = active_deck_for_room(state, target_room)
         if deck and deck.remaining() > 0:
             card = deck.cards[deck.top]
-            state.action_log.append({"event": "PEEK_RESULT", "room": str(target_room), "card": str(card)})
+            state.action_log.append(
+                {"event": "PEEK_RESULT", "room": str(target_room), "card": str(card)}
+            )
         if state.flags.get("PENDING_HALLWAY_PEEK") == str(pid):
             del state.flags["PENDING_HALLWAY_PEEK"]
         return True

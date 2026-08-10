@@ -1,13 +1,23 @@
 from __future__ import annotations
 
-from engine.board import corridor_id, floor_of, ruleta_floor, rotate_boxes, rotate_boxes_intra_floor
+from engine.board import (
+    corridor_id,
+    floor_of,
+    ruleta_floor,
+    rotate_boxes,
+    rotate_boxes_intra_floor,
+)
 from engine.boxes import sync_room_decks_from_boxes
 from engine.config import Config
 from engine.effects.states_canonical import decrement_status_durations
 from engine.objects import is_soulbound
 from engine.rng import RNG
 from engine.rules.sanity import sanity_cap
-from engine.rules.victory_defeat import can_lose_all_minus5, can_lose_keys_destroyed, can_win
+from engine.rules.victory_defeat import (
+    can_lose_all_minus5,
+    can_lose_keys_destroyed,
+    can_win,
+)
 from engine.state import GameState, ensure_canonical_rooms
 from engine.systems.finalize import finalize_and_return
 from engine.systems.monsters import monster_phase
@@ -104,7 +114,9 @@ def attract_players_to_floor(state: GameState, floor: int) -> None:
         p.room = target
 
 
-def expel_players_from_floor_except_fk(state: GameState, floor: int, fk_floor: int | None) -> None:
+def expel_players_from_floor_except_fk(
+    state: GameState, floor: int, fk_floor: int | None
+) -> None:
     if floor == 1:
         dest_floor = 2
     elif floor == 2:
@@ -125,7 +137,9 @@ def expel_players_from_floor_except_fk(state: GameState, floor: int, fk_floor: i
             p.room = stair_room
 
 
-def attract_players_to_floor_except_fk(state: GameState, floor: int, fk_floor: int | None) -> None:
+def attract_players_to_floor_except_fk(
+    state: GameState, floor: int, fk_floor: int | None
+) -> None:
     target = corridor_id(floor)
     for p in state.players.values():
         if fk_floor is not None and floor_of(p.room) == fk_floor:
@@ -168,7 +182,9 @@ def end_of_round_checks(state: GameState, cfg: Config) -> None:
         state.game_over = True
         state.outcome = f"LOSE_ALL_MINUS5 ({source})"
         return
-    if not state.flags.get(PENDING_SACRIFICE_FLAG) and can_lose_keys_destroyed(state, cfg):
+    if not state.flags.get(PENDING_SACRIFICE_FLAG) and can_lose_keys_destroyed(
+        state, cfg
+    ):
         state.game_over = True
         state.outcome = "LOSE_KEYS_DESTROYED"
         return

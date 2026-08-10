@@ -21,6 +21,7 @@ Endpoints:
     GET  /health               → health check
     WS   /ws/{id}/{pid}        → WebSocket para actualizaciones de estado en tiempo real
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,9 +31,9 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -53,6 +54,7 @@ except ImportError:
     asyncpg = None
 _db_pool = None
 
+
 async def init_db_pool():
     global _db_pool
     if asyncpg is None:
@@ -65,15 +67,18 @@ async def init_db_pool():
         # Convert external URL to internal format
         database_url = database_url.replace(
             "@dpg-d8kvfshkh4rs73fjricg-a.oregon-postgres.render.com:5432/",
-            "@dpg-d8kvfshkh4rs73fjricg-a/"
+            "@dpg-d8kvfshkh4rs73fjricg-a/",
         )
         print(f"[DB] Converted to internal URL format: {database_url[:80]}...")
 
-    print(f"[DB] DATABASE_URL from env: {database_url[:80] if database_url else 'NOT SET'}...")
+    print(
+        f"[DB] DATABASE_URL from env: {database_url[:80] if database_url else 'NOT SET'}..."
+    )
     if database_url:
         # Render PostgreSQL internal connections need SSL but hostname verification fails
         # Create custom SSL context that doesn't verify hostname
         import ssl
+
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -81,15 +86,18 @@ async def init_db_pool():
         # Remove sslmode from URL if present
         if "sslmode=" in database_url:
             import urllib.parse
+
             parsed = urllib.parse.urlparse(database_url)
             query_params = urllib.parse.parse_qs(parsed.query)
-            query_params.pop('sslmode', None)
+            query_params.pop("sslmode", None)
             new_query = urllib.parse.urlencode(query_params, doseq=True)
             database_url = urllib.parse.urlunparse(parsed._replace(query=new_query))
 
         print(f"[DB] Connecting to PostgreSQL with custom SSL: {database_url[:80]}...")
         try:
-            _db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=5, ssl=ssl_context)
+            _db_pool = await asyncpg.create_pool(
+                database_url, min_size=1, max_size=5, ssl=ssl_context
+            )
             # Test connection
             async with _db_pool.acquire() as conn:
                 await conn.execute("SELECT 1")
@@ -129,7 +137,9 @@ async def init_db_pool():
                         created_at TIMESTAMPTZ DEFAULT NOW()
                     )
                 """)
-            print(f"[DB] PostgreSQL pool initialized with custom SSL: {database_url[:50]}...")
+            print(
+                f"[DB] PostgreSQL pool initialized with custom SSL: {database_url[:50]}..."
+            )
         except Exception as e:
             print(f"[DB] Table creation FAILED: {type(e).__name__}: {e}")
             print("[DB] Falling back to filesystem mode")
@@ -143,7 +153,9 @@ app = FastAPI(title="CARCOSA Game Server", version="1.1.0")
 # Detectar directorio de static (Docker usa /app/static, local usa web/)
 STATIC_DIR = "/app/static"
 if not os.path.exists(STATIC_DIR):
-    STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+    STATIC_DIR = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web"
+    )
     if not os.path.exists(STATIC_DIR):
         STATIC_DIR = "web"
 
@@ -155,7 +167,9 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR, html=True), name="static"
 @app.get("/hali", include_in_schema=False)
 async def serve_hali():
     from fastapi.responses import RedirectResponse
+
     return RedirectResponse(url="/static/hali/")
+
 
 # Servir index.html en root con headers anti-cache para forzar reload del frontend
 @app.get("/", include_in_schema=False)
@@ -166,16 +180,12 @@ async def serve_index():
     response.headers["Expires"] = "0"
     return response
 
-# Custom exception handler for HTTPException to ensure proper error responses
-from fastapi.responses import JSONResponse
-from fastapi import Request
 
+# Custom exception handler for HTTPException to ensure proper error responses
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail}
-    )
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 # Lifecycle
 @app.on_event("startup")
@@ -188,10 +198,13 @@ async def startup_db():
     for gid in list(_sessions.keys()):
         try:
             state = _sessions[gid]["state"]
-            if not state.game_over and _active_actor(state) not in _sessions[gid].get("human_ids", set()):
+            if not state.game_over and _active_actor(state) not in _sessions[gid].get(
+                "human_ids", set()
+            ):
                 asyncio.create_task(_auto_advance_until_human(gid))
         except Exception as e:
             print(f"[SESSION_LOAD] Error reanudando auto-advance de {gid}: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown_db():
@@ -199,6 +212,7 @@ async def shutdown_db():
     if _db_pool:
         await _db_pool.close()
         print("[DB] PostgreSQL pool closed")
+
 
 # Permitir requests desde Godot (localhost) y herramientas de test
 app.add_middleware(
@@ -220,13 +234,15 @@ FS_GAMES_INDEX = os.path.join("runs", "human_games_index.jsonl")
 
 # ── Persistencia de sesiones activas (sobrevive reinicios) ───────────────────
 
+
 def serialize_rng(rng: RNG) -> Dict[str, Any]:
     return {
         "seed": rng.seed,
         "last_king_d6": rng.last_king_d6,
         "last_king_d4": rng.last_king_d4,
-        "random_state": list(rng._r.getstate()) if rng._r else None
+        "random_state": list(rng._r.getstate()) if rng._r else None,
     }
+
 
 def deserialize_rng(d: Dict[str, Any]) -> RNG:
     rng = RNG(d["seed"])
@@ -237,6 +253,7 @@ def deserialize_rng(d: Dict[str, Any]) -> RNG:
         state[1] = tuple(state[1])
         rng._r.setstate(tuple(state))
     return rng
+
 
 def serialize_session(session: Dict[str, Any]) -> Dict[str, Any]:
     return {
@@ -249,8 +266,9 @@ def serialize_session(session: Dict[str, Any]) -> Dict[str, Any]:
         "bot_ids": list(session["bot_ids"]),
         "seat_claims": dict(session.get("seat_claims", {})),
         "saved_to": session.get("saved_to"),
-        "updated_at": datetime.now().isoformat()
+        "updated_at": datetime.now().isoformat(),
     }
+
 
 def deserialize_session(d: Dict[str, Any]) -> Dict[str, Any]:
     cfg = Config()
@@ -269,6 +287,7 @@ def deserialize_session(d: Dict[str, Any]) -> Dict[str, Any]:
         "saved_to": d.get("saved_to"),
     }
 
+
 def save_session_to_disk(game_id: str) -> None:
     session = _sessions.get(game_id)
     if not session:
@@ -280,6 +299,7 @@ def save_session_to_disk(game_id: str) -> None:
             json.dump(serialize_session(session), f)
     except Exception as e:
         print(f"[SESSION_SAVE] Error saving session {game_id}: {e}")
+
 
 def load_sessions_from_disk() -> None:
     path = "runs/active_sessions"
@@ -298,6 +318,7 @@ def load_sessions_from_disk() -> None:
             except Exception as e:
                 print(f"[SESSION_LOAD] Error loading session {game_id}: {e}")
 
+
 def delete_session_from_disk(game_id: str) -> None:
     try:
         path = os.path.join("runs/active_sessions", f"{game_id}.json")
@@ -305,6 +326,7 @@ def delete_session_from_disk(game_id: str) -> None:
             os.remove(path)
     except Exception as e:
         print(f"[SESSION_DELETE] Error deleting session file {game_id}: {e}")
+
 
 async def cleanup_inactive_sessions_task():
     while True:
@@ -332,6 +354,7 @@ async def cleanup_inactive_sessions_task():
 
 # ── Request models ─────────────────────────────────────────────────────────────
 
+
 class StartRequest(BaseModel):
     seed: int = 1
     players: list[str] = ["P1", "P2", "P3", "P4"]
@@ -345,7 +368,9 @@ class StartRequest(BaseModel):
     # NO usar el último modelo en disco (20260806_185139 = jitter FALSIFICADO 0/300).
     # Nota: models/ esta gitignored (artifacts locales). El .zip debe existir en disco.
     bot_policy: str = "PPO"
-    ppo_model_path: Optional[str] = "models/maskable_ppo_carcosa_final_20260805_154245.zip"
+    ppo_model_path: Optional[str] = (
+        "models/maskable_ppo_carcosa_final_20260805_154245.zip"
+    )
 
 
 class ActRequest(BaseModel):
@@ -358,11 +383,12 @@ class ActRequest(BaseModel):
 
 class ReportRequest(BaseModel):
     """Reporte de error in-app (para jugadores que no usan GitHub)."""
+
     description: str
-    category: str = "otro"          # regla | visual | interfaz | otro
+    category: str = "otro"  # regla | visual | interfaz | otro
     game_id: Optional[str] = None
     client_id: Optional[str] = None
-    context: Dict[str, Any] = {}    # capturado automáticamente por el frontend
+    context: Dict[str, Any] = {}  # capturado automáticamente por el frontend
 
 
 class ClaimRequest(BaseModel):
@@ -379,6 +405,7 @@ class ClaimRequest(BaseModel):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _get_session(game_id: str) -> Dict[str, Any]:
     session = _sessions.get(game_id)
@@ -413,7 +440,9 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
-def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _state_summary(
+    state: GameState, session: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Resumen serializable del estado para la respuesta API."""
     cfg = (session or {}).get("cfg") or Config()
 
@@ -434,7 +463,9 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
             "shield": getattr(p, "shield", 0),
             "at_minus5": getattr(p, "at_minus5", False),
             "free_move_used_this_turn": getattr(p, "free_move_used_this_turn", False),
-            "double_roll_used_this_turn": getattr(p, "double_roll_used_this_turn", False),
+            "double_roll_used_this_turn": getattr(
+                p, "double_roll_used_this_turn", False
+            ),
             "soulbound_items": list(getattr(p, "soulbound_items", [])),
             "object_charges": dict(getattr(p, "object_charges", {})),
             "object_slots_penalty": getattr(p, "object_slots_penalty", 0),
@@ -453,7 +484,9 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
                 "monster_id": str(m.monster_id),
                 "room": str(m.room),
                 # Floor is encoded in room name: "F1_R2" → floor 1
-                "floor": int(str(m.room).split("_")[0][1:]) if str(m.room).startswith("F") else 1,
+                "floor": int(str(m.room).split("_")[0][1:])
+                if str(m.room).startswith("F")
+                else 1,
             }
             for m in state.monsters
         ],
@@ -465,7 +498,9 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
                 "deck": {
                     "cards": [str(c) for c in r.deck.cards],
                     "top": r.deck.top,
-                } if r.deck else None
+                }
+                if r.deck
+                else None,
             }
             for rid, r in state.rooms.items()
         },
@@ -473,12 +508,16 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
         "motemey_deck": {
             "cards": [str(c) for c in state.motemey_deck.cards],
             "top": state.motemey_deck.top,
-        } if state.motemey_deck else None,
+        }
+        if state.motemey_deck
+        else None,
         "king_floor": state.king_floor,
         "action_log": _json_safe(list(state.action_log)),
         # Estado global que el frontend necesita para render fiel al canon
         "flags": _json_safe(dict(state.flags)),
-        "pending_motemey_choice": _json_safe(state.pending_motemey_choice) if state.pending_motemey_choice else None,
+        "pending_motemey_choice": _json_safe(state.pending_motemey_choice)
+        if state.pending_motemey_choice
+        else None,
         "movement_blocked_players": [str(x) for x in state.movement_blocked_players],
         "tue_tue_revelations": state.tue_tue_revelations,
         "salon_belleza_uses": state.salon_belleza_uses,
@@ -487,11 +526,19 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
         "keys_destroyed": state.keys_destroyed,
         "keys_total": getattr(cfg, "KEYS_TOTAL", 6),
         "keys_to_win": getattr(cfg, "KEYS_TO_WIN", 4),
-        "ring_activated_by": str(state.ring_activated_by) if state.ring_activated_by else None,
-        "chambers_book_holder": str(state.chambers_book_holder) if state.chambers_book_holder else None,
+        "ring_activated_by": str(state.ring_activated_by)
+        if state.ring_activated_by
+        else None,
+        "chambers_book_holder": str(state.chambers_book_holder)
+        if state.chambers_book_holder
+        else None,
         "chambers_tales_attached": state.chambers_tales_attached,
-        "taberna_used_this_turn": {str(k): bool(v) for k, v in state.taberna_used_this_turn.items()},
-        "armory_storage": {str(k): [str(i) for i in v] for k, v in state.armory_storage.items()},
+        "taberna_used_this_turn": {
+            str(k): bool(v) for k, v in state.taberna_used_this_turn.items()
+        },
+        "armory_storage": {
+            str(k): [str(i) for i in v] for k, v in state.armory_storage.items()
+        },
         # Escaleras por piso: sin esto el frontend no puede renderizar la conectividad
         # vertical canónica (canon 4.2). {"1": "F1_R1", ...}
         "stairs": {str(f): str(rid) for f, rid in state.stairs.items()},
@@ -511,7 +558,11 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
         # Acción más reciente (para el visualizador de red en vivo, línea [092])
         la = session.get("last_action")
         if la is not None:
-            summary["last_action"] = {"actor": la.get("actor"), "type": la.get("type"), "data": la.get("data", {})}
+            summary["last_action"] = {
+                "actor": la.get("actor"),
+                "type": la.get("type"),
+                "data": la.get("data", {}),
+            }
         # [LIVE-ACT] Activaciones del último paso de bot (PPO). Se envía por WS
         # para que el frontend pinte el "cerebro" del bot en tiempo real.
         la_act = session.get("last_activations")
@@ -527,6 +578,7 @@ def _state_summary(state: GameState, session: Optional[Dict[str, Any]] = None) -
 
 # ── WebSocket broadcast helper ───────────────────────────────────────────────────
 
+
 async def _broadcast_state(game_id: str) -> None:
     """Envía el estado actual a todas las conexiones WS de la partida."""
     session = _sessions.get(game_id)
@@ -534,11 +586,13 @@ async def _broadcast_state(game_id: str) -> None:
     if not session or not connections:
         return
 
-    payload = json.dumps({
-        "type": "state_update",
-        "state": _state_summary(session["state"], session),
-        "active_player": _active_actor(session["state"]),
-    })
+    payload = json.dumps(
+        {
+            "type": "state_update",
+            "state": _state_summary(session["state"], session),
+            "active_player": _active_actor(session["state"]),
+        }
+    )
 
     dead = set()
     for ws in list(connections):
@@ -552,7 +606,14 @@ async def _broadcast_state(game_id: str) -> None:
 
 # ── Auto-advance ──────────────────────────────────────────────────────────────
 
-def _single_step(session: Dict[str, Any], actor: str, action_type: str, action_data: Dict[str, Any], policy_label: str) -> GameState:
+
+def _single_step(
+    session: Dict[str, Any],
+    actor: str,
+    action_type: str,
+    action_data: Dict[str, Any],
+    policy_label: str,
+) -> GameState:
     """Ejecuta un step, registra la transición, retorna el nuevo estado."""
     state: GameState = session["state"]
     rng: RNG = session["rng"]
@@ -563,19 +624,28 @@ def _single_step(session: Dict[str, Any], actor: str, action_type: str, action_d
     action = Action(actor=actor, type=at, data=action_data)
     next_state = step(state, action, rng, cfg)
 
-    action_dict: Dict[str, Any] = {"actor": actor, "type": action_type, "data": action_data}
+    action_dict: Dict[str, Any] = {
+        "actor": actor,
+        "type": action_type,
+        "data": action_data,
+    }
     if action_type == "KING_ENDROUND" and rng.last_king_d6 is not None:
         action_dict["d6"] = rng.last_king_d6
         # Anotar d6/d4 en la entrada del action_log para que el frontend pueda
         # desglosar la fase del Rey (el engine no los incluye en su log).
-        if next_state.action_log and next_state.action_log[-1].get("type") == "KING_ENDROUND":
+        if (
+            next_state.action_log
+            and next_state.action_log[-1].get("type") == "KING_ENDROUND"
+        ):
             next_state.action_log[-1]["d6"] = rng.last_king_d6
             if rng.last_king_d4 is not None:
                 next_state.action_log[-1]["d4"] = rng.last_king_d4
 
     record = transition_record(state, action_dict, next_state, cfg, step_idx)
     record["policy"] = policy_label
-    session["last_action"] = action_dict  # para el visualizador de red en vivo (línea [092])
+    session["last_action"] = (
+        action_dict  # para el visualizador de red en vivo (línea [092])
+    )
 
     session["records"].append(record)
     session["state"] = next_state
@@ -605,8 +675,10 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
     # (modelo 23.0% real, no el FALSIFICADO de jitter 20260806_185139).
     # Si se pide GOAL explícitamente en el request, se respeta (override abajo).
     bot_policy_name = "PPO"
-    model_path = getattr(session.get("start_request"), "ppo_model_path", None) or \
-        "models/maskable_ppo_carcosa_final_20260805_154245.zip"
+    model_path = (
+        getattr(session.get("start_request"), "ppo_model_path", None)
+        or "models/maskable_ppo_carcosa_final_20260805_154245.zip"
+    )
     req_bot_policy = getattr(session.get("start_request"), "bot_policy", "PPO").upper()
     if req_bot_policy == "GOAL":
         bot_policy_name = "GOAL"
@@ -616,8 +688,10 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
     try:
         ppol = get_player_policy(bot_policy_name, cfg, model_path=model_path)
     except Exception as e:
-        print(f"[AUTO_ADVANCE] No se pudo cargar policy '{bot_policy_name}': {e}. "
-              f"Usando GOAL.")
+        print(
+            f"[AUTO_ADVANCE] No se pudo cargar policy '{bot_policy_name}': {e}. "
+            f"Usando GOAL."
+        )
         ppol = get_player_policy("GOAL", cfg)
     # [LIVE-ACT] Nombres de acciones para el visualizador de activaciones
     act_names = getattr(ppol, "_action_types", None)
@@ -645,8 +719,16 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
                 action = kpol.choose(state, rng)
                 legal = get_legal_actions(state, "KING")
                 if action not in legal:
-                    action = legal[0] if legal else Action(actor="KING", type=ActionType.KING_ENDROUND, data={})
-                _single_step(session, "KING", action.type.value, action.data, "bot_king")
+                    action = (
+                        legal[0]
+                        if legal
+                        else Action(
+                            actor="KING", type=ActionType.KING_ENDROUND, data={}
+                        )
+                    )
+                _single_step(
+                    session, "KING", action.type.value, action.data, "bot_king"
+                )
             else:
                 # Bot
                 action = ppol.choose(state, rng)
@@ -655,15 +737,23 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
                 session["last_activations"] = getattr(ppol, "last_activations", None)
                 legal = get_legal_actions(state, actor)
                 if action not in legal:
-                    action = legal[0] if legal else Action(actor=actor, type=ActionType.END_TURN, data={})
+                    action = (
+                        legal[0]
+                        if legal
+                        else Action(actor=actor, type=ActionType.END_TURN, data={})
+                    )
                 _single_step(session, actor, action.type.value, action.data, "bot")
         except ValueError as e:
             # Bot eligió acción ilegal y el fallback también falló: forzar END_TURN
-            print(f"[AUTO_ADVANCE] Illegal bot action for {actor}: {e}. Forcing END_TURN.")
+            print(
+                f"[AUTO_ADVANCE] Illegal bot action for {actor}: {e}. Forcing END_TURN."
+            )
             try:
                 _single_step(session, actor, "END_TURN", {}, "bot_fallback")
             except ValueError as e2:
-                print(f"[AUTO_ADVANCE] END_TURN also illegal for {actor}: {e2}. Stopping loop.")
+                print(
+                    f"[AUTO_ADVANCE] END_TURN also illegal for {actor}: {e2}. Stopping loop."
+                )
                 break
 
         # Broadcast state after each bot action
@@ -676,6 +766,7 @@ async def _auto_advance_until_human(game_id: str, delay: float = 0.0) -> None:
 
 
 # ── Persistencia de partidas terminadas ───────────────────────────────────────
+
 
 def _fs_index_append(entry: Dict[str, Any]) -> None:
     try:
@@ -722,7 +813,8 @@ async def _persist_game(game_id: str, session: Dict[str, Any]) -> str:
     if _db_pool:
         try:
             async with _db_pool.acquire() as conn:
-                await conn.execute("""
+                await conn.execute(
+                    """
                     INSERT INTO carcosa_games (id, seed, completed_at, outcome, rounds, jsonl_data, human_players)
                     VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT (id) DO UPDATE SET
@@ -731,7 +823,15 @@ async def _persist_game(game_id: str, session: Dict[str, Any]) -> str:
                         rounds = EXCLUDED.rounds,
                         jsonl_data = EXCLUDED.jsonl_data,
                         human_players = EXCLUDED.human_players
-                """, game_id, seed, datetime.now(), state.outcome, state.round, jsonl_data, human_ids)
+                """,
+                    game_id,
+                    seed,
+                    datetime.now(),
+                    state.outcome,
+                    state.round,
+                    jsonl_data,
+                    human_ids,
+                )
             saved_to = f"postgresql://carcosa_games/{game_id}"
             print(f"[DB] Game {game_id} saved to PostgreSQL")
         except Exception as e:
@@ -744,16 +844,18 @@ async def _persist_game(game_id: str, session: Dict[str, Any]) -> str:
         path = os.path.join(out_dir, "human.jsonl")
         write_jsonl(path, session["records"])
         saved_to = path
-        _fs_index_append({
-            "id": game_id,
-            "seed": seed,
-            "completed_at": datetime.now().isoformat(),
-            "outcome": state.outcome,
-            "rounds": state.round,
-            "human_players": human_ids,
-            "steps": len(session["records"]),
-            "path": path,
-        })
+        _fs_index_append(
+            {
+                "id": game_id,
+                "seed": seed,
+                "completed_at": datetime.now().isoformat(),
+                "outcome": state.outcome,
+                "rounds": state.round,
+                "human_players": human_ids,
+                "steps": len(session["records"]),
+                "path": path,
+            }
+        )
         print(f"[FS] Game {game_id} saved to {path}")
 
     session["saved_to"] = saved_to
@@ -761,6 +863,7 @@ async def _persist_game(game_id: str, session: Dict[str, Any]) -> str:
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
 
 @app.post("/start")
 async def start_game(req: StartRequest) -> Dict[str, Any]:
@@ -783,6 +886,7 @@ async def start_game(req: StartRequest) -> Dict[str, Any]:
     draw_mode = (req.draw_mode or "").upper()
     if draw_mode in ("FIXED", "RANDOM_UNIQUE", "RANDOM_WITH_REPLACEMENT"):
         import dataclasses
+
         cfg = dataclasses.replace(cfg, ROLE_DRAW_MODE=draw_mode)
 
     human_ids: set = set()
@@ -816,6 +920,7 @@ async def start_game(req: StartRequest) -> Dict[str, Any]:
     if draw_mode == "FIXED" and explicit_roles:
         from engine.roles import get_sanity_max, get_starting_items
         from engine.catalogs.roles import ROLE_CATALOG
+
         for pid_obj, p in state.players.items():
             role = explicit_roles.get(str(pid_obj))
             if role and role in ROLE_CATALOG and role != p.role_id:
@@ -834,7 +939,9 @@ async def start_game(req: StartRequest) -> Dict[str, Any]:
     # Validación: debe haber al menos un jugador (humano o bot).
     # Permitimos 0 humanos (partida 100% bots = modo espectador en vivo).
     if not human_ids and not bot_ids:
-        raise HTTPException(status_code=400, detail="Debe haber al menos un jugador (humano o bot).")
+        raise HTTPException(
+            status_code=400, detail="Debe haber al menos un jugador (humano o bot)."
+        )
 
     seat_claims: Dict[str, str] = {}
     if req.client_id:
@@ -895,12 +1002,22 @@ async def claim_seats(req: ClaimRequest) -> Dict[str, Any]:
     else:
         for seat in req.seats:
             if seat not in human_ids:
-                raise HTTPException(status_code=400, detail=f"El asiento {seat} no es humano en esta partida.")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"El asiento {seat} no es humano en esta partida.",
+                )
             owner = claims.get(seat)
             if owner and owner != req.client_id and not req.takeover:
-                raise HTTPException(status_code=409, detail=f"El asiento {seat} ya está ocupado por otro jugador.")
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"El asiento {seat} ya está ocupado por otro jugador.",
+                )
         if mode == "replace":
-            for seat in [s for s, c in claims.items() if c == req.client_id and s not in req.seats]:
+            for seat in [
+                s
+                for s, c in claims.items()
+                if c == req.client_id and s not in req.seats
+            ]:
                 del claims[seat]
         for seat in req.seats:
             claims[seat] = req.client_id
@@ -962,7 +1079,7 @@ async def act(req: ActRequest) -> Dict[str, Any]:
     if req.actor not in valid_actors:
         raise HTTPException(
             status_code=403,
-            detail=f"Actor '{req.actor}' no pertenece a esta partida. Actores válidos: {sorted(valid_actors)}"
+            detail=f"Actor '{req.actor}' no pertenece a esta partida. Actores válidos: {sorted(valid_actors)}",
         )
 
     # Enforcement de asientos: un asiento reclamado solo puede ser jugado por su dueño.
@@ -971,7 +1088,7 @@ async def act(req: ActRequest) -> Dict[str, Any]:
     if owner and owner != req.client_id:
         raise HTTPException(
             status_code=403,
-            detail=f"El asiento {req.actor} está controlado por otro jugador."
+            detail=f"El asiento {req.actor} está controlado por otro jugador.",
         )
 
     if state.game_over:
@@ -987,7 +1104,9 @@ async def act(req: ActRequest) -> Dict[str, Any]:
 
     # Ejecutar la acción del humano (step() valida legalidad)
     try:
-        next_state = _single_step(session, req.actor, req.action_type, req.action_data, "human")
+        _single_step(
+            session, req.actor, req.action_type, req.action_data, "human"
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Acción ilegal: {e}")
 
@@ -1053,6 +1172,7 @@ def setup_preview(seed: int, draw_mode: str = "") -> Dict[str, Any]:
     dm = (draw_mode or "").upper()
     if dm in ("FIXED", "RANDOM_UNIQUE", "RANDOM_WITH_REPLACEMENT"):
         import dataclasses
+
         cfg = dataclasses.replace(cfg, ROLE_DRAW_MODE=dm)
     try:
         state = make_smoke_state(seed=seed, cfg=cfg)
@@ -1083,7 +1203,9 @@ async def submit_report(req: ReportRequest) -> Dict[str, Any]:
     """
     description = (req.description or "").strip()
     if not description:
-        raise HTTPException(status_code=400, detail="El reporte necesita una descripción.")
+        raise HTTPException(
+            status_code=400, detail="El reporte necesita una descripción."
+        )
     if len(description) > 4000:
         description = description[:4000]
 
@@ -1093,7 +1215,9 @@ async def submit_report(req: ReportRequest) -> Dict[str, Any]:
     # por un marcador (nunca se corta a media cadena — eso rompía /reports).
     context_json = json.dumps(_json_safe(req.context or {}), ensure_ascii=False)
     if len(context_json) > 60_000:
-        context_json = json.dumps({"_truncated": True, "original_size": len(context_json)})
+        context_json = json.dumps(
+            {"_truncated": True, "original_size": len(context_json)}
+        )
     context_stored = json.loads(context_json)
 
     report_id = str(uuid.uuid4())[:8]
@@ -1108,8 +1232,13 @@ async def submit_report(req: ReportRequest) -> Dict[str, Any]:
                     INSERT INTO carcosa_reports (id, game_id, client_id, category, description, context, created_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7)
                     """,
-                    report_id, req.game_id, req.client_id,
-                    category, description, context_json, created_at,
+                    report_id,
+                    req.game_id,
+                    req.client_id,
+                    category,
+                    description,
+                    context_json,
+                    created_at,
                 )
             saved_to = "postgresql://carcosa_reports"
         except Exception as e:
@@ -1119,20 +1248,30 @@ async def submit_report(req: ReportRequest) -> Dict[str, Any]:
         try:
             os.makedirs("runs", exist_ok=True)
             with open(FS_REPORTS_PATH, "a", encoding="utf-8") as f:
-                f.write(json.dumps({
-                    "id": report_id,
-                    "game_id": req.game_id,
-                    "client_id": req.client_id,
-                    "category": category,
-                    "description": description,
-                    "context": context_stored,
-                    "created_at": created_at.isoformat(),
-                }, ensure_ascii=False) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "id": report_id,
+                            "game_id": req.game_id,
+                            "client_id": req.client_id,
+                            "category": category,
+                            "description": description,
+                            "context": context_stored,
+                            "created_at": created_at.isoformat(),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
             saved_to = FS_REPORTS_PATH
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"No se pudo guardar el reporte: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"No se pudo guardar el reporte: {e}"
+            )
 
-    print(f"[REPORT] {report_id} ({req.category}) game={req.game_id}: {description[:80]}")
+    print(
+        f"[REPORT] {report_id} ({req.category}) game={req.game_id}: {description[:80]}"
+    )
     return {"report_id": report_id, "saved_to": saved_to}
 
 
@@ -1153,17 +1292,25 @@ async def list_reports(limit: int = 100) -> Dict[str, Any]:
     if _db_pool:
         try:
             async with _db_pool.acquire() as conn:
-                rows = await conn.fetch("""
+                rows = await conn.fetch(
+                    """
                     SELECT id, game_id, client_id, category, description, context, created_at
                     FROM carcosa_reports ORDER BY created_at DESC LIMIT $1
-                """, limit)
+                """,
+                    limit,
+                )
             return {
                 "reports": [
                     {
-                        "id": r["id"], "game_id": r["game_id"], "client_id": r["client_id"],
-                        "category": r["category"], "description": r["description"],
+                        "id": r["id"],
+                        "game_id": r["game_id"],
+                        "client_id": r["client_id"],
+                        "category": r["category"],
+                        "description": r["description"],
                         "context": _safe_ctx(r["context"]),
-                        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                        "created_at": r["created_at"].isoformat()
+                        if r["created_at"]
+                        else None,
                     }
                     for r in rows
                 ],
@@ -1202,20 +1349,28 @@ async def list_games(limit: int = 50, offset: int = 0) -> Dict[str, Any]:
     """Lista partidas guardadas (PostgreSQL, o índice filesystem como fallback)."""
     if _db_pool:
         async with _db_pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT id, seed, created_at, completed_at, outcome, rounds, human_players
                 FROM carcosa_games
                 ORDER BY created_at DESC
                 LIMIT $1 OFFSET $2
-            """, limit, offset)
+            """,
+                limit,
+                offset,
+            )
             total = await conn.fetchval("SELECT COUNT(*) FROM carcosa_games")
         return {
             "games": [
                 {
                     "id": row["id"],
                     "seed": row["seed"],
-                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                    "completed_at": row["completed_at"].isoformat() if row["completed_at"] else None,
+                    "created_at": row["created_at"].isoformat()
+                    if row["created_at"]
+                    else None,
+                    "completed_at": row["completed_at"].isoformat()
+                    if row["completed_at"]
+                    else None,
                     "outcome": row["outcome"],
                     "rounds": row["rounds"],
                     "human_players": row["human_players"],
@@ -1230,7 +1385,7 @@ async def list_games(limit: int = 50, offset: int = 0) -> Dict[str, Any]:
 
     entries = _fs_index_read()
     return {
-        "games": entries[offset:offset + limit],
+        "games": entries[offset : offset + limit],
         "total": len(entries),
         "limit": limit,
         "offset": offset,
@@ -1243,14 +1398,19 @@ async def download_game(game_id: str):
     """Descarga el JSONL de una partida guardada (PG o filesystem)."""
     if _db_pool:
         async with _db_pool.acquire() as conn:
-            row = await conn.fetchrow("""
+            row = await conn.fetchrow(
+                """
                 SELECT jsonl_data FROM carcosa_games WHERE id = $1
-            """, game_id)
+            """,
+                game_id,
+            )
         if row:
             return Response(
                 content=row["jsonl_data"],
                 media_type="application/x-ndjson",
-                headers={"Content-Disposition": f"attachment; filename={game_id}.jsonl"}
+                headers={
+                    "Content-Disposition": f"attachment; filename={game_id}.jsonl"
+                },
             )
 
     entry = next((e for e in _fs_index_read() if e.get("id") == game_id), None)
@@ -1266,6 +1426,7 @@ async def download_game(game_id: str):
 
 # ── WebSocket endpoint ─────────────────────────────────────────────────────────
 
+
 @app.websocket("/ws/{game_id}/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: str, player_id: str):
     """
@@ -1278,7 +1439,15 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str, player_id: str)
         # Partida inexistente (expirada o server reiniciado sin sesión): avisar y cerrar
         # en vez de dejar al cliente esperando updates que nunca llegarán.
         try:
-            await websocket.send_text(json.dumps({"type": "error", "code": "game_not_found", "detail": f"Partida {game_id} no existe."}))
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "code": "game_not_found",
+                        "detail": f"Partida {game_id} no existe.",
+                    }
+                )
+            )
             await websocket.close()
         except Exception:
             pass
@@ -1290,17 +1459,21 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str, player_id: str)
     _ws_connections[game_id].add(websocket)
 
     # Send current state immediately upon connection
-    await websocket.send_text(json.dumps({
-        "type": "state_update",
-        "state": _state_summary(session["state"], session),
-        "active_player": _active_actor(session["state"]),
-    }))
+    await websocket.send_text(
+        json.dumps(
+            {
+                "type": "state_update",
+                "state": _state_summary(session["state"], session),
+                "active_player": _active_actor(session["state"]),
+            }
+        )
+    )
 
     try:
         while True:
             try:
                 # Esperar mensajes del cliente o mantener conexión viva con timeouts
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=20.0)
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=20.0)  # noqa: F841
             except asyncio.TimeoutError:
                 # Enviar ping al cliente
                 await websocket.send_text(json.dumps({"type": "ping"}))

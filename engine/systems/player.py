@@ -13,7 +13,11 @@ from engine.objects import use_object
 from engine.roles import brawler_blunt_free
 from engine.rng import RNG
 from engine.state import GameState
-from engine.systems.rooms import enter_room_and_reveal, handle_hallway_peek_action, update_umbral_flags
+from engine.systems.rooms import (
+    enter_room_and_reveal,
+    handle_hallway_peek_action,
+    update_umbral_flags,
+)
 from engine.systems.sacrifice import apply_sacrifice_choice, apply_minus5_transitions
 from engine.systems.sanity import apply_sanity_loss, heal_player
 from engine.types import PlayerId, RoomId
@@ -38,7 +42,9 @@ def _cap_actions_for_ice_servant(state: GameState, pid: PlayerId) -> None:
         state.remaining_actions[pid] = min(state.remaining_actions.get(pid, 0), 1)
 
 
-def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config) -> GameState:
+def apply_player_action(
+    state: GameState, action: Action, rng: RNG, cfg: Config
+) -> GameState:
     from engine import transition
 
     s = state
@@ -84,13 +90,22 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
 
     elif action.type == ActionType.ESCAPE_TRAPPED:
         from engine.roles import can_use_double_roll
+
         if can_use_double_roll(p, p.double_roll_used_this_turn):
             d6 = rng.randint(1, 6) + rng.randint(1, 6)
             p.double_roll_used_this_turn = True
         else:
             d6 = rng.randint(1, 6)
         total = d6 + p.sanity
-        s.action_log.append({"event": "ESCAPE_ATTEMPT", "d6": d6, "sanity": p.sanity, "total": total, "success": total >= 3})
+        s.action_log.append(
+            {
+                "event": "ESCAPE_ATTEMPT",
+                "d6": d6,
+                "sanity": p.sanity,
+                "total": total,
+                "success": total >= 3,
+            }
+        )
 
         if total >= 3:
             trapped_st = None
@@ -99,7 +114,11 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
                     trapped_st = st
                     break
 
-            p.statuses = [st for st in p.statuses if st.status_id not in ("TRAPPED", "TRAPPED_SPIDER")]
+            p.statuses = [
+                st
+                for st in p.statuses
+                if st.status_id not in ("TRAPPED", "TRAPPED_SPIDER")
+            ]
 
             if trapped_st and trapped_st.metadata.get("source_monster_id"):
                 mid = trapped_st.metadata["source_monster_id"]
@@ -133,7 +152,9 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
             s.chambers_tales_attached += 1
             s.flags[f"TALE_ATTACHED_{tale_id}"] = True
             s.king_vanished_turns = s.chambers_tales_attached
-            s.action_log.append({"event": "KING_VANISHED", "turns": s.chambers_tales_attached})
+            s.action_log.append(
+                {"event": "KING_VANISHED", "turns": s.chambers_tales_attached}
+            )
 
     elif action.type == ActionType.USE_HEALER_HEAL:
         apply_sanity_loss(s, p, 1, source="HEALER_ABILITY", cfg=cfg)
@@ -159,14 +180,18 @@ def apply_player_action(state: GameState, action: Action, rng: RNG, cfg: Config)
             if transition.consume_object(s, pid, "PORTABLE_STAIRS"):
                 from_room = p.room
                 p.room = corridor_id(target)
-                enter_room_and_reveal(s, pid, p.room, from_room=from_room, cfg=cfg, rng=rng)
+                enter_room_and_reveal(
+                    s, pid, p.room, from_room=from_room, cfg=cfg, rng=rng
+                )
 
     cost_override: Optional[int] = None
     if action.type == ActionType.USE_BLUNT:
         if brawler_blunt_free(p):
             cost_override = 0
 
-    cost = transition._consume_action_if_needed(action.type, cost_override=cost_override)
+    cost = transition._consume_action_if_needed(
+        action.type, cost_override=cost_override
+    )
 
     if action.type == ActionType.MOVE and getattr(p, "role_id", "") == "SCOUT":
         if not p.free_move_used_this_turn:

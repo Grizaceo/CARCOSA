@@ -101,7 +101,9 @@ def make_game_state(
     if remaining_actions is None:
         remaining_actions_ids = {pid: 2 for pid in turn_order_ids}
     else:
-        remaining_actions_ids = {_to_player_id(pid): count for pid, count in remaining_actions.items()}
+        remaining_actions_ids = {
+            _to_player_id(pid): count for pid, count in remaining_actions.items()
+        }
 
     state = GameState(
         round=round,

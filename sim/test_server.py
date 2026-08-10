@@ -7,6 +7,7 @@ Ejecutar con el servidor corriendo en otro terminal:
 Luego en otro terminal:
     cd /ruta/al/proyecto && python3 sim/test_server.py
 """
+
 import json
 import sys
 import urllib.request
@@ -74,12 +75,16 @@ def main():
     # 5. Apply first action
     first_action = actions[0]
     print(f"\n[5] POST /act  actor={actor} type={first_action['type']}")
-    r = req("POST", "/act", {
-        "game_id": game_id,
-        "actor": actor,
-        "action_type": first_action["type"],
-        "action_data": first_action["data"],
-    })
+    r = req(
+        "POST",
+        "/act",
+        {
+            "game_id": game_id,
+            "actor": actor,
+            "action_type": first_action["type"],
+            "action_data": first_action["data"],
+        },
+    )
     print(f"  done={r['done']} outcome={r['outcome']}")
     print(f"  new active_actor: {r['state']['active_actor']}")
 

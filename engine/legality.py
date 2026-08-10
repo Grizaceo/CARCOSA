@@ -26,9 +26,11 @@ def _get_special_room_type(state: GameState, room_id: RoomId) -> Optional[str]:
     if room_state is None:
         return None
     # Solo considerar si está revelada y no destruida
-    if (room_state.special_card_id and
-        room_state.special_revealed and
-        not room_state.special_destroyed):
+    if (
+        room_state.special_card_id
+        and room_state.special_revealed
+        and not room_state.special_destroyed
+    ):
         return normalize_room_type(room_state.special_card_id)
     return None
 
@@ -40,7 +42,7 @@ def _current_player_id(state: GameState) -> PlayerId:
 def _is_movement_blocked(state: GameState, pid: PlayerId) -> bool:
     """
     Verifica si el jugador tiene movimiento bloqueado.
-    
+
     MOVIMIENTO_BLOQUEADO: Aplicado por Reina Helada en turno de entrada.
     Solo afecta a jugadores que estaban presentes cuando entró.
     """
@@ -95,7 +97,9 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
     # Debe elegir entre SACRIFICE o ACCEPT_SACRIFICE.
     pending_sacrifice_pid = state.flags.get("PENDING_SACRIFICE_CHECK")
     if isinstance(pending_sacrifice_pid, list):
-        pending_sacrifice_pid = pending_sacrifice_pid[0] if pending_sacrifice_pid else None
+        pending_sacrifice_pid = (
+            pending_sacrifice_pid[0] if pending_sacrifice_pid else None
+        )
     if pending_sacrifice_pid:
         if actor == pending_sacrifice_pid:
             p = state.players[PlayerId(actor)]
@@ -108,15 +112,35 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                 new_slots = max(0, obj_slots - 1)
                 if len(non_soul) > new_slots:
                     for obj in non_soul:
-                        options.append(Action(actor=actor, type=ActionType.SACRIFICE, data={"mode": "OBJECT_SLOT", "discard_object_id": obj}))
+                        options.append(
+                            Action(
+                                actor=actor,
+                                type=ActionType.SACRIFICE,
+                                data={"mode": "OBJECT_SLOT", "discard_object_id": obj},
+                            )
+                        )
                 else:
-                    options.append(Action(actor=actor, type=ActionType.SACRIFICE, data={"mode": "OBJECT_SLOT"}))
+                    options.append(
+                        Action(
+                            actor=actor,
+                            type=ActionType.SACRIFICE,
+                            data={"mode": "OBJECT_SLOT"},
+                        )
+                    )
 
             if p.sanity_max is not None and p.sanity_max > -1:
-                options.append(Action(actor=actor, type=ActionType.SACRIFICE, data={"mode": "SANITY_MAX"}))
+                options.append(
+                    Action(
+                        actor=actor,
+                        type=ActionType.SACRIFICE,
+                        data={"mode": "SANITY_MAX"},
+                    )
+                )
 
             # Always allow ACCEPT
-            options.append(Action(actor=actor, type=ActionType.ACCEPT_SACRIFICE, data={}))
+            options.append(
+                Action(actor=actor, type=ActionType.ACCEPT_SACRIFICE, data={})
+            )
             return options
         else:
             return []
@@ -126,15 +150,21 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         acts = []
         p = state.players[PlayerId(actor)]
         current_floor = floor_of(p.room)
-        
+
         # Add PEEK action for each room on this floor
         for i in range(1, 5):
             rid = RoomId(f"F{current_floor}_R{i}")
             if rid in state.rooms:
-                 deck = active_deck_for_room(state, rid)
-                 if deck and deck.remaining() > 0:
-                     acts.append(Action(actor=actor, type=ActionType.PEEK_ROOM_DECK, data={"room_id": str(rid)}))
-        
+                deck = active_deck_for_room(state, rid)
+                if deck and deck.remaining() > 0:
+                    acts.append(
+                        Action(
+                            actor=actor,
+                            type=ActionType.PEEK_ROOM_DECK,
+                            data={"room_id": str(rid)},
+                        )
+                    )
+
         # Always allow SKIP
         acts.append(Action(actor=actor, type=ActionType.SKIP_PEEK, data={}))
         return acts
@@ -142,13 +172,25 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
     # Motemey pending choice: solo CHOOSE es legal
     if state.pending_motemey_choice and actor in state.pending_motemey_choice:
         acts = [
-            Action(actor=actor, type=ActionType.USE_MOTEMEY_BUY_CHOOSE, data={"chosen_index": 0}),
-            Action(actor=actor, type=ActionType.USE_MOTEMEY_BUY_CHOOSE, data={"chosen_index": 1}),
+            Action(
+                actor=actor,
+                type=ActionType.USE_MOTEMEY_BUY_CHOOSE,
+                data={"chosen_index": 0},
+            ),
+            Action(
+                actor=actor,
+                type=ActionType.USE_MOTEMEY_BUY_CHOOSE,
+                data={"chosen_index": 1},
+            ),
             Action(actor=actor, type=ActionType.END_TURN, data={}),
         ]
         # SANIDAD puede descartarse incluso en este estado
-        if actor in state.players and has_status(state.players[PlayerId(actor)], "SANIDAD"):
-            acts.insert(0, Action(actor=actor, type=ActionType.DISCARD_SANIDAD, data={}))
+        if actor in state.players and has_status(
+            state.players[PlayerId(actor)], "SANIDAD"
+        ):
+            acts.insert(
+                0, Action(actor=actor, type=ActionType.DISCARD_SANIDAD, data={})
+            )
         return acts
 
     if state.phase == "PLAYER":
@@ -160,11 +202,13 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         if state.remaining_actions.get(pid, 0) <= 0:
             acts = [Action(actor=str(pid), type=ActionType.END_TURN, data={})]
             if has_status(p, "SANIDAD"):
-                acts.insert(0, Action(actor=str(pid), type=ActionType.DISCARD_SANIDAD, data={}))
+                acts.insert(
+                    0, Action(actor=str(pid), type=ActionType.DISCARD_SANIDAD, data={})
+                )
             return acts
 
         acts: List[Action] = []
-        
+
         # CANON Fix: TRAPPED State blocks ALL actions except Escape
         if has_status(p, "TRAPPED"):
             # Solo permitir ESCAPE_TRAPPED
@@ -177,7 +221,9 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         for nb in neighbors(p.room):
             # MOVIMIENTO_BLOQUEADO y PARANOIA bloquean movimiento
             if movement_allowed and _is_paranoia_move_legal(state, pid, RoomId(nb)):
-                acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(nb)}))
+                acts.append(
+                    Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(nb)})
+                )
 
         # MOVE especial: si estás en la habitación que tiene escaleras en tu piso,
         # puedes moverte a la habitación con escalera del piso arriba/abajo (según canon P0).
@@ -187,28 +233,56 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                 dest_stair = state.stairs.get(f - 1)
                 if dest_stair:
                     # MOVIMIENTO_BLOQUEADO y PARANOIA bloquean movimiento
-                    if movement_allowed and _is_paranoia_move_legal(state, pid, dest_stair):
-                        acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
+                    if movement_allowed and _is_paranoia_move_legal(
+                        state, pid, dest_stair
+                    ):
+                        acts.append(
+                            Action(
+                                actor=str(pid),
+                                type=ActionType.MOVE,
+                                data={"to": str(dest_stair)},
+                            )
+                        )
             if f < 3:
                 dest_stair = state.stairs.get(f + 1)
                 if dest_stair:
                     # MOVIMIENTO_BLOQUEADO y PARANOIA bloquean movimiento
-                    if movement_allowed and _is_paranoia_move_legal(state, pid, dest_stair):
-                        acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest_stair)}))
+                    if movement_allowed and _is_paranoia_move_legal(
+                        state, pid, dest_stair
+                    ):
+                        acts.append(
+                            Action(
+                                actor=str(pid),
+                                type=ActionType.MOVE,
+                                data={"to": str(dest_stair)},
+                            )
+                        )
 
         # MOVE especial: escaleras temporales (TREASURE_STAIRS) permiten subir/bajar al mismo cuarto
         if _temp_stairs_active(state, p.room, pid):
             suffix = str(p.room).split("_", 1)[1]
             if f > 1:
-                dest = RoomId(f"F{f-1}_{suffix}")
+                dest = RoomId(f"F{f - 1}_{suffix}")
                 if dest in state.rooms:
                     if movement_allowed and _is_paranoia_move_legal(state, pid, dest):
-                        acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest)}))
+                        acts.append(
+                            Action(
+                                actor=str(pid),
+                                type=ActionType.MOVE,
+                                data={"to": str(dest)},
+                            )
+                        )
             if f < 3:
-                dest = RoomId(f"F{f+1}_{suffix}")
+                dest = RoomId(f"F{f + 1}_{suffix}")
                 if dest in state.rooms:
                     if movement_allowed and _is_paranoia_move_legal(state, pid, dest):
-                        acts.append(Action(actor=str(pid), type=ActionType.MOVE, data={"to": str(dest)}))
+                        acts.append(
+                            Action(
+                                actor=str(pid),
+                                type=ActionType.MOVE,
+                                data={"to": str(dest)},
+                            )
+                        )
 
         # SEARCH solo en habitación con mazo activo
         deck = active_deck_for_room(state, p.room)
@@ -228,16 +302,18 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
                     if getattr(other, "role_id", "") == "TANK":
                         can_meditate = False  # Tank bloquea meditación de otros
                         break
-        
+
         if can_meditate:
             acts.append(Action(actor=str(pid), type=ActionType.MEDITATE, data={}))
 
         # SANIDAD: puede descartarse gratis para eliminar todos los estados
         if has_status(p, "SANIDAD"):
-            acts.append(Action(actor=str(pid), type=ActionType.DISCARD_SANIDAD, data={}))
+            acts.append(
+                Action(actor=str(pid), type=ActionType.DISCARD_SANIDAD, data={})
+            )
 
         if any(st.status_id == "TRAPPED" for st in p.statuses):
-             acts.append(Action(actor=str(pid), type=ActionType.ESCAPE_TRAPPED, data={}))
+            acts.append(Action(actor=str(pid), type=ActionType.ESCAPE_TRAPPED, data={}))
 
         # ===== B2: MOTEMEY (buy/sell) =====
         # Disponible si actor está en habitación MOTEMEY o evento es activo
@@ -246,15 +322,27 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         if is_in_motemey or state.motemey_event_active:
             # Paso 1: Iniciar compra (requiere sanidad >= 2)
             if p.sanity >= 2 and state.motemey_deck.remaining() >= 2:
-                acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_START, data={}))
+                acts.append(
+                    Action(
+                        actor=str(pid), type=ActionType.USE_MOTEMEY_BUY_START, data={}
+                    )
+                )
                 # Legacy one-step buy (compatibilidad con clientes antiguos)
-                acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY, data={}))
+                acts.append(
+                    Action(actor=str(pid), type=ActionType.USE_MOTEMEY_BUY, data={})
+                )
 
             # SELL: requiere tener al menos un objeto (siempre disponible)
             if p.objects:
                 for item in p.objects:
                     if not is_soulbound(item):
-                        acts.append(Action(actor=str(pid), type=ActionType.USE_MOTEMEY_SELL, data={"item_name": item}))
+                        acts.append(
+                            Action(
+                                actor=str(pid),
+                                type=ActionType.USE_MOTEMEY_SELL,
+                                data={"item_name": item},
+                            )
+                        )
 
         # ===== B4: PUERTAS AMARILLO =====
         # Disponible si actor está en habitación PUERTAS y existe al menos otro jugador
@@ -265,7 +353,13 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
 
         if is_in_puertas and other_players:
             for target_pid in other_players:
-                acts.append(Action(actor=str(pid), type=ActionType.USE_YELLOW_DOORS, data={"target_player": str(target_pid)}))
+                acts.append(
+                    Action(
+                        actor=str(pid),
+                        type=ActionType.USE_YELLOW_DOORS,
+                        data={"target_player": str(target_pid)},
+                    )
+                )
 
         # ===== B5: TABERNA =====
         # CANON: Solo habitaciones (NO pasillos), 2 distintas, 1x turno
@@ -278,9 +372,15 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             valid_rooms = [rid for rid in state.rooms.keys() if not is_corridor(rid)]
             if len(valid_rooms) >= 2:
                 for i, room_a in enumerate(valid_rooms):
-                    for room_b in valid_rooms[i+1:]:
+                    for room_b in valid_rooms[i + 1 :]:
                         if room_a != room_b:
-                            acts.append(Action(actor=str(pid), type=ActionType.USE_TABERNA_ROOMS, data={"room_a": str(room_a), "room_b": str(room_b)}))
+                            acts.append(
+                                Action(
+                                    actor=str(pid),
+                                    type=ActionType.USE_TABERNA_ROOMS,
+                                    data={"room_a": str(room_a), "room_b": str(room_b)},
+                                )
+                            )
 
         # ===== B6: ARMERÍA =====
         # Disponible si actor está en habitación ARMERÍA y armería no está destruida
@@ -293,20 +393,34 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         if is_in_armory and not armory_destroyed:
             # CANON: Storage permite hasta 2 ítems en total (objetos y llaves)
             current_storage_count = len(state.armory_storage.get(p.room, []))
-            
+
             # DROP OBJECTS: si tiene objetos y hay espacio (< 2)
             if p.objects and current_storage_count < 2:
                 for obj in p.objects:
                     if not is_soulbound(obj):
-                        acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": obj, "item_type": "object"}))
+                        acts.append(
+                            Action(
+                                actor=str(pid),
+                                type=ActionType.USE_ARMORY_DROP,
+                                data={"item_name": obj, "item_type": "object"},
+                            )
+                        )
 
             # DROP KEYS: si tiene llaves y hay espacio (< 2)
             if p.keys > 0 and current_storage_count < 2:
-                acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_DROP, data={"item_name": "KEY", "item_type": "key"}))
+                acts.append(
+                    Action(
+                        actor=str(pid),
+                        type=ActionType.USE_ARMORY_DROP,
+                        data={"item_name": "KEY", "item_type": "key"},
+                    )
+                )
 
             # TAKE: si hay ítems en almacenamiento
             if current_storage_count > 0:
-                acts.append(Action(actor=str(pid), type=ActionType.USE_ARMORY_TAKE, data={}))
+                acts.append(
+                    Action(actor=str(pid), type=ActionType.USE_ARMORY_TAKE, data={})
+                )
 
         # ===== OBJETOS (contundente / escaleras portÃ¡tiles) =====
         # Contundente: solo si hay monstruo en la sala
@@ -319,19 +433,49 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             corridor = corridor_id(floor_of(p.room))
             if p.room != corridor:
                 if movement_allowed and _is_paranoia_move_legal(state, pid, corridor):
-                    acts.append(Action(actor=str(pid), type=ActionType.USE_OBJECT, data={"object_id": "COMPASS"}))
+                    acts.append(
+                        Action(
+                            actor=str(pid),
+                            type=ActionType.USE_OBJECT,
+                            data={"object_id": "COMPASS"},
+                        )
+                    )
         if "VIAL" in p.objects:
-            acts.append(Action(actor=str(pid), type=ActionType.USE_OBJECT, data={"object_id": "VIAL"}))
+            acts.append(
+                Action(
+                    actor=str(pid),
+                    type=ActionType.USE_OBJECT,
+                    data={"object_id": "VIAL"},
+                )
+            )
         if "TREASURE_STAIRS" in p.objects:
-            acts.append(Action(actor=str(pid), type=ActionType.USE_OBJECT, data={"object_id": "TREASURE_STAIRS"}))
+            acts.append(
+                Action(
+                    actor=str(pid),
+                    type=ActionType.USE_OBJECT,
+                    data={"object_id": "TREASURE_STAIRS"},
+                )
+            )
 
         # Escalera portÃ¡til: moverse +/-1 piso (respeta bloqueo de movimiento)
         if "PORTABLE_STAIRS" in p.objects and movement_allowed:
             f = floor_of(p.room)
             if f > 1:
-                acts.append(Action(actor=str(pid), type=ActionType.USE_PORTABLE_STAIRS, data={"direction": "DOWN"}))
+                acts.append(
+                    Action(
+                        actor=str(pid),
+                        type=ActionType.USE_PORTABLE_STAIRS,
+                        data={"direction": "DOWN"},
+                    )
+                )
             if f < 3:
-                acts.append(Action(actor=str(pid), type=ActionType.USE_PORTABLE_STAIRS, data={"direction": "UP"}))
+                acts.append(
+                    Action(
+                        actor=str(pid),
+                        type=ActionType.USE_PORTABLE_STAIRS,
+                        data={"direction": "UP"},
+                    )
+                )
 
         # ===== B3: CÁMARA LETAL =====
         # P1 - FASE 1.5.4: Ritual para obtener 7ª llave
@@ -343,43 +487,63 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         # - Habitación no está destruida
         if p.room in state.rooms:
             room_state = state.rooms[p.room]
-            is_camara_letal = (normalize_room_type(room_state.special_card_id or "") == "CAMARA_LETAL")
+            is_camara_letal = (
+                normalize_room_type(room_state.special_card_id or "") == "CAMARA_LETAL"
+            )
             camara_letal_present = state.flags.get("CAMARA_LETAL_PRESENT", False)
             ritual_completed = state.flags.get("CAMARA_LETAL_RITUAL_COMPLETED", False)
             room_destroyed = room_state.special_destroyed
 
-            if (is_camara_letal and camara_letal_present and
-                not ritual_completed and not room_destroyed):
+            if (
+                is_camara_letal
+                and camara_letal_present
+                and not ritual_completed
+                and not room_destroyed
+            ):
                 # Contar jugadores en la habitación
                 players_in_room = [
-                    p_id for p_id, player in state.players.items()
+                    p_id
+                    for p_id, player in state.players.items()
                     if player.room == p.room
                 ]
 
                 if len(players_in_room) == 2:
-                    acts.append(Action(
-                        actor=str(pid),
-                        type=ActionType.USE_CAMARA_LETAL_RITUAL,
-                        data={}
-                    ))
+                    acts.append(
+                        Action(
+                            actor=str(pid),
+                            type=ActionType.USE_CAMARA_LETAL_RITUAL,
+                            data={},
+                        )
+                    )
 
         # ===== B1: MONASTERIO DE LOCURA (Capilla) =====
         if p.room in state.rooms:
             room_state = state.rooms[p.room]
-            is_monasterio = (normalize_room_type(room_state.special_card_id or "") == "MONASTERIO_LOCURA")
+            is_monasterio = (
+                normalize_room_type(room_state.special_card_id or "")
+                == "MONASTERIO_LOCURA"
+            )
             room_destroyed = room_state.special_destroyed
             if is_monasterio and not room_destroyed:
-                acts.append(Action(actor=str(pid), type=ActionType.USE_CAPILLA, data={}))
+                acts.append(
+                    Action(actor=str(pid), type=ActionType.USE_CAPILLA, data={})
+                )
 
         # ===== B7: SALÓN DE BELLEZA =====
         if p.room in state.rooms:
             room_state = state.rooms[p.room]
-            is_salon = (normalize_room_type(room_state.special_card_id or "") == "SALON_BELLEZA")
+            is_salon = (
+                normalize_room_type(room_state.special_card_id or "") == "SALON_BELLEZA"
+            )
             room_destroyed = room_state.special_destroyed
             if is_salon and not room_destroyed:
                 # Si tiene VANIDAD ya no puede usarlo (canon check)
                 if not has_status(p, "VANIDAD"):
-                    acts.append(Action(actor=str(pid), type=ActionType.USE_SALON_BELLEZA, data={}))
+                    acts.append(
+                        Action(
+                            actor=str(pid), type=ActionType.USE_SALON_BELLEZA, data={}
+                        )
+                    )
 
         # ===== FASE 1: Habilidad del Healer =====
         # Healer puede sacrificar 1 cordura propia para:
@@ -389,11 +553,13 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
         if getattr(p, "role_id", "") == "HEALER" and p.sanity >= 1:
             other_players = [pid2 for pid2 in state.players if pid2 != pid]
             if len(other_players) > 0:
-                acts.append(Action(
-                    actor=str(pid),
-                    type=ActionType.USE_HEALER_HEAL,
-                    data={}  # La elección de estado se hace en el handler
-                ))
+                acts.append(
+                    Action(
+                        actor=str(pid),
+                        type=ActionType.USE_HEALER_HEAL,
+                        data={},  # La elección de estado se hace en el handler
+                    )
+                )
 
         # ===== FASE 4: USE_ATTACH_TALE (Unir cuento al libro) =====
         # Requiere: Tener el Libro (BOOK_CHAMBERS) y al menos un Cuento (TALE_*)
@@ -401,7 +567,13 @@ def get_legal_actions(state: GameState, actor: str) -> List[Action]:
             for obj in p.objects:
                 if obj.startswith("TALE_"):
                     # Es un cuento, podemos unirlo
-                    acts.append(Action(actor=str(pid), type=ActionType.USE_ATTACH_TALE, data={"tale_id": obj}))
+                    acts.append(
+                        Action(
+                            actor=str(pid),
+                            type=ActionType.USE_ATTACH_TALE,
+                            data={"tale_id": obj},
+                        )
+                    )
 
         acts.append(Action(actor=str(pid), type=ActionType.END_TURN, data={}))
         return acts

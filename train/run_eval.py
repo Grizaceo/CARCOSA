@@ -5,7 +5,12 @@ from pathlib import Path
 # Allow importing package modules when executed as a script
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from train.evaluate import Config, NeuralNetworkPlayerPolicy, evaluate_policy, print_results
+from train.evaluate import (
+    Config,
+    NeuralNetworkPlayerPolicy,
+    evaluate_policy,
+    print_results,
+)
 
 
 def main():
@@ -15,7 +20,9 @@ def main():
         return
 
     cfg = Config()
-    policy = NeuralNetworkPlayerPolicy(str(model_path), cfg=cfg, device="cpu", temperature=1.0)
+    policy = NeuralNetworkPlayerPolicy(
+        str(model_path), cfg=cfg, device="cpu", temperature=1.0
+    )
     results = evaluate_policy(policy, f"NN:{model_path.stem}", episodes=20, cfg=cfg)
     print_results(results)
 
