@@ -29,4 +29,7 @@ COPY . .
 ENV PYTHONPATH=/app
 
 # Default command (se puede sobrescribir desde docker-compose)
-CMD ["python", "-m", "sim.runner"]
+# Render (web_service) exige un proceso de larga duración escuchando en $PORT.
+# sim.runner es un batch que corre y sale -> deploy update_failed en cadena.
+# El server web canónico es sim.game_server:app (mismo que Dockerfile.web).
+CMD uvicorn sim.game_server:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1
